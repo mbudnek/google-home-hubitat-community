@@ -128,16 +128,17 @@ The On/Off trait is used for devices that have discreet on and off states such a
 
 The Open/Close trait is used for devices that can be opened and closed such as doors, blinds, vents, or valves.  This trait supports both devices that can only be fully opened or closed and devices that can be partially opened.  It can be controlled by saying things like "Hey Google, open {device}" or "Hey Google, open {device} 50%" and queried by saying things like "Hey Google, is {device} open?".  It has the following configuration parameters:
 
+- Query Only Open/Close: Should be set if this device can only be queried but not controlled (a contact sensor, for example).
 - Discrete Only Open/Close: Should be left unset if this device can be partially opened and set if the device can only be fully opened or closed.  The other configuration parameters change depending on if this is set or not:
     - Unset:
         - Open/Close Attribute: The device attribute used to query the current state of the device.  Should be in the range 0-100 with 0 being fully closed and 100 being fully open.
-        - Open/Close Command: A device command used to open or close the device.  Should accept a parameter in the range 0-100 representing the percentage of the way to open the device.  Mapped to `setPosition` by default.
+        - Open/Close Command: Only available if Query Only Open/Close is unset.  A device command used to open or close the device.  Should accept a parameter in the range 0-100 representing the percentage of the way to open the device.  Mapped to `setPosition` by default.
     - Set:
         - Open/Close Attribute: The device attribute used to query the current state of the device.  Should always be either Open Value or Closed Value.
         - Open Value: The value that the Open/Close Attribute will report when the device is open.  Defaults to "open".
         - Closed Value: The value that the Open/Close Attribute will report when the device is closed.  Defaults to "closed".
-        - Open Command: A device command used to open the device.  Should not require any parameters.  Mapps to `open` by default.
-        - Close Command: A device command used to close the device.  Should not require any parameters.  Mapps to `close` by default.
+        - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Mapps to `open` by default.
+        - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Mapps to `close` by default.
 
 ### Scene
 
