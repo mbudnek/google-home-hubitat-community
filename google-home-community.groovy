@@ -376,28 +376,40 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
                 defaultValue: "closed",
                 required: true
             )
-            input(
-                name: "${deviceTrait.name}.openCommand",
-                title: "Open Command",
-                type: "text",
-                defaultValue: "open",
-                required: true
-            )
-            input(
-                name: "${deviceTrait.name}.closeCommand",
-                title: "Close Command",
-                type: "text",
-                defaultValue: "close",
-                required: true
-            )
-        } else {
-            input(
-                name: "${deviceTrait.name}.openPositionCommand",
-                title: "Open Position Command",
-                type: "text",
-                defaultValue: "setPosition",
-                required: true
-            )
+        }
+        input(
+            name: "${deviceTrait.name}.queryOnly",
+            title: "Query Only Open/Close",
+            type: "bool",
+            defaultValue: false,
+            required: true,
+            submitOnChange: true
+        )
+        if (!deviceTrait.queryOnly) {
+            if (deviceTrait.discreteOnlyOpenClose) {
+                input(
+                    name: "${deviceTrait.name}.openCommand",
+                    title: "Open Command",
+                    type: "text",
+                    defaultValue: "open",
+                    required: true
+                )
+                input(
+                    name: "${deviceTrait.name}.closeCommand",
+                    title: "Close Command",
+                    type: "text",
+                    defaultValue: "close",
+                    required: true
+                )
+            } else {
+                input(
+                    name: "${deviceTrait.name}.openPositionCommand",
+                    title: "Open Position Command",
+                    type: "text",
+                    defaultValue: "setPosition",
+                    required: true
+                )
+            }
         }
     }
 }
@@ -924,7 +936,8 @@ private attributesForTrait_OnOff(deviceTrait) {
 
 private attributesForTrait_OpenClose(deviceTrait) {
     return [
-        discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose
+        discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
+        queryOnlyOpenClose: deviceTrait.queryOnly
     ]
 }
 
@@ -1002,16 +1015,25 @@ private traitFromSettings_OnOff(traitName) {
 private traitFromSettings_OpenClose(traitName) {
     def openCloseTrait = [
         discreteOnlyOpenClose: settings."${traitName}.discreteOnlyOpenClose",
-        openCloseAttribute: settings."${traitName}.openCloseAttribute"
+        openCloseAttribute: settings."${traitName}.openCloseAttribute",
+        // queryOnly may be null for device traits defined with older versions,
+        // so coerce it to a boolean by negating it twice
+        queryOnly: !!settings."${traitName}.queryOnly",
     ]
     if (openCloseTrait.discreteOnlyOpenClose) {
         openCloseTrait.openValue = settings."${traitName}.openValue"
         openCloseTrait.closedValue = settings."${traitName}.closedValue"
-        openCloseTrait.openCommand = settings."${traitName}.openCommand"
-        openCloseTrait.closeCommand = settings."${traitName}.closeCommand"
-    } else {
-        openCloseTrait.setPositionCommand = settings."${traitName}.setPositionCommand"
     }
+
+    if (!openCloseTrait.queryOnly) {
+        if (openCloseTrait.discreteOnlyOpenClose) {
+            openCloseTrait.openCommand = settings."${traitName}.openCommand"
+            openCloseTrait.closeCommand = settings."${traitName}.closeCommand"
+        } else {
+            openCloseTrait.setPositionCommand = settings."${traitName}.setPositionCommand"
+        }
+    }
+
     return openCloseTrait
 }
 
@@ -1139,6 +1161,7 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.openCommand")
     app.removeSetting("${deviceTrait.name}.closeCommand")
     app.removeSetting("${deviceTrait.name}.openPositionCommand")
+    app.removeSetting("${deviceTrait.name}.queryOnly")
 }
 
 private deleteDeviceTrait_Scene(deviceTrait) {
@@ -1398,6 +1421,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     REFRIGERATOR:   "Refrigerator",
     SCENE:          "Scene",
     SECURITYSYSTEM: "Security system",
+    SENSOR:         "Sensor",
     SHUTTER:        "Shutter",
     SHOWER:         "Shower",
     SOUSVIDE:       "Sous vide",
