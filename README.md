@@ -25,7 +25,8 @@ To install the Hubitat App:
 10. Click "Add User App" and select "Google Home Community"
 11. Make a note of the app's ID.  This can be found in your web browser's URL bar.
     - The URL should be "http://{your hub IP}/installedapp/configure/{app ID}/mainPreferences"
-12. Click "Done".  Don't configure any app settings yet.
+12. Configure at least one device type.  See [Configuring Devices](#configuring-devices) below for more information.
+13. Click "Done".
 
 ## Creating the Google smart home Action
 
@@ -66,9 +67,10 @@ To create your Google smart home Action:
 22. In the list, find the entry `[test] {your action name}`
 23. Enter your Hubitat account credentials and click "Sign In"
 24. Select your hub and tap "Select"
-25. Tap "Authorize"
+25. Make sure at least one device is selected to expose to Google Home
+    - Note: If you do not select any devices linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
+26. Tap "Authorize"
 
-At this point, your Hubitat hub is linked to Google Home.  You're ready to start configuring devices to link.
 
 # Configuring Devices
 
