@@ -67,7 +67,9 @@ def mainPreferences() {
         section {
             allDeviceTypes.each{ deviceType ->
                 input(
-                    name: "${deviceType.name}.devices",
+                    // Note: This name _must_ be converted to a String.
+                    //       If it isn't, then all devices will be removed when linking to Google Home
+                    name: "${deviceType.name}.devices" as String,
                     type: "capability.${deviceType.type}",
                     title: "${deviceType.display} devices",
                     multiple: true
