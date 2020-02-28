@@ -98,6 +98,14 @@ def mainPreferences() {
             )
             href(title: "Define new device type", description: "", style: "page", page: "deviceTypePreferences")
         }
+        section {
+            input(
+                name: "debugLogging",
+                title: "Enable Debug Logging",
+                type: "bool",
+                defaultValue: false
+            )
+        }
     }
 }
 
@@ -171,7 +179,7 @@ def deviceTypePreferences(deviceType) {
 
 def deviceTypeDelete(deviceType) {
     return dynamicPage(name: "deviceTypeDelete", title: "Device Type Deleted", nextPage: "mainPreferences") {
-        log.debug("Deleting device type ${deviceType.display}")
+        logger.debug("Deleting device type ${deviceType.display}")
         app.removeSetting("${deviceType.name}.display")
         app.removeSetting("${deviceType.name}.type")
         app.removeSetting("${deviceType.name}.googleDeviceType")
@@ -600,7 +608,7 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
 }
 
 def handleAction() {
-    log.debug(request.JSON)
+    logger.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
     if (requestType == "action.devices.SYNC") {
         return handleSyncRequest(request)
@@ -659,7 +667,7 @@ private handleExecuteRequest(request) {
         }
 
     }
-    log.debug(resp)
+    logger.debug(resp)
     return resp
 }
 
@@ -797,7 +805,7 @@ private handleQueryRequest(request) {
         }
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
-    log.debug(resp)
+    logger.debug(resp)
     return resp
 }
 
@@ -902,7 +910,7 @@ private handleSyncRequest(request) {
             ]
         }
     }
-    log.debug(resp)
+    logger.debug(resp)
     return resp
 }
 
@@ -1123,7 +1131,7 @@ private deviceTypeTraitFromSettings(traitName) {
 }
 
 private deleteDeviceTrait(deviceTrait) {
-    log.debug("Deleting device trait ${deviceTrait.name}")
+    logger.debug("Deleting device trait ${deviceTrait.name}")
     "deleteDeviceTrait_${deviceTrait.type}"(deviceTrait)
     def pieces = deviceTrait.name.split("\\.traits\\.")
     def deviceType = pieces[0]
@@ -1279,6 +1287,14 @@ private celsiusToFahrenheitRounded(temperature) {
     // Round to one decimal place
     return Math.round(tempFahrenheit * 10) / 10
 }
+
+@Field
+private logger = [
+    debug: { if (settings.debugLogging) log.debug(it) },
+    info: { log.info(it) },
+    warn: { log.warn(it) },
+    error: { log.error(it) }
+]
 
 @Field
 private static final HUBITAT_DEVICE_TYPES = [
