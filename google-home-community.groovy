@@ -189,6 +189,7 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.googleDeviceType")
         app.removeSetting("${deviceType.name}.devices")
         deviceType.traits.each { traitType, deviceTrait -> deleteDeviceTrait(deviceTrait) }
+        state.deviceTraits.remove(deviceType.name as String)
         section {
             paragraph("The ${deviceType.display} device type was deleted")
         }
