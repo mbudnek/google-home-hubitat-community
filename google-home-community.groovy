@@ -77,25 +77,29 @@ def mainPreferences() {
             }
         }
         section {
-            def deviceTypeOptions = allDeviceTypes.collectEntries { deviceType ->
-                [deviceType.name, deviceType.display]
+            if (allDeviceTypes) {
+                def deviceTypeOptions = allDeviceTypes.collectEntries { deviceType ->
+                    [deviceType.name, deviceType.display]
+                }
+                input(
+                    name: "deviceTypeToEdit",
+                    title: "Edit Device Type",
+                    description: "Select a device type to edit...",
+                    width: 6,
+                    type: "enum",
+                    options: deviceTypeOptions,
+                    submitOnChange: true
+                )
+                input(
+                    name: "deviceTypeToDelete",
+                    title: "Delete Device Type",
+                    description: "Select a device type to delete...",
+                    width: 6,
+                    type: "enum",
+                    options: deviceTypeOptions,
+                    submitOnChange: true
+                )
             }
-            input(
-                name: "deviceTypeToEdit",
-                title: "Edit Device Type",
-                description: "Select a device type to edit...",
-                type: "enum",
-                options: deviceTypeOptions,
-                submitOnChange: true
-            )
-            input(
-                name: "deviceTypeToDelete",
-                title: "Delete Device Type",
-                description: "Select a device type to delete...",
-                type: "enum",
-                options: deviceTypeOptions,
-                submitOnChange: true
-            )
             href(title: "Define new device type", description: "", style: "page", page: "deviceTypePreferences")
         }
         section {
