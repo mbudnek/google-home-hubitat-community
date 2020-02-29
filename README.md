@@ -121,10 +121,16 @@ The Fan Speed trait is primarily used for fan controllers with multiple speed se
 The On/Off trait is used for devices that have discreet on and off states such as switches or lights.  It can be controlled by saying things like "Hey Google, turn on {device}" and queried by saying things like "Hey Google, is {device} on?".  It has the following configuration parameters:
 
 - On/Off Attribute: The device attribute used to query the current state of the device.  Should always be either On Value or Off Value.  Maps to the `switch` attribute by default.
-- On Value: The value that the On/Off Attribute will report when the device is on.  Defaults to "on".
-- Off Value: The value that the On/Off Attribute will report when the device is off.  Defaults to "off".
-- On Command: A device command used to turn the device on.  Should not require any parameters.  Mapps to `on` by default.
-- Off Command: A device command used to turn the device off.  Should not require any parameters. Mapps to `off` by default.
+- On Value: The value that the On/Off Attribute will report when the device is on.  Optional if Off Value is specified.  Defaults to "on".
+- Off Value: The value that the On/Off Attribute will report when the device is off.  Optional if On Value is specified.  Defaults to "off".
+- Control Type: This parameter determines how this device is controlled.  Either with a single command that accepts different parameters for "on" and "off" or two different commands for "on" and "off".
+    - Separate Commands
+        - On Command: A device command used to turn the device on.  Should not require any parameters.  Mapps to `on` by default.
+        - Off Command: A device command used to turn the device off.  Should not require any parameters. Mapps to `off` by default.
+    - Single Command
+        - On/Off Command: A device command used to turn the device on or off.  Should accept one parameter.
+        - On Parameter: The parameter to pass to the On/Off Command to turn the device on.
+        - Off Parameter: The parameter to pass to the On/Off Command to turn the device off.
 
 ### Open/Close
 

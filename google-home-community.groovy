@@ -327,34 +327,70 @@ private deviceTraitPreferences_OnOff(deviceTrait) {
             defaultValue: "switch",
             required: true
         )
+        paragraph("At least one of On Value or Off Value must be specified")
         input(
             name: "${deviceTrait.name}.onValue",
             title: "On Value",
             type: "text",
             defaultValue: "on",
-            required: true
+            submitOnChange: true,
+            required: !deviceTrait.offValue
         )
         input(
             name: "${deviceTrait.name}.offValue",
             title: "Off Value",
             type: "text",
             defaultValue: "off",
-            required: true
+            submitOnChange: true,
+            required: !deviceTrait.onValue
         )
         input(
-            name: "${deviceTrait.name}.onCommand",
-            title: "On Command",
-            type: "text",
-            defaultValue: "on",
-            required: true
+            name: "${deviceTrait.name}.controlType",
+            title: "Control Type",
+            type: "enum",
+            options: [
+                "separate": "Separate On and Off commands",
+                "single": "Single On/Off command with parameter"
+            ],
+            defaultValue: "separate",
+            required: true,
+            submitOnChange: true
         )
-        input(
-            name: "${deviceTrait.name}.offCommand",
-            title: "Off Command",
-            type: "text",
-            defaultValue: "off",
-            required: true
-        )
+        if (deviceTrait.controlType != "single") {
+            input(
+                name: "${deviceTrait.name}.onCommand",
+                title: "On Command",
+                type: "text",
+                defaultValue: "on",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.offCommand",
+                title: "Off Command",
+                type: "text",
+                defaultValue: "off",
+                required: true
+            )
+        } else {
+            input(
+                name: "${deviceTrait.name}.onOffCommand",
+                title: "On/Off Command",
+                type: "text",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.onParameter",
+                title: "On Parameter",
+                type: "text",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.offParameter",
+                title: "Off Parameter",
+                type: "text",
+                required: true
+            )
+        }
     }
 }
 
@@ -650,7 +686,8 @@ private handleExecuteRequest(request) {
         attrsToAwait.each { device, attributes ->
             attributes.each { attrName, attrValue ->
                 for (def i = 0; i < 100000; ++i) {
-                    if (device.currentValue(attrName, true) == attrValue) {
+                    def currentValue = device.currentValue(attrName, true)
+                    if (attrValue instanceof Closure && attrValue(currentValue) || currentValue == attrValue) {
                         break
                     }
                 }
@@ -709,13 +746,32 @@ private executeCommand_Reverse(deviceInfo, command) {
 
 private executeCommand_OnOff(deviceInfo, command) {
     def onOffTrait = deviceInfo.deviceType.traits.OnOff
+
+    def on
+    def off
+    if (onOffTrait.controlType == "single") {
+        on = { device -> device."${onOffTrait.onOffCommand}"(onOffTrait.onParam) }
+        off = { device -> device."${onOffTrait.onOffCommand}"(onOffTrait.offParam) }
+    } else {
+        on = { device -> device."${onOffTrait.onCommand}"() }
+        off = { device -> device."${onOffTrait.offCommand}"() }
+    }
+
     def checkValue
     if (command.params.on) {
-        deviceInfo.device."${onOffTrait.onCommand}"()
-        checkValue = onOffTrait.onValue
+        on(deviceInfo.device)
+        if (onOffTrait.onValue) {
+            checkValue = onOffTrait.onValue
+        } else {
+            checkValue = { it != onOffTrait.offValue }
+        }
     } else {
-        deviceInfo.device."${onOffTrait.offCommand}"()
-        checkValue = onOffTrait.offValue
+        off(deviceInfo.device)
+        if (onOffTrait.onValue) {
+            checkValue = onOffTrait.offValue
+        } else {
+            checkValue = { it != onOffTrait.onValue }
+        }
     }
     return [
         (onOffTrait.onOffAttribute): checkValue
@@ -829,8 +885,14 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 }
 
 private deviceStateForTrait_OnOff(deviceTrait, device) {
+    def isOn
+    if (deviceTrait.onValue) {
+        isOn = device.currentValue(deviceTrait.onOffAttribute) == deviceTrait.onValue
+    } else {
+        isOn = device.currentValue(deviceTrait.onOffAttribute) != deviceTrait.offValue
+    }
     return [
-        on: device.latestValue(deviceTrait.onOffAttribute) == deviceTrait.onValue
+        on: isOn
     ]
 }
 
@@ -1018,13 +1080,22 @@ private traitFromSettings_FanSpeed(traitName) {
 }
 
 private traitFromSettings_OnOff(traitName) {
-    return [
+    def deviceTrait = [
         onOffAttribute: settings."${traitName}.onOffAttribute",
         onValue: settings."${traitName}.onValue",
         offValue: settings."${traitName}.offValue",
-        onCommand: settings."${traitName}.onCommand",
-        offCommand: settings."${traitName}.offCommand"
+        controlType: settings."${traitName}.controlType"
     ]
+
+    if (deviceTrait.controlType == "single") {
+        deviceTrait.onOffCommand = settings."${traitName}.onOffCommand"
+        deviceTrait.onParam = settings."${traitName}.onParameter"
+        deviceTrait.offParam = settings."${traitName}.offParameter"
+    } else if (deviceTrait.controlType == "separate") {
+        deviceTrait.onCommand = settings."${traitName}.onCommand"
+        deviceTrait.offCommand = settings."${traitName}.offCommand"
+    }
+    return deviceTrait
 }
 
 private traitFromSettings_OpenClose(traitName) {
@@ -1164,8 +1235,12 @@ private deleteDeviceTrait_OnOff(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.onOffAttribute")
     app.removeSetting("${deviceTrait.name}.onValue")
     app.removeSetting("${deviceTrait.name}.offValue")
+    app.removeSetting("${deviceTrait.name}.controlType")
     app.removeSetting("${deviceTrait.name}.onCommand")
     app.removeSetting("${deviceTrait.name}.offCommand")
+    app.removeSetting("${deviceTrait.name}.onOffCommand")
+    app.removeSetting("${deviceTrait.name}.onParameter")
+    app.removeSetting("${deviceTrait.name}.offParameter")
 }
 
 private deleteDeviceTrait_OpenClose(deviceTrait) {
