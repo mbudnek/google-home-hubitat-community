@@ -332,7 +332,7 @@ private deviceTraitPreferences_OnOff(deviceTrait) {
             name: "${deviceTrait.name}.onValue",
             title: "On Value",
             type: "text",
-            defaultValue: "on",
+            defaultValue: deviceTrait.offValue ? "" : "on",
             submitOnChange: true,
             required: !deviceTrait.offValue
         )
@@ -340,7 +340,7 @@ private deviceTraitPreferences_OnOff(deviceTrait) {
             name: "${deviceTrait.name}.offValue",
             title: "Off Value",
             type: "text",
-            defaultValue: "off",
+            defaultValue: deviceTrait.onValue ? "" : "off",
             submitOnChange: true,
             required: !deviceTrait.onValue
         )
@@ -1091,7 +1091,7 @@ private traitFromSettings_OnOff(traitName) {
         deviceTrait.onOffCommand = settings."${traitName}.onOffCommand"
         deviceTrait.onParam = settings."${traitName}.onParameter"
         deviceTrait.offParam = settings."${traitName}.offParameter"
-    } else if (deviceTrait.controlType == "separate") {
+    } else {
         deviceTrait.onCommand = settings."${traitName}.onCommand"
         deviceTrait.offCommand = settings."${traitName}.offCommand"
     }
