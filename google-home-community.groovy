@@ -970,7 +970,7 @@ private handleSyncRequest(request) {
                 traits: traits,
                 name: [
                     defaultNames: [device.getName()],
-                    name: device.getLabel()
+                    name: device.getLabel() ?: device.getName()
                 ],
                 willReportState: false,
                 attributes: attributes,
