@@ -183,7 +183,7 @@ def deviceTypePreferences(deviceType) {
 
 def deviceTypeDelete(deviceType) {
     return dynamicPage(name: "deviceTypeDelete", title: "Device Type Deleted", nextPage: "mainPreferences") {
-        logger.debug("Deleting device type ${deviceType.display}")
+        LOGGER.debug("Deleting device type ${deviceType.display}")
         app.removeSetting("${deviceType.name}.display")
         app.removeSetting("${deviceType.name}.type")
         app.removeSetting("${deviceType.name}.googleDeviceType")
@@ -649,7 +649,7 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
 }
 
 def handleAction() {
-    logger.debug(request.JSON)
+    LOGGER.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
     if (requestType == "action.devices.SYNC") {
         return handleSyncRequest(request)
@@ -682,15 +682,27 @@ private handleExecuteRequest(request) {
                 attrsToAwait[device.device] += "executeCommand_${commandName}"(device, execution)
             }
         }
-        // Wait a little while for devices to report their new state
-        attrsToAwait.each { device, attributes ->
-            attributes.each { attrName, attrValue ->
-                for (def i = 0; i < 100000; ++i) {
+        // Wait up to 5 seconds for devices to report their new state
+        for (def i = 0; i < 50; ++i) {
+            def ready = true
+            attrsToAwait.each { device, attributes ->
+                attributes.each { attrName, attrValue ->
                     def currentValue = device.currentValue(attrName, true)
-                    if (attrValue instanceof Closure && attrValue(currentValue) || currentValue == attrValue) {
-                        break
+                    if (attrValue instanceof Closure) {
+                        if (!attrValue(currentValue)) {
+                            LOGGER.debug("${device.getName()}: Expected value test returned false for attribute ${attrName} with value ${currentValue}")
+                            ready = false
+                        }
+                    } else if (currentValue != attrValue) {
+                        LOGGER.debug("${device.getName()}: current value of ${attrName} (${currentValue}) does does not yet match expected value (${attrValue})")
+                        ready = false
                     }
                 }
+            }
+            if (ready) {
+                break
+            } else {
+                pauseExecution(100)
             }
         }
         // Now build our response message
@@ -709,7 +721,7 @@ private handleExecuteRequest(request) {
         }
 
     }
-    logger.debug(resp)
+    LOGGER.debug(resp)
     return resp
 }
 
@@ -866,7 +878,7 @@ private handleQueryRequest(request) {
         }
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
-    logger.debug(resp)
+    LOGGER.debug(resp)
     return resp
 }
 
@@ -977,7 +989,7 @@ private handleSyncRequest(request) {
             ]
         }
     }
-    logger.debug(resp)
+    LOGGER.debug(resp)
     return resp
 }
 
@@ -1207,7 +1219,7 @@ private deviceTypeTraitFromSettings(traitName) {
 }
 
 private deleteDeviceTrait(deviceTrait) {
-    logger.debug("Deleting device trait ${deviceTrait.name}")
+    LOGGER.debug("Deleting device trait ${deviceTrait.name}")
     "deleteDeviceTrait_${deviceTrait.type}"(deviceTrait)
     def pieces = deviceTrait.name.split("\\.traits\\.")
     def deviceType = pieces[0]
@@ -1369,7 +1381,7 @@ private celsiusToFahrenheitRounded(temperature) {
 }
 
 @Field
-private logger = [
+private LOGGER = [
     debug: { if (settings.debugLogging) log.debug(it) },
     info: { log.info(it) },
     warn: { log.warn(it) },
