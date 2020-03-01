@@ -31,6 +31,8 @@ preferences {
     page(name: "deviceTypeDelete")
     page(name: "deviceTraitPreferences")
     page(name: "deviceTraitDelete")
+    page(name: "togglePreferences")
+    page(name: "toggleDelete")
 }
 
 mappings {
@@ -650,6 +652,70 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
     }
 }
 
+private deviceTraitPreferences_Toggles(deviceTrait) {
+    section("Toggles") {
+        deviceTrait.toggles.each { toggle ->
+            href(
+                title: "${toggle.labels.join(",")}",
+                description: "Click to edit",
+                style: "page",
+                page: "togglePreferences",
+                params: toggle
+            )
+        }
+        href(
+            title: "New Toggle",
+            description: "",
+            style: "page",
+            page: "togglePreferences",
+            params: [
+                traitName: deviceTrait.name,
+                name: "${deviceTrait.name}.toggles.${UUID.randomUUID().toString()}"
+            ]
+        )
+    }
+}
+
+def togglePreferences(toggle) {
+    def toggles = settings."${toggle.traitName}.toggles" ?: []
+    if (!(toggle.name in toggles)) {
+        toggles << toggle.name
+        app.updateSetting("${toggle.traitName}.toggles", toggles)
+    }
+    return dynamicPage(name: "togglePreferences", title: "Toggle Preferences", nextPage: "deviceTraitPreferences") {
+        section {
+            input(
+                name: "${toggle.name}.labels",
+                title: "Toggle Names",
+                description: "A comma-separated list of names for this toggle",
+                type: "text",
+                required: true
+            )
+        }
+
+        deviceTraitPreferences_OnOff(toggle)
+
+        section {
+            href(
+                title: "Remove Toggle",
+                description: "",
+                style: "page",
+                page: "toggleDelete",
+                params: toggle
+            )
+        }
+    }
+}
+
+def toggleDelete(toggle) {
+    return dynamicPage(name: "toggleDelete", title: "Toggle Deleted", nextPage: "deviceTraitPreferences") {
+        deleteToggle(toggle)
+        section {
+            paragraph("The ${toggle.labels ? toggle.labels.join(",") : "new"} toggle has been removed")
+        }
+    }
+}
+
 def handleAction() {
     LOGGER.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
@@ -821,6 +887,28 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
     ]
 }
 
+private executeCommand_SetToggles(deviceInfo, command) {
+    def togglesTrait = deviceInfo.deviceType.traits.Toggles
+    def togglesToSet = command.params.updateToggleSettings
+
+    def statesToCheck = [:]
+    togglesToSet.each { toggleName, toggleValue ->
+        def toggle = togglesTrait.toggles.find { it.name == toggleName }
+        def fakeDeviceInfo = [
+            deviceType: [
+                traits: [
+                    // We're delegating to the OnOff handler, so we need
+                    // to fake the OnOff trait.
+                    OnOff: toggle
+                ]
+            ],
+            device: deviceInfo.device
+        ]
+        statesToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+    }
+    return statesToCheck
+}
+
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def setpoint = command.params.thermostatTemperatureSetpoint
@@ -963,6 +1051,14 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
     return state
 }
 
+private deviceStateForTrait_Toggles(deviceTrait, device) {
+    return [
+        currentToggleSettings: deviceTrait.toggles.collectEntries { toggle ->
+            [toggle.name, deviceStateForTrait_OnOff(toggle, device).on]
+        }
+    ]
+}
+
 private handleSyncRequest(request) {
     def resp = [
         requestId: request.JSON.requestId,
@@ -1064,6 +1160,22 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
         attrs.bufferRangeCelsius = buffer
     }
     return attrs
+}
+
+private attributesForTrait_Toggles(deviceTrait) {
+    return [
+        availableToggles: deviceTrait.toggles.collect { toggle ->
+            [
+                name: toggle.name,
+                name_values: [
+                    [
+                        name_synonym: toggle.labels,
+                        lang: "en"
+                    ]
+                ]
+            ]
+        }
+    ]
 }
 
 void installed() {}
@@ -1196,6 +1308,25 @@ private traitFromSettings_TemperatureSetting(traitName) {
     return tempSettingTrait
 }
 
+private traitFromSettings_Toggles(traitName) {
+    def togglesTrait = [
+        toggles: []
+    ]
+    def toggles = settings."${traitName}.toggles"?.collect { toggle ->
+        def toggleAttrs = [
+            name: toggle,
+            traitName: traitName,
+            labels: settings."${toggle}.labels"?.split(",")
+        ]
+        toggleAttrs << traitFromSettings_OnOff(toggle)
+        toggleAttrs
+    }
+    if (toggles) {
+        togglesTrait.toggles = toggles
+    }
+    return togglesTrait
+}
+
 private deviceTraitsFromState(deviceType) {
     if (state.deviceTraits == null) {
         state.deviceTraits = [:]
@@ -1293,6 +1424,22 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     deviceTrait.modes.each { mode ->
         app.removeSetting("${deviceTrait.name}.mode.${mode}.hubitatMode")
     }
+}
+
+private deleteDeviceTrait_Toggles(deviceTrait) {
+    deviceTrait.toggles.each { toggle ->
+        deleteToggle(toggle)
+    }
+    app.removeSetting("${deviceTrait.name}.toggles")
+}
+
+private deleteToggle(toggle) {
+    LOGGER.debug("Deleting toggle: ${toggle}")
+    def toggles = settings."${toggle.traitName}.toggles"
+    toggles.remove(toggle.name)
+    app.updateSetting("${toggle.traitName}.toggles", toggles)
+    app.removeSetting("${toggle.name}.labels")
+    deleteDeviceTrait_OnOff(toggle)
 }
 
 private deviceTypeTraitsFromSettings(deviceTypeName) {
@@ -1578,5 +1725,5 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //TemperatureControl: "Temperature Control",
     TemperatureSetting: "Temperature Setting",
     //Timer: "Timer",
-    //Toggles: "Toggles",
+    Toggles: "Toggles",
 ]

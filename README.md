@@ -175,3 +175,11 @@ This trait is primarily used for thermostats.  It can be controlled by saying th
 - Current Mode Attribute: The device attribute used to query the device's current operating mode.  Should always report one of the {Mode} Hubitat Mode values.
 - Minimum Setpoint: The minimum allowed value for the device's setpoint.  Optional, but must be specified if Maximum Setpoint is specified.
 - Maximum Setpoint: The maximum allowed value for the device's setpoint.  Optional, but must be specified if Minimum Setpoint is specified.
+
+### Toggles
+
+This trait is used for devices that have one or more independently togglable on/off settings.  For example, a manual override of a thermostat schedule or an engery saving mode on a dryer.  It can be controlled by saying things like "Hey Google, turn on {toggle} on {device}" or "Hey Google, turn off {device} {toggle}" and can be queried by saying things like "Hey Google, is {device} {toggle} on?".
+
+Multiple toggles may be defined for a device type, each has all of the parameters defined for the [On/Off trait](#On/Off), as well as the following:
+
+- Toggle Names: A comma-separated list of names that can be used to control or query this toggle.  The Google Assistant will accept any of the defined names, but will always respond with the first name in the list.
