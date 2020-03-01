@@ -415,14 +415,16 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
         if (deviceTrait.discreteOnlyOpenClose) {
             input(
                 name: "${deviceTrait.name}.openValue",
-                title: "Open Value",
+                title: "Open Values",
+                description: "Values of the Open/Close Attribute that indicate this device is open.  Separate multiple values with a comma",
                 type: "text",
                 defaultValue: "open",
                 required: true
             )
             input(
                 name: "${deviceTrait.name}.closedValue",
-                title: "Closed Value",
+                title: "Closed Values",
+                description: "Values of the Open/Close Attribute that indicate this device is closed.  Separate multiple values with a comma",
                 type: "text",
                 defaultValue: "closed",
                 required: true
@@ -796,10 +798,10 @@ private executeCommand_OpenClose(deviceInfo, command) {
     def checkValue
     if (openCloseTrait.discreteOnlyOpenClose && openPercent == 100) {
         deviceInfo.device."${openCloseTrait.openCommand}"()
-        checkValue = openCloseTrait.openValue
+        checkValue = { it in openCloseTrait.openValue.split(",") }
     } else if (openCloseTrait.discreteOnlyOpenClose && openPercent == 0) {
         deviceInfo.device."${openCloseTrait.closeCommand}"()
-        checkValue = openCloseTrait.closedValue
+        checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
         checkValue = openPercent
@@ -911,7 +913,8 @@ private deviceStateForTrait_OnOff(deviceTrait, device) {
 private deviceStateForTrait_OpenClose(deviceTrait, device) {
     def openPercent
     if (deviceTrait.discreteOnlyOpenClose) {
-        if (device.currentValue(deviceTrait.openCloseAttribute) == deviceTrait.openValue) {
+        def openValues = deviceTrait.openValue.split(",")
+        if (device.currentValue(deviceTrait.openCloseAttribute) in openValues) {
             openPercent = 100
         } else {
             openPercent = 0
