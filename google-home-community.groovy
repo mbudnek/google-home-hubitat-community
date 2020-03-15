@@ -272,7 +272,10 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.type")
         app.removeSetting("${deviceType.name}.googleDeviceType")
         app.removeSetting("${deviceType.name}.devices")
-        deviceType.pinCodes.each { pinCode -> deleteDeviceTypePin(deviceType, pinCode.id) }
+        app.removeSetting("${deviceType.name}.confirmCommands")
+        app.removeSetting("${deviceType.name}.secureCommands")
+        def pinCodeIds = deviceType.pinCodes.collect { it.id }
+        pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
         app.removeSetting("${deviceType.name}.pinCodes")
         deviceType.traits.each { traitType, deviceTrait -> deleteDeviceTrait(deviceTrait) }
         state.deviceTraits.remove(deviceType.name as String)
