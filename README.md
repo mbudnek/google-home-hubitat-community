@@ -81,10 +81,7 @@ The first step to configuring a device to link to Google Home is to define a dev
 1. Navigate to "Apps" in Hubitat
 2. Click on the "Google Home Community" app you created
 3. Click "Define new device type"
-4. Fill in the settings on the "Device Type Definition" page
-    - Device type name:  This is the display name for this device type.  It will be shown in the device selector once the device type is defined.
-    - Device type: A Hubitat capability that will determine which devices are available to select for this device type.
-    - Google Home device type: The type of device that Google Home will see the selected devices as.  Controls the icon and available controls in the Google Home app and on Google Assistant devices with screens.  The "Scene" device type is special.  Devices with the "Scene" type are not shown in the main Google Home app interface, but may be controlled by voice and using routines.
+4. Fill in the settings on the "Device Type Definition" page.  See [Device Type Settings](#device-type-settings) below.
 5. Select one or more device traits to add to this device type.  Device traits determine what commands are available for a device type and how those commands translate to Hubitat commands.  See below for more information about individual device traits.
 6. Click "Next"
 7. Back on the main preferences page, click "{device type} devices" and select which devices you would like to link to Google Home using this device type
@@ -93,6 +90,19 @@ The first step to configuring a device to link to Google Home is to define a dev
 10. The selected devices should appear in your Google Home app and be available to control using the Google assistant
 
 Note: The same device should not be selected for multiple device types.
+
+## Device Type Settings
+
+Each device type has the following settings:
+
+    - Device type name:  This is the display name for this device type.  It will be shown in the device selector once the device type is defined.
+    - Device type: A Hubitat capability that will determine which devices are available to select for this device type.
+    - Google Home device type: The type of device that Google Home will see the selected devices as.  Controls the icon and available controls in the Google Home app and on Google Assistant devices with screens.  The "Scene" device type is special.  Devices with the "Scene" type are not shown in the main Google Home app interface, but may be controlled by voice and using routines.
+    - Device traits: The traits defined for this device.  See [Device Traits](#device-traits) below.
+    - Actions to Confirm:  Only visible if the device has one or more traits with actions.  The Google Assistant will ask for confirmation before performing thse actions.  This is primarily useful to prevent the assistant from triggering an action accidentally.
+    - Actions reqiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
+    - PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
+
 
 ## Device Traits
 
