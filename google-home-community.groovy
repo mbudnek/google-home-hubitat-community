@@ -1009,6 +1009,8 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
         checkMfa(deviceInfo.deviceType, "Set Position", command)
+        // Google uses 0...100 for position but hubitat uses 0...99, so clamp
+        openPercent = Math.min(openPercent, 99)
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
         checkValue = openPercent
     }
