@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import groovy.json.JsonOutput
 import groovy.transform.Field
 
 definition(
@@ -40,6 +41,23 @@ mappings {
         action: [
             POST: "handleAction"
         ]
+    }
+}
+
+def appButtonHandler(buttonPressed) {
+    def match
+    if ((match = (buttonPressed =~ /^addPin:(.+)$/))) {
+        def deviceTypeName = match.group(1)
+        def deviceType = deviceTypeFromSettings(deviceTypeName)
+        addDeviceTypePin(deviceType)
+    } else if ((match = (buttonPressed =~ /^deletePin:(.+)\.pin\.(.+)$/))) {
+        def deviceTypeName = match.group(1)
+        def pinId = match.group(2)
+        // If we actually delete the PIN here then it will get added back when the
+        // device type settings page re-submits after the button handler finishes.
+        // Instead just set a flag that we want to delete this PIN, and the settings
+        // page will take care of actually deleting it.
+        state.pinToDelete = pinId
     }
 }
 
@@ -128,6 +146,12 @@ def deviceTypePreferences(deviceType) {
         addTraitToDeviceTypeState(deviceType.name, toAdd)
         return deviceTraitPreferences([name: traitName])
     }
+
+    if (state.pinToDelete) {
+        deleteDeviceTypePin(deviceType, state.pinToDelete)
+        state.remove("pinToDelete")
+    }
+
     return dynamicPage(name: "deviceTypePreferences", title: "Device Type Definition", nextPage: "mainPreferences") {
         def devicePropertyName = deviceType != null ? deviceType.name : "deviceTypes.${state.nextDeviceTypeIndex++}"
         state.currentlyEditingDeviceType = devicePropertyName
@@ -155,7 +179,8 @@ def deviceTypePreferences(deviceType) {
             )
         }
 
-        section(name: "Device Traits") {
+        def currentDeviceTraits = deviceType?.traits ?: [:]
+        section("Device Traits") {
             if (deviceType != null) {
                 deviceType.traits.each { traitType, deviceTrait ->
                     href(
@@ -167,7 +192,7 @@ def deviceTypePreferences(deviceType) {
                     )
                 }
             }
-            def currentDeviceTraits = deviceType?.traits ?: [:]
+
             def deviceTraitOptions = GOOGLE_DEVICE_TRAITS.findAll { key, value ->
                 !(key in currentDeviceTraits.keySet())
             }
@@ -180,6 +205,63 @@ def deviceTypePreferences(deviceType) {
                 submitOnChange: true
             )
         }
+
+        def deviceTypeCommands = []
+        currentDeviceTraits.each { traitType, deviceTrait ->
+            deviceTypeCommands += deviceTrait.commands
+        }
+        if (deviceTypeCommands) {
+            section {
+                input(
+                    name: "${devicePropertyName}.confirmCommands",
+                    title: "The Google Assistant will ask for confirmation before performing these actions",
+                    type: "enum",
+                    options: deviceTypeCommands,
+                    multiple: true
+                )
+                input(
+                    name: "${devicePropertyName}.secureCommands",
+                    title: "The Google Assistant will ask for a PIN code before performing these actions",
+                    type: "enum",
+                    options: deviceTypeCommands,
+                    multiple: true,
+                    submitOnChange: true
+                )
+            }
+            if (deviceType?.secureCommands || deviceType?.pinCodes) {
+                section("PIN Codes") {
+                    deviceType.pinCodes.each { pinCode ->
+                        input(
+                            name: "${devicePropertyName}.pin.${pinCode.id}.name",
+                            title: "PIN Code Name",
+                            type: "text",
+                            required: true,
+                            width: 6
+                        )
+                        input(
+                            name: "${devicePropertyName}.pin.${pinCode.id}.value",
+                            title: "PIN Code Value",
+                            type: "password",
+                            required: true,
+                            width: 5
+                        )
+                        input(
+                            name: "deletePin:${devicePropertyName}.pin.${pinCode.id}",
+                            title: "X",
+                            type: "button",
+                            width: 1
+                        )
+                    }
+                    if (deviceType?.secureCommands) {
+                        input(
+                            name: "addPin:${devicePropertyName}",
+                            title: "Add PIN Code",
+                            type: "button"
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -190,6 +272,8 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.type")
         app.removeSetting("${deviceType.name}.googleDeviceType")
         app.removeSetting("${deviceType.name}.devices")
+        deviceType.pinCodes.each { pinCode -> deleteDeviceTypePin(deviceType, pinCode.id) }
+        app.removeSetting("${deviceType.name}.pinCodes")
         deviceType.traits.each { traitType, deviceTrait -> deleteDeviceTrait(deviceTrait) }
         state.deviceTraits.remove(deviceType.name as String)
         section {
@@ -743,11 +827,22 @@ private handleExecuteRequest(request) {
     commands.each { command ->
         def devices = command.devices.collect { device -> knownDevices."${device.id}" }
         def attrsToAwait = [:].withDefault{ [:] }
+        def results = [:]
         // Send appropriate commands to devices
         devices.each { device ->
             command.execution.each { execution ->
                 def commandName = execution.command.split("\\.").last()
-                attrsToAwait[device.device] += "executeCommand_${commandName}"(device, execution)
+                try {
+                    attrsToAwait[device.device] += "executeCommand_${commandName}"(device, execution)
+                    results[device.device] = [
+                        status: "SUCCESS"
+                    ]
+                } catch (Exception ex) {
+                    results[device.device] = [
+                        status: "ERROR"
+                    ]
+                    results[device.device] << parseJson(ex.message)
+                }
             }
         }
         // Wait up to 5 seconds for devices to report their new state
@@ -775,22 +870,53 @@ private handleExecuteRequest(request) {
         }
         // Now build our response message
         devices.each { device ->
-            def deviceState = [
-                online: true
-            ]
-            device.deviceType.traits.each { traitType, deviceTrait ->
-                deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
+            def result = results[device.device]
+            result["ids"] = [device.device.getId()]
+            if (result[status] == "SUCCESS") {
+                def deviceState = [
+                    online: true
+                ]
+                device.deviceType.traits.each { traitType, deviceTrait ->
+                    deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
+                }
+                result[states] = deviceState
             }
-            resp.payload.commands << [
-                status: "SUCCESS",
-                ids: [device.device.getId()],
-                states: deviceState
-            ]
+            resp.payload.commands << result
         }
 
     }
     LOGGER.debug(resp)
     return resp
+}
+
+private checkMfa(deviceType, commandType, command) {
+    commandType = commandType as String
+    LOGGER.debug("Checking MFA for ${commandType} command")
+    if (commandType in deviceType.confirmCommands && !command.challenge?.ack) {
+        throw new Exception(JsonOutput.toJson([
+            errorCode: "challengeNeeded",
+            challengeNeeded: [
+                type: "ackNeeded"
+            ]
+        ]))
+    }
+    if (commandType in deviceType.secureCommands) {
+        if (!command.challenge?.pin) {
+            throw new Exception(JsonOutput.toJson([
+                errorCode: "challengeNeeded",
+                challengeNeeded: [
+                    type: "pinNeeded"
+                ]
+            ]))
+        } else if (!(command.challenge.pin in deviceType.pinCodes.collect{ it.value })) {
+            throw new Exception(JsonOutput.toJson([
+                errorCode: "challengeNeeded",
+                challengeNeeded: [
+                    type: "challengeFailedPinNeeded"
+                ]
+            ]))
+        }
+    }
 }
 
 private executeCommand_ActivateScene(deviceInfo, command) {
@@ -799,8 +925,10 @@ private executeCommand_ActivateScene(deviceInfo, command) {
         location.setMode(deviceInfo.device.getName())
     } else {
         if (command.params.deactivate) {
+            checkMfa(deviceInfo.deviceType, "Deactivate Scene", command)
             deviceInfo.device."${sceneTrait.deactivateCommand}"()
         } else {
+            checkMfa(deviceInfo.deviceType, "Activate Scene", command)
             deviceInfo.device."${sceneTrait.activateCommand}"()
         }
     }
@@ -808,6 +936,7 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 }
 
 private executeCommand_BrightnessAbsolute(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Brightness", command)
     def brightnessTrait = deviceInfo.deviceType.traits.Brightness
     // Google uses 0...100 for brightness but hubitat uses 0...99, so clamp
     def brightnessToSet = Math.min(command.params.brightness, 99)
@@ -819,6 +948,7 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 }
 
 private executeCommand_Reverse(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     deviceInfo.device."${fanSpeedTrait.reverseCommand}"()
     return [:]
@@ -839,6 +969,7 @@ private executeCommand_OnOff(deviceInfo, command) {
 
     def checkValue
     if (command.params.on) {
+        checkMfa(deviceInfo.deviceType, "On", command)
         on(deviceInfo.device)
         if (onOffTrait.onValue) {
             checkValue = onOffTrait.onValue
@@ -846,6 +977,7 @@ private executeCommand_OnOff(deviceInfo, command) {
             checkValue = { it != onOffTrait.offValue }
         }
     } else {
+        checkMfa(deviceInfo.deviceType, "Off", command)
         off(deviceInfo.device)
         if (onOffTrait.onValue) {
             checkValue = onOffTrait.offValue
@@ -863,12 +995,15 @@ private executeCommand_OpenClose(deviceInfo, command) {
     def openPercent = command.params.openPercent as int
     def checkValue
     if (openCloseTrait.discreteOnlyOpenClose && openPercent == 100) {
+        checkMfa(deviceInfo.deviceType, "Open", command)
         deviceInfo.device."${openCloseTrait.openCommand}"()
         checkValue = { it in openCloseTrait.openValue.split(",") }
     } else if (openCloseTrait.discreteOnlyOpenClose && openPercent == 0) {
+        checkMfa(deviceInfo.deviceType, "Close", command)
         deviceInfo.device."${openCloseTrait.closeCommand}"()
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
+        checkMfa(deviceInfo.deviceType, "Set Position", command)
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
         checkValue = openPercent
     }
@@ -878,6 +1013,7 @@ private executeCommand_OpenClose(deviceInfo, command) {
 }
 
 private executeCommand_SetFanSpeed(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     def fanSpeed = command.params.fanSpeed
 
@@ -904,12 +1040,14 @@ private executeCommand_SetToggles(deviceInfo, command) {
             ],
             device: deviceInfo.device
         ]
+        checkMfa(deviceInfo.deviceType, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
         statesToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
     }
     return statesToCheck
 }
 
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def setpoint = command.params.thermostatTemperatureSetpoint
     if (temperatureSettingTrait.temperatureUnit == "F") {
@@ -923,6 +1061,7 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
 }
 
 private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def coolSetpoint = command.params.thermostatTemperatureSetpointHigh
     def heatSetpoint = command.params.thermostatTemperatureSetpointLow
@@ -940,6 +1079,7 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
 }
 
 private executeCommand_ThermostatSetMode(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Mode", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def googleMode = command.params.thermostatMode
     def hubitatMode = temperatureSettingTrait.googleToHubitatModeMap[googleMode]
@@ -1184,20 +1324,23 @@ void updated() {}
 
 private traitFromSettings_Brightness(traitName) {
     return [
-        brightnessAttribute: settings."${traitName}.brightnessAttribute",
-        setBrightnessCommand: settings."${traitName}.setBrightnessCommand"
+        brightnessAttribute:  settings."${traitName}.brightnessAttribute",
+        setBrightnessCommand: settings."${traitName}.setBrightnessCommand",
+        commands:             ["Set Brightness"]
     ]
 }
 
 private traitFromSettings_FanSpeed(traitName) {
     def fanSpeedMapping = [
         currentSpeedAttribute: settings."${traitName}.currentSpeedAttribute",
-        setFanSpeedCommand: settings."${traitName}.setFanSpeedCommand",
-        fanSpeeds: [:],
-        reversible: settings."${traitName}.reversible"
+        setFanSpeedCommand:    settings."${traitName}.setFanSpeedCommand",
+        fanSpeeds:             [:],
+        reversible:            settings."${traitName}.reversible",
+        commands:              ["Set Fan Speed"]
     ]
     if (fanSpeedMapping.reversible) {
         fanSpeedMapping.reverseCommand = settings."${traitName}.reverseCommand"
+        fanSpeedMapping.commands << "Reverse"
     }
     settings."${traitName}.fanSpeeds"?.each { fanSpeed ->
         fanSpeedMapping.fanSpeeds[fanSpeed] = settings."${traitName}.speed.${fanSpeed}.googleNames"
@@ -1209,9 +1352,10 @@ private traitFromSettings_FanSpeed(traitName) {
 private traitFromSettings_OnOff(traitName) {
     def deviceTrait = [
         onOffAttribute: settings."${traitName}.onOffAttribute",
-        onValue: settings."${traitName}.onValue",
-        offValue: settings."${traitName}.offValue",
-        controlType: settings."${traitName}.controlType"
+        onValue:        settings."${traitName}.onValue",
+        offValue:       settings."${traitName}.offValue",
+        controlType:    settings."${traitName}.controlType",
+        commands:       ["On", "Off"]
     ]
 
     if (deviceTrait.controlType == "single") {
@@ -1228,10 +1372,11 @@ private traitFromSettings_OnOff(traitName) {
 private traitFromSettings_OpenClose(traitName) {
     def openCloseTrait = [
         discreteOnlyOpenClose: settings."${traitName}.discreteOnlyOpenClose",
-        openCloseAttribute: settings."${traitName}.openCloseAttribute",
+        openCloseAttribute:    settings."${traitName}.openCloseAttribute",
         // queryOnly may be null for device traits defined with older versions,
         // so coerce it to a boolean by negating it twice
-        queryOnly: !!settings."${traitName}.queryOnly",
+        queryOnly:             !!settings."${traitName}.queryOnly",
+        commands:              []
     ]
     if (openCloseTrait.discreteOnlyOpenClose) {
         openCloseTrait.openValue = settings."${traitName}.openValue"
@@ -1242,8 +1387,10 @@ private traitFromSettings_OpenClose(traitName) {
         if (openCloseTrait.discreteOnlyOpenClose) {
             openCloseTrait.openCommand = settings."${traitName}.openCommand"
             openCloseTrait.closeCommand = settings."${traitName}.closeCommand"
+            openCloseTrait.commands += ["Open", "Close"]
         } else {
             openCloseTrait.setPositionCommand = settings."${traitName}.setPositionCommand"
+            openCloseTrait.commands << "Set Position"
         }
     }
 
@@ -1253,23 +1400,26 @@ private traitFromSettings_OpenClose(traitName) {
 private traitFromSettings_Scene(traitName) {
     def sceneTrait = [
         activateCommand: settings."${traitName}.activateCommand",
-        sceneReversible: settings."${traitName}.sceneReversible"
+        sceneReversible: settings."${traitName}.sceneReversible",
+        commands:        ["Activate Scene"]
     ]
     if (sceneTrait.sceneReversible) {
         sceneTrait.deactivateCommand = settings."${traitName}.deactivateCommand"
+        sceneTrait.commands << "Deactivate Scene"
     }
     return sceneTrait
 }
 
 private traitFromSettings_TemperatureSetting(traitName) {
     def tempSettingTrait = [
-        temperatureUnit: settings."${traitName}.temperatureUnit",
-        modes: settings."${traitName}.modes",
-        setModeCommand: settings."${traitName}.setModeCommand",
-        currentModeAttribute: settings."${traitName}.currentModeAttribute",
-        googleToHubitatModeMap: [:],
-        hubitatToGoogleModeMap: [:],
-        currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute"
+        temperatureUnit:             settings."${traitName}.temperatureUnit",
+        modes:                       settings."${traitName}.modes",
+        setModeCommand:              settings."${traitName}.setModeCommand",
+        currentModeAttribute:        settings."${traitName}.currentModeAttribute",
+        googleToHubitatModeMap:      [:],
+        hubitatToGoogleModeMap:      [:],
+        currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute",
+        commands:                    ["Set Mode"],
     ]
     tempSettingTrait.modes.each { mode ->
         def hubitatMode = settings."${traitName}.mode.${mode}.hubitatMode"
@@ -1282,11 +1432,15 @@ private traitFromSettings_TemperatureSetting(traitName) {
     if (setpointAttr != null) {
         tempSettingTrait.setpointAttribute = setpointAttr
         tempSettingTrait.setSetpointCommand = settings."${traitName}.setSetpointCommand"
+        tempSettingTrait.commands << "Set Setpoint"
     }
     def heatSetpointAttr = settings."${traitName}.heatingSetpointAttribute"
     if (heatSetpointAttr != null) {
         tempSettingTrait.heatingSetpointAttribute = heatSetpointAttr
         tempSettingTrait.setHeatingSetpointCommand = settings."${traitName}.setHeatingSetpointCommand"
+        if (!("Set Setpoint" in tempSettingTrait.commands)) {
+            tempSettingTrait.commands << "Set Setpoint"
+        }
     }
     def coolSetpointAttr = settings."${traitName}.coolingSetpointAttribute"
     if (coolSetpointAttr != null) {
@@ -1310,7 +1464,8 @@ private traitFromSettings_TemperatureSetting(traitName) {
 
 private traitFromSettings_Toggles(traitName) {
     def togglesTrait = [
-        toggles: []
+        toggles:  [],
+        commands: [],
     ]
     def toggles = settings."${traitName}.toggles"?.collect { toggle ->
         def toggleAttrs = [
@@ -1323,6 +1478,12 @@ private traitFromSettings_Toggles(traitName) {
     }
     if (toggles) {
         togglesTrait.toggles = toggles
+        toggles.each { toggle ->
+            togglesTrait.commands += [
+                "${toggle.labels[0]} On" as String,
+                "${toggle.labels[0]} Off" as String
+            ]
+        }
     }
     return togglesTrait
 }
@@ -1458,19 +1619,63 @@ private deviceTypeFromSettings(deviceTypeName) {
         googleDeviceType: settings."${deviceTypeName}.googleDeviceType",
         devices:          settings."${deviceTypeName}.devices",
         traits:           deviceTypeTraitsFromSettings(deviceTypeName),
+        confirmCommands:  [],
+        secureCommands:   [],
+        pinCodes:         [],
     ]
 
     if (deviceType.display == null) {
         return null
     }
+
+    def confirmCommands = settings."${deviceTypeName}.confirmCommands"
+    if (confirmCommands) {
+        deviceType.confirmCommands = confirmCommands
+    }
+
+    def secureCommands = settings."${deviceTypeName}.secureCommands"
+    if (secureCommands) {
+        deviceType.secureCommands = secureCommands
+    }
+
+    def pinCodes = settings."${deviceTypeName}.pinCodes"
+    pinCodes?.each { pinCodeId ->
+        deviceType.pinCodes << [
+            id:    pinCodeId,
+            name:  settings."${deviceTypeName}.pin.${pinCodeId}.name",
+            value: settings."${deviceTypeName}.pin.${pinCodeId}.value",
+        ]
+    }
+
     return deviceType
+}
+
+private deleteDeviceTypePin(deviceType, pinId) {
+    LOGGER.debug("Removing pin with ID ${pinId} from device type ${deviceType.name}")
+    def pinIndex = deviceType.pinCodes.findIndexOf { it.id == pinId }
+    deviceType.pinCodes.removeAt(pinIndex)
+    app.updateSetting("${deviceType.name}.pinCodes", deviceType.pinCodes.collect { it.id })
+    app.removeSetting("${deviceType.name}.pin.${pinId}.name")
+    app.removeSetting("${deviceType.name}.pin.${pinId}.value")
+}
+
+private addDeviceTypePin(deviceType) {
+    deviceType.pinCodes << [
+        id: UUID.randomUUID().toString(),
+        name: null,
+        value: null
+    ]
+    app.updateSetting("${deviceType.name}.pinCodes", deviceType.pinCodes.collect { it.id })
 }
 
 private modeSceneDeviceType() {
     return [
-        name: "hubitat_mode",
-        display: "Hubitat Mode",
+        name:             "hubitat_mode",
+        display:          "Hubitat Mode",
         googleDeviceType: "SCENE",
+        confirmCommands:  [],
+        secureCommands:   [],
+        pinCodes:         [],
         traits: [
             Scene: [
                 name: "hubitat_mode",
@@ -1484,7 +1689,7 @@ private modeSceneDeviceType() {
                 getLabel: { "${mode} Mode" },
                 getId: { "hubitat_mode_${mode}" }
             ]
-        }
+        },
     ]
 }
 
