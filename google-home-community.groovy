@@ -1318,10 +1318,6 @@ private attributesForTrait_Toggles(deviceTrait) {
     ]
 }
 
-void installed() {}
-void uninstalled() {}
-void updated() {}
-
 private traitFromSettings_Brightness(traitName) {
     return [
         brightnessAttribute:  settings."${traitName}.brightnessAttribute",
@@ -1374,8 +1370,8 @@ private traitFromSettings_OpenClose(traitName) {
         discreteOnlyOpenClose: settings."${traitName}.discreteOnlyOpenClose",
         openCloseAttribute:    settings."${traitName}.openCloseAttribute",
         // queryOnly may be null for device traits defined with older versions,
-        // so coerce it to a boolean by negating it twice
-        queryOnly:             !!settings."${traitName}.queryOnly",
+        // so coerce it to a boolean
+        queryOnly:             settings."${traitName}.queryOnly" as boolean,
         commands:              []
     ]
     if (openCloseTrait.discreteOnlyOpenClose) {
@@ -1830,7 +1826,7 @@ private static final HUBITAT_DEVICE_TYPES = [
     touchSensor:                 "Touch Sensor",
     ultravioletIndex:            "Ultraviolet Index",
     valve:                       "Valve",
-    videoCapture:                "Video Camera",
+    videoCamera:                 "Video Camera",
     videoCapture:                "Video Capture",
     voltageMeasurement:          "Voltage Measurement",
     waterSensor:                 "Water Sensor",
