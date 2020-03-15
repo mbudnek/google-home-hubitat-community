@@ -841,6 +841,7 @@ private handleExecuteRequest(request) {
                         status: "SUCCESS"
                     ]
                 } catch (Exception ex) {
+                    LOGGER.debug("Error executing command ${commandName} on device ${device.device.getName()}: ${ex.message}")
                     results[device.device] = [
                         status: "ERROR"
                     ]
@@ -1388,7 +1389,7 @@ private traitFromSettings_OpenClose(traitName) {
             openCloseTrait.closeCommand = settings."${traitName}.closeCommand"
             openCloseTrait.commands += ["Open", "Close"]
         } else {
-            openCloseTrait.setPositionCommand = settings."${traitName}.setPositionCommand"
+            openCloseTrait.openPositionCommand = settings."${traitName}.openPositionCommand"
             openCloseTrait.commands << "Set Position"
         }
     }
