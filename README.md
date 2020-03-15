@@ -95,13 +95,13 @@ Note: The same device should not be selected for multiple device types.
 
 Each device type has the following settings:
 
-    - Device type name:  This is the display name for this device type.  It will be shown in the device selector once the device type is defined.
-    - Device type: A Hubitat capability that will determine which devices are available to select for this device type.
-    - Google Home device type: The type of device that Google Home will see the selected devices as.  Controls the icon and available controls in the Google Home app and on Google Assistant devices with screens.  The "Scene" device type is special.  Devices with the "Scene" type are not shown in the main Google Home app interface, but may be controlled by voice and using routines.
-    - Device traits: The traits defined for this device.  See [Device Traits](#device-traits) below.
-    - Actions to Confirm:  Only visible if the device has one or more traits with actions.  The Google Assistant will ask for confirmation before performing thse actions.  This is primarily useful to prevent the assistant from triggering an action accidentally.
-    - Actions reqiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
-    - PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
+- Device type name:  This is the display name for this device type.  It will be shown in the device selector once the device type is defined.
+- Device type: A Hubitat capability that will determine which devices are available to select for this device type.
+- Google Home device type: The type of device that Google Home will see the selected devices as.  Controls the icon and available controls in the Google Home app and on Google Assistant devices with screens.  The "Scene" device type is special.  Devices with the "Scene" type are not shown in the main Google Home app interface, but may be controlled by voice and using routines.
+- Device traits: The traits defined for this device.  See [Device Traits](#device-traits) below.
+- Actions to Confirm:  Only visible if the device has one or more traits with actions.  The Google Assistant will ask for confirmation before performing thse actions.  This is primarily useful to prevent the assistant from triggering an action accidentally.
+- Actions reqiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
+- PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
 
 
 ## Device Traits
