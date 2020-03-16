@@ -876,15 +876,15 @@ private handleExecuteRequest(request) {
         // Now build our response message
         devices.each { device ->
             def result = results[device.device]
-            result["ids"] = [device.device.getId()]
-            if (result[status] == "SUCCESS") {
+            result.ids = [device.device.getId()]
+            if (result.status == "SUCCESS") {
                 def deviceState = [
                     online: true
                 ]
                 device.deviceType.traits.each { traitType, deviceTrait ->
                     deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
                 }
-                result[states] = deviceState
+                result.states = deviceState
             }
             resp.payload.commands << result
         }
