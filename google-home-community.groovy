@@ -1185,7 +1185,7 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 }
 
 private deviceStateForTrait_LockUnlock(deviceTrait, device) {
-    def isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue`
+    def isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue
     return [
         isLocked: isLocked,
         isJammed: false
