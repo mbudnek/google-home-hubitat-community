@@ -126,6 +126,15 @@ The Fan Speed trait is primarily used for fan controllers with multiple speed se
 - Reversible: Select this if the fan direction can be reversed
 - Reverse Command: Only available if "Reversible" is selected.  A device command that can be used to reverse the device's fan direction.
 
+### Lock/Unlock
+
+The Lock/Unlock trait is used for anything that can lock and unlock, such as doors and windows.  It can be controlled by saying things like "Hey Google, lock {device}" and queried by saying things like "Hey Google, is {device} locked?".  Since locks are often security-sensitive, it is recommended, though not required, that PIN code support be configured for device types implementing this trait.  The Lock/Unlock trait has the following configuration parameters:
+
+- Locked/Unlocked Attribute: The device attribute used to query the current state of the device.  Maps to the `lock` attribute by default.
+- Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
+- Lock Command: A device command used to lock the device.  Should not require any parameters.  Mapps to `lock` by default.
+- Lock Command: A device command used to unlock the device.  Should not require any parameters.  Mapps to `unlock` by default.
+
 ### On/Off
 
 The On/Off trait is used for devices that have discreet on and off states such as switches or lights.  It can be controlled by saying things like "Hey Google, turn on {device}" and queried by saying things like "Hey Google, is {device} on?".  It has the following configuration parameters:
