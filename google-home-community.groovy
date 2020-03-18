@@ -408,6 +408,39 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
     }
 }
 
+private deviceTraitPreferences_LockUnlock(deviceTrait) {
+    section("Lock/Unlock Settings") {
+        input(
+            name: "${deviceTrait.name}.lockedUnlockedAttribute",
+            title: "Locked/Unlocked Attribute",
+            type: "text",
+            defaultValue: "lock",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.lockedValue",
+            title: "Locked Value",
+            type: "text",
+            defaultValue: "locked",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.lockCommand",
+            title: "Lock Command",
+            type: "text",
+            defaultValue: "lock",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.unlockCommand",
+            title: "Unlock Command",
+            type: "text",
+            defaultValue: "unlock",
+            required: true
+        )
+    }
+}
+
 private deviceTraitPreferences_OnOff(deviceTrait) {
     section("On/Off Settings") {
         input(
@@ -959,6 +992,24 @@ private executeCommand_Reverse(deviceInfo, command) {
     return [:]
 }
 
+private executeCommand_LockUnlock(deviceInfo, command) {
+    def lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
+    def checkValue
+    if (command.params.lock) {
+        checkMfa(deviceInfo.deviceType, "Lock", command)
+        checkValue = lockUnlockTrait.lockedValue
+        deviceInfo.device."${lockUnlockTrait.lockCommand}"()
+    } else {
+        checkMfa(deviceInfo.deviceType, "Unlock", command)
+        checkValue = { it != lockUnlockTrait.lockedValue }
+        deviceInfo.device."${lockUnlockTrait.unlockCommand}"()
+    }
+
+    return [
+        (lockUnlockTrait.lockedUnlockedAttribute): checkValue
+    ]
+}
+
 private executeCommand_OnOff(deviceInfo, command) {
     def onOffTrait = deviceInfo.deviceType.traits.OnOff
 
@@ -1133,6 +1184,14 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     ]
 }
 
+private deviceStateForTrait_LockUnlock(deviceTrait, device) {
+    def isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue`
+    return [
+        isLocked: isLocked,
+        isJammed: false
+    ]
+}
+
 private deviceStateForTrait_OnOff(deviceTrait, device) {
     def isOn
     if (deviceTrait.onValue) {
@@ -1265,6 +1324,10 @@ private attributesForTrait_FanSpeed(deviceTrait) {
     return fanSpeedAttrs
 }
 
+private attributesForTrait_LockUnlock(deviceTrait) {
+    return [:]
+}
+
 private attributesForTrait_OnOff(deviceTrait) {
     return [:]
 }
@@ -1350,6 +1413,16 @@ private traitFromSettings_FanSpeed(traitName) {
     }
 
     return fanSpeedMapping
+}
+
+private traitFromSettings_LockUnlock(traitName) {
+    return [
+        lockedUnlockedAttribute: settings."${traitName}.lockedUnlockedAttribute",
+        lockedValue:             settings."${traitName}.lockedValue",
+        lockCommand:             settings."${traitName}.lockCommand",
+        unlockCommand:           settings."${traitName}.unlockCommand",
+        commands:                ["Lock", "Unlock"]
+    ]
 }
 
 private traitFromSettings_OnOff(traitName) {
@@ -1539,6 +1612,13 @@ private deleteDeviceTrait_FanSpeed(deviceTrait) {
         app.removeSetting("${deviceTrait.name}.speed.${fanSpeed}.googleNames")
     }
     app.removeSetting("${deviceTrait.name}.fanSpeeds")
+}
+
+private deleteDeviceTrait_LockUnlock(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.lockedUnlockedAttribute")
+    app.removeSetting("${deviceTrait.name}.lockedValue")
+    app.removeSetting("${deviceTrait.name}.lockCommand")
+    app.removeSetting("${deviceTrait.name}.unlockCommand")
 }
 
 private deleteDeviceTrait_OnOff(deviceTrait) {
@@ -1919,7 +1999,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //HumiditySetting: "Humidity Setting",
     //LightEffects: "Light Effects",
     //Locator: "Locator",
-    //LockUnlock: "Lock/Unlock",
+    LockUnlock: "Lock/Unlock",
     //Modes: "Modes",
     OnOff: "On/Off",
     OpenClose: "Open/Close",
