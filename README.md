@@ -111,15 +111,15 @@ Google Home defines a number of device traits that you can mix-and-match to defi
 
 The Brightness trait is primarily used for devices like dimmer switches and light bulbs, but can be used for any device that can be set to a level between 0% and 100%.  It can be controlled by saying things like "Hey Google, set {device} to {level}" and queried by saying things like "Hey Google, what's the level of {device}?".  It has the following configuration parameters:
 
-- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Mapps to the `level` attribute by default.
-- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Mapps to the `setLevel` command by default.
+- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
+- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 
 ### Fan Speed
 
 The Fan Speed trait is primarily used for fan controllers with multiple speed settings.  It can be controlled by saying things like "Hey Google, set {device} to {speed}" and queried by saying things like "Hey Google, what's the {device} speed?".  It has the following configuration parameters:
 
 - Current Speed Attribute: The device attribute used to query the current fan speed of the device.  Maps to the `speed` attribute by default.
-- Set Speed Command: A device command used to set the fan speed of the device.  Should accept one of the supported fan speeds.  Mapps to the `setSpeed` command by default.
+- Set Speed Command: A device command used to set the fan speed of the device.  Should accept one of the supported fan speeds.  Maps to the `setSpeed` command by default.
 - Supported Fan Speeds: The set of fan speed settings that this type of device supports.  If multiple settings will set the device to the same fan speed, you should only select one of them.
 - Google Home Level Names for {speed} - A comma-separated list of names that you will use to reference this fan speed when interacting with the Google Assistant.  By default, the name of the speed in Hubitat is used.
 - Reversible: Select this if the fan direction can be reversed
@@ -131,8 +131,8 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 
 - Locked/Unlocked Attribute: The device attribute used to query the current state of the device.  Maps to the `lock` attribute by default.
 - Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
-- Lock Command: A device command used to lock the device.  Should not require any parameters.  Mapps to `lock` by default.
-- Lock Command: A device command used to unlock the device.  Should not require any parameters.  Mapps to `unlock` by default.
+- Lock Command: A device command used to lock the device.  Should not require any parameters.  Maps to `lock` by default.
+- Lock Command: A device command used to unlock the device.  Should not require any parameters.  Maps to `unlock` by default.
 
 ### On/Off
 
@@ -143,8 +143,8 @@ The On/Off trait is used for devices that have discreet on and off states such a
 - Off Value: The value that the On/Off Attribute will report when the device is off.  Optional if On Value is specified.  Defaults to "off".
 - Control Type: This parameter determines how this device is controlled.  Either with a single command that accepts different parameters for "on" and "off" or two different commands for "on" and "off".
     - Separate Commands
-        - On Command: A device command used to turn the device on.  Should not require any parameters.  Mapps to `on` by default.
-        - Off Command: A device command used to turn the device off.  Should not require any parameters. Mapps to `off` by default.
+        - On Command: A device command used to turn the device on.  Should not require any parameters.  Maps to `on` by default.
+        - Off Command: A device command used to turn the device off.  Should not require any parameters. Maps to `off` by default.
     - Single Command
         - On/Off Command: A device command used to turn the device on or off.  Should accept one parameter.
         - On Parameter: The parameter to pass to the On/Off Command to turn the device on.
@@ -163,30 +163,30 @@ The Open/Close trait is used for devices that can be opened and closed such as d
         - Open/Close Attribute: The device attribute used to query the current state of the device.  Should always be either Open Value or Closed Value.
         - Open Value: The value that the Open/Close Attribute will report when the device is open.  Defaults to "open".
         - Closed Value: The value that the Open/Close Attribute will report when the device is closed.  Defaults to "closed".
-        - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Mapps to `open` by default.
-        - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Mapps to `close` by default.
+        - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Maps to `open` by default.
+        - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Maps to `close` by default.
 
 ### Scene
 
 This is used for controlling scenes, and should generally only be used with the "Scene" device type.  It can be controlled by saying things like "Hey Google, activate {scene}" or "Hey Google, deactivate {scene}".  It cannot be queried.  It has the following configuration parameters:
 
-- Activate Command: A device command used to activate this scene.  Mapps to `on` by default.
+- Activate Command: A device command used to activate this scene.  Maps to `on` by default.
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
-- Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Mapps to `off` by default.
+- Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
 
 ### Temperature Setting
 
 This trait is primarily used for thermostats.  It can be controlled by saying things like "Hey Google, set {device} to 75 degrees" or "Hey Google, set {device} to heat mode" and can be queried by saying things like "Hey Google, what's the temperature of {device}?".  It has the following configuration parameters:
 
-- Temperature Unit: The unit that this device reports temperature in, either Fahrenheit or Celcius.  Defaults to your hub's default temperature unit.
+- Temperature Unit: The unit that this device reports temperature in, either Fahrenheit or Celsius.  Defaults to your hub's default temperature unit.
 - Supported Modes: The operating modes that this device supports.
-- Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Mapps to `temperature` by default.
-- Setpoint Attribute: The device attribute used to query the device's current setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Mapps to `thermostatSetpoint` by default.
-- Set Setpoint Command:  A device command used to set the device's setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Mapps to `setCoolingSetpoint` by default.
-- Heating Setpoint Attribute: The device attribute used to query the device's current heating setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Mapps to `heatingSetpoint` by default.
-- Set Heating Setpoint Command:  A device command used to set the device's heating setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Mapps to `setHeatingSetpoint` by default.
-- Cooling Setpoint Attribute: The device attribute used to query the device's current cooling setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Mapps to `coolingSetpoint` by default.
-- Set Cooling Setpoint Command:  A device command used to set the device's cooling setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Mapps to `setCoolingSetpoint` by default.
+- Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Maps to `temperature` by default.
+- Setpoint Attribute: The device attribute used to query the device's current setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `thermostatSetpoint` by default.
+- Set Setpoint Command:  A device command used to set the device's setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `setCoolingSetpoint` by default.
+- Heating Setpoint Attribute: The device attribute used to query the device's current heating setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `heatingSetpoint` by default.
+- Set Heating Setpoint Command:  A device command used to set the device's heating setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `setHeatingSetpoint` by default.
+- Cooling Setpoint Attribute: The device attribute used to query the device's current cooling setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `coolingSetpoint` by default.
+- Set Cooling Setpoint Command:  A device command used to set the device's cooling setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `setCoolingSetpoint` by default.
 - Temperature Buffer: The minimum offset between the heating and cooling setpoints when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Optional.
 - {Mode} Hubitat Mode: The value passed to the Set Mode Command to set the device to this mode and reported by the Current Mode Attribute when the device is in this mode.
 - Set Mode Command: A device command used to set the current operating mode of the device.  Should accept any of the {Mode} Hubitat Mode values.
@@ -196,7 +196,7 @@ This trait is primarily used for thermostats.  It can be controlled by saying th
 
 ### Toggles
 
-This trait is used for devices that have one or more independently togglable on/off settings.  For example, a manual override of a thermostat schedule or an engery saving mode on a dryer.  It can be controlled by saying things like "Hey Google, turn on {toggle} on {device}" or "Hey Google, turn off {device} {toggle}" and can be queried by saying things like "Hey Google, is {device} {toggle} on?".
+This trait is used for devices that have one or more independently togglable on/off settings.  For example, a manual override of a thermostat schedule or an energy saving mode on a dryer.  It can be controlled by saying things like "Hey Google, turn on {toggle} on {device}" or "Hey Google, turn off {device} {toggle}" and can be queried by saying things like "Hey Google, is {device} {toggle} on?".
 
 Multiple toggles may be defined for a device type, each has all of the parameters defined for the [On/Off trait](#onoff), as well as the following:
 
