@@ -343,6 +343,108 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
     }
 }
 
+private deviceTraitPreferences_ColorSetting(deviceTrait) {
+    section ("Color Setting Preferences") {
+        input(
+            name: "${deviceTrait.name}.fullSpectrum",
+            title: "Full-Spectrum Color Control",
+            type: "bool",
+            required: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.fullSpectrum) {
+            input(
+                name: "${deviceTrait.name}.hueAttribute",
+                title: "Hue Attribute",
+                type: "text",
+                defaultValue: "hue",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.saturationAttribute",
+                title: "Saturation Attribute",
+                type: "text",
+                defaultValue: "saturation",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.levelAttribute",
+                title: "Level Attribute",
+                type: "text",
+                defaultValue: "level",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.setColorCommand",
+                title: "Set Color Command",
+                type: "text",
+                defaultValue: "setColor",
+                required: true
+            )
+        }
+        input(
+            name: "${deviceTrait.name}.colorTemperature",
+            title: "Color Temperature Control",
+            type: "bool",
+            required: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.colorTemperature) {
+            input(
+                name: "${deviceTrait.name}.colorTemperature.min",
+                title: "Minimum Color Temperature",
+                type: "number",
+                defaultValue: 2200,
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.colorTemperature.max",
+                title: "Maximum Color Temperature",
+                type: "number",
+                defaultValue: 6500,
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.colorTemperatureAttribute",
+                title: "Color Temperature Attribute",
+                type: "text",
+                defaultValue: "colorTemperature",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.setColorTemperatureCommand",
+                title: "Set Color Temperature Command",
+                type: "text",
+                defaultValue: "setColorTemperature",
+                required: true
+            )
+        }
+        if (deviceTrait.fullSpectrum && deviceTrait.colorTemperature) {
+            input(
+                name: "${deviceTrait.name}.colorModeAttribute",
+                title: "Color Mode Attribute",
+                type: "text",
+                defaultValue: "colorMode",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.fullSpectrumModeValue",
+                title: "Full-Spectrum Mode Value",
+                type: "text",
+                defaultValue: "RGB",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.temperatureModeValue",
+                title: "Color Temperature Mode Value",
+                type: "text",
+                defaultValue: "CT",
+                required: true
+            )
+        }
+    }
+}
+
 private deviceTraitPreferences_FanSpeed(deviceTrait) {
     hubitatFanSpeeds = [
         "low":         "Low",
@@ -985,6 +1087,50 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     ]
 }
 
+private executeCommand_ColorAbsolute(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Color", command)
+    def colorTrait = deviceInfo.deviceType.traits.ColorSetting
+
+    def checkAttrs = [:]
+    if (command.params.color.temperature) {
+        def temperature = command.params.color.temperature
+        deviceInfo.device."${colorTrait.setColorTemperatureCommand}"(temperature)
+        checkAttrs << [
+            (colorTrait.colorTemperatureAttribute): temperature
+        ]
+        if (colorTrait.fullSpectrum && colorTrait.colorTemperature) {
+            checkAttrs << [
+                (colorTrait.colorModeAttribute): colorTrait.temperatureModeValue
+            ]
+        }
+    } else if (command.params.color.spectrumHSV) {
+        def hsv = command.params.color.spectrumHSV
+        // Google sends hue in degrees (0...360), but hubitat wants it in the range 0...100
+        def hue = Math.round(hsv.hue * 100 / 360)
+        // Google sends saturation and value as floats in the range 0...1,
+        // but Hubitat wants them in the range 0...100
+        def saturation = Math.round(hsv.saturation * 100)
+        def value = Math.round(hsv.value * 100)
+
+        deviceInfo.device."${colorTrait.setColorCommand}"([
+            hue:        hue,
+            saturation: saturation,
+            level:      value
+        ])
+        checkAttrs << [
+            (colorTrait.hueAttribute):        hue,
+            (colorTrait.saturationAttribute): saturation,
+            (colorTrait.levelAttribute):      value
+        ]
+        if (colorTrait.fullSpectrum && colorTrait.colorTemperature) {
+            checkAttrs << [
+                (colorTrait.colorModeAttribute): colorTrait.fullSpectrumModeValue
+            ]
+        }
+    }
+    return checkAttrs
+}
+
 private executeCommand_Reverse(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
@@ -1176,6 +1322,52 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
     ]
 }
 
+private deviceStateForTrait_ColorSetting(deviceTrait, device) {
+    def colorMode
+    if (deviceTrait.fullSpectrum && deviceTrait.colorTemperature) {
+        if (device.currentValue(deviceTrait.colorModeAttribute) == deviceTrait.fullSpectrumModeValue) {
+            colorMode = "spectrum"
+        } else {
+            colorMode = "temperature"
+        }
+    } else if (deviceTrait.fullSpectrum) {
+        colorMode = "spectrum"
+    } else {
+        colorMode = "temperature"
+    }
+
+    def deviceState = [
+        color: [:]
+    ]
+
+    if (colorMode == "spectrum") {
+        def hue = device.currentValue(deviceTrait.hueAttribute)
+        def saturation = device.currentValue(deviceTrait.saturationAttribute)
+        def value = device.currentValue(deviceTrait.levelAttribute)
+
+        // Hubitat reports hue in the range 0...100, but Google wants it in degrees (0...360)
+        hue = hue * 360 / 100
+        // Hubitat reports saturation and value in the range 0...100 but
+        // Google wants them as floats in the range 0...1
+        saturation = saturation / 100
+        value = value / 100
+
+        deviceState.color = [
+            spectrumHsv: [
+                hue: hue,
+                saturation: saturation,
+                value: value
+            ]
+        ]
+    } else {
+        deviceState.color = [
+            temperatureK: device.currentValue(deviceTrait.colorTemperatureAttribute)
+        ]
+    }
+
+    return deviceState
+}
+
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
@@ -1302,6 +1494,24 @@ private attributesForTrait_Brightness(deviceTrait) {
     return [:]
 }
 
+private attributesForTrait_ColorSetting(deviceTrait) {
+    def colorAttrs = [:]
+    if (deviceTrait.fullSpectrum) {
+        colorAttrs << [
+            colorModel: "hsv"
+        ]
+    }
+    if (deviceTrait.colorTemperature) {
+        colorAttrs << [
+            colorTemperatureRange: [
+                temperatureMinK: deviceTrait.colorTemperatureMin,
+                temperatureMaxK: deviceTrait.colorTemperatureMax
+            ]
+        ]
+    }
+    return colorAttrs
+}
+
 private attributesForTrait_FanSpeed(deviceTrait) {
     def fanSpeedAttrs = [
         availableFanSpeeds: [
@@ -1394,6 +1604,40 @@ private traitFromSettings_Brightness(traitName) {
         setBrightnessCommand: settings."${traitName}.setBrightnessCommand",
         commands:             ["Set Brightness"]
     ]
+}
+
+private traitFromSettings_ColorSetting(traitName) {
+    def deviceTrait = [
+        fullSpectrum:     settings."${traitName}.fullSpectrum",
+        colorTemperature: settings."${traitName}.colorTemperature",
+        commands:         ["Set Color"]
+    ]
+
+    if (deviceTrait.fullSpectrum) {
+        deviceTrait << [
+            hueAttribute:        settings."${traitName}.hueAttribute",
+            saturationAttribute: settings."${traitName}.saturationAttribute",
+            levelAttribute:      settings."${traitName}.levelAttribute",
+            setColorCommand:     settings."${traitName}.setColorCommand"
+        ]
+    }
+    if (deviceTrait.colorTemperature) {
+        deviceTrait << [
+            colorTemperatureMin:        settings."${traitName}.colorTemperature.min",
+            colorTemperatureMax:        settings."${traitName}.colorTemperature.max",
+            colorTemperatureAttribute:  settings."${traitName}.colorTemperatureAttribute",
+            setColorTemperatureCommand: settings."${traitName}.setColorTemperatureCommand"
+        ]
+    }
+    if (deviceTrait.fullSpectrum && deviceTrait.colorTemperature) {
+        deviceTrait << [
+            colorModeAttribute:    settings."${traitName}.colorModeAttribute",
+            fullSpectrumModeValue: settings."${traitName}.fullSpectrumModeValue",
+            temperatureModeValue:  settings."${traitName}.temperatureModeValue"
+        ]
+    }
+
+    return deviceTrait
 }
 
 private traitFromSettings_FanSpeed(traitName) {
@@ -1601,6 +1845,22 @@ private deleteDeviceTrait(deviceTrait) {
 private deleteDeviceTrait_Brightness(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.brightnessAttribute")
     app.removeSetting("${deviceTrait.name}.setBrightnessCommand")
+}
+
+private deleteDeviceTrait_ColorSetting(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.fullSpectrum")
+    app.removeSetting("${deviceTrait.name}.hueAttribute")
+    app.removeSetting("${deviceTrait.name}.saturationAttribute")
+    app.removeSetting("${deviceTrait.name}.levelAttribute")
+    app.removeSetting("${deviceTrait.name}.setColorCommand")
+    app.removeSetting("${deviceTrait.name}.colorTemperature")
+    app.removeSetting("${deviceTrait.name}.colorTemperature.min")
+    app.removeSetting("${deviceTrait.name}.colorTemperature.max")
+    app.removeSetting("${deviceTrait.name}.colorTemperatureAttribute")
+    app.removeSetting("${deviceTrait.name}.setColorTemperatureCommand")
+    app.removeSetting("${deviceTrait.name}.colorModeAttribute")
+    app.removeSetting("${deviceTrait.name}.fullSpectrumModeValue")
+    app.removeSetting("${deviceTrait.name}.temperatureModeValue")
 }
 
 private deleteDeviceTrait_FanSpeed(deviceTrait) {
@@ -1990,7 +2250,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
     //CameraStream: "Camera Stream",
-    //ColorSetting: "Color Setting",
+    ColorSetting: "Color Setting",
     //Cook: "Cook",
     //Dispense: "Dispense",
     //Dock: "Dock",

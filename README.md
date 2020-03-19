@@ -114,6 +114,29 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 - Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
 - Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 
+### Color Setting
+
+The Color Setting trait is intended primarily for smart lights that can have their color set.  It supports both full-spectrum color and color temperature.  It can be controlled by saying things like "Hey Goolge, set {device} to blue" or "Hey Google, set {device} to 3500K".  Color cannot currently be queried.  The Color Setting trait has the following configuration parameters:
+
+NOTE: At least one of "Full-Spectrum Color Control" and/or "Color Temperature Control" **must** be set.
+
+- Full-Spectrum Color Control: Set this if the device can be set to any color.  If set, the following settings become available:
+    - Hue Attribute: The device attribute used to query the current hue of the device.  Maps to `hue` by default.
+    - Saturation Attribute: The device attribute used to query the current saturation of the device.  Maps to `saturation` by default.
+    - Level Attribute: The device attribute used to query the current level/value of the device.  Maps to `level` by default.
+    - Set Color Command: A device command used to set the color of the device.  Should accept a map with the keys `hue`, `saturaton`, and `level`.  Maps to `setColor` by default.
+- Color Temperature Control: Set this if the device can have its color temperature set.  If set, the following settings become available:
+    - Minimum Color Temperature: The minimum color temperature to which the device can be set.  Default is 2200.
+    - Maximum Color Temperature: The maximum color temperature to which the device can be set.  Default is 6500.
+    - Color Temperature Attribute: The device attribute used to query the current color temperature of the device.  Maps to `colorTemperature` by default.
+    - Set Color Temperature Command: A device command used to set the color temperature of the device.  Should accept an integer in the range [Minimum Color Temperature, Maximum Color Temperature].  Maps to `setColorTemperature` by default.
+
+If both "Full-Spectrum Color Control" and "Color Temperature Control" are set, the following settings become available:
+
+- Color Mode Attribute: The device attribute used to determine if the device's color is currently set to a full-spectrum color or a color temperature.  Maps to `colorMode` by default.
+- Full-Spectrum Mode Value: The value reported by the "Color Mode Attribute" when the device has been set to a full-spectrum color.  Default is "RGB".
+- Color Temperature Mode Value: The value reported by the "Color Mode Attribute" when the device has been set to a color temperature.  Default is "CT".
+
 ### Fan Speed
 
 The Fan Speed trait is primarily used for fan controllers with multiple speed settings.  It can be controlled by saying things like "Hey Google, set {device} to {speed}" and queried by saying things like "Hey Google, what's the {device} speed?".  It has the following configuration parameters:
