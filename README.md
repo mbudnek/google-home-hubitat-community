@@ -199,11 +199,14 @@ This is used for controlling scenes, and should generally only be used with the 
 
 ### Temperature Setting
 
-This trait is primarily used for thermostats.  It can be controlled by saying things like "Hey Google, set {device} to 75 degrees" or "Hey Google, set {device} to heat mode" and can be queried by saying things like "Hey Google, what's the temperature of {device}?".  It has the following configuration parameters:
+This trait is primarily used for thermostats and ambient temperature sensors.  It can be controlled by saying things like "Hey Google, set {device} to 75 degrees" or "Hey Google, set {device} to heat mode" and can be queried by saying things like "Hey Google, what's the temperature of {device}?".  It has the following configuration parameters:
 
 - Temperature Unit: The unit that this device reports temperature in, either Fahrenheit or Celsius.  Defaults to your hub's default temperature unit.
-- Supported Modes: The operating modes that this device supports.
 - Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Maps to `temperature` by default.
+- Query Only Temperature Setting: Set to indicate that this device can only be queried for temperature, not set.
+
+The following settings are only availabel if "Query Only Temperature Setting" is unset:
+- Supported Modes: The operating modes that this device supports.
 - Setpoint Attribute: The device attribute used to query the device's current setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `thermostatSetpoint` by default.
 - Set Setpoint Command:  A device command used to set the device's setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `setCoolingSetpoint` by default.
 - Heating Setpoint Attribute: The device attribute used to query the device's current heating setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `heatingSetpoint` by default.
