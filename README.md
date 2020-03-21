@@ -197,9 +197,22 @@ This is used for controlling scenes, and should generally only be used with the 
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
 - Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
 
+### Temperature Control
+
+This trait is intended for devices that can sense or control their own internal temperature such as a water heater or an oven.  For devices that sense or control the ambient temperature, use [Temperature Setting](#temperature-setting).  It can be controlled by saying things like "Hey Google, set {device} to 100 degrees" and queried by saying things like "Hey Google, what's the temperature of {device}?".  The temperature of these devices will not be reported when asking the Google Assistant about the temperature of a room.  The Temperature Control trait has the following configuration parameters:
+
+- Temperature Unit: The unit that this device reports temperature in, either Fahrenheit or Celsius.  Defaults to your hub's default temperature unit.
+- Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Maps to `temperature` by default.
+- Query Only Temperature Control: Should be set if this device can only be queried for its current temperature, and not controlled.  If this setting is not set, the following configuration parameters become available:
+    - Current Temperature Setpoint Attribute: The device attribute used to query the device's current setpoint.
+    - Set Temperature Command: A device command used to set the desired temperature of the device.
+    - Minimum Temperature Setting: The minimum temperature to which the device can be set.
+    - Maximum Temperature Setting: The maximum temperature to which the device can be set.
+    - Temperature Step: The ammount that the desired temperature will be raised or lowered when you say "Hey Google, turn up/down {device}".
+
 ### Temperature Setting
 
-This trait is primarily used for thermostats and ambient temperature sensors.  It can be controlled by saying things like "Hey Google, set {device} to 75 degrees" or "Hey Google, set {device} to heat mode" and can be queried by saying things like "Hey Google, what's the temperature of {device}?".  It has the following configuration parameters:
+This trait is primarily used for thermostats and ambient temperature sensors.  For devices that sense or control their own internal temperature, use the [Temperature Control](#temperature-control) trait.  It can be controlled by saying things like "Hey Google, set {device} to 75 degrees" or "Hey Google, set {device} to heat mode" and can be queried by saying things like "Hey Google, what's the temperature of {device}?".  The current temperature of all devices in a room with this trait will be reported when asking the Google Assistant for the temperature of the room.  It has the following configuration parameters:
 
 - Temperature Unit: The unit that this device reports temperature in, either Fahrenheit or Celsius.  Defaults to your hub's default temperature unit.
 - Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Maps to `temperature` by default.

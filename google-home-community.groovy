@@ -721,6 +721,68 @@ def deviceTraitPreferences_Scene(deviceTrait) {
     }
 }
 
+def deviceTraitPreferences_TemperatureControl(deviceTrait) {
+    section ("Temperature Control Preferences") {
+        input(
+            name: "${deviceTrait.name}.temperatureUnit",
+            title: "Temperature Unit",
+            type: "enum",
+            options: [
+                "C": "Celsius",
+                "F": "Fahrenheit"
+            ],
+            required: true,
+            defaultValue: getTemperatureScale()
+        )
+        input(
+            name: "${deviceTrait.name}.currentTemperatureAttribute",
+            title: "Current Temperature Attribute",
+            type: "text",
+            required: true,
+            defaultValue: "temperature"
+        )
+        input(
+            name: "${deviceTrait.name}.queryOnly",
+            title: "Query Only Temperature Control",
+            type: "bool",
+            defaultValue: false,
+            required: true,
+            submitOnChange: true
+        )
+        if (!deviceTrait.queryOnly) {
+            input(
+                name: "${deviceTrait.name}.setpointAttribute",
+                title: "Current Temperature Setpoint Attribute",
+                type: "text",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.setTemperatureCommand",
+                title: "Set Temperature Command",
+                type: "text",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.minTemperature",
+                title: "Minimum Temperature Setting",
+                type: "real",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.maxTemperature",
+                title: "Maximum Temperature Setting",
+                type: "real",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.temperatureStep",
+                title: "Temperature Step",
+                type: "real"
+            )
+        }
+    }
+}
+
 def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
     section ("Temperature Setting Preferences") {
         input(
@@ -1241,6 +1303,20 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
     ]
 }
 
+private executeCommand_SetTemperature(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceTrait, "Set Temperature", command)
+    def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
+    def setpoint = command.params.temperature
+    if (temperatureControlTrait.temperatureUnit == "F") {
+        setpoint = celsiusToFahrenheitRounded(setpoint)
+    }
+    deviceInfo.device."${temperatureControlTrait.setTemperatureCommand}"(setpoint)
+
+    return [
+        (temperatureControlTrait.setpointAttribute): setpoint
+    ]
+}
+
 private executeCommand_SetToggles(deviceInfo, command) {
     def togglesTrait = deviceInfo.deviceType.traits.Toggles
     def togglesToSet = command.params.updateToggleSettings
@@ -1431,6 +1507,28 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
 }
 
+private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
+    def currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
+    if (deviceTrait.temperatureUnit == "F") {
+        currentTemperature = fahrenheitToCelsiusRounded(currentTemperature)
+    }
+    def state = [
+        temperatureAmbientCelsius: currentTemperature
+    ]
+
+    if (deviceTrait.queryOnly) {
+        state.temperatureSetpointCelsius = currentTemperature
+    } else {
+        def setpoint = device.currentValue(deviceTrait.setpointAttribute)
+        if (deviceTrait.temperatureUnit == "F") {
+            setpoint = fahrenheitToCelsiusRounded(setpoint)
+        }
+        state.temperatureSetpiontCelsius = setpoint
+    }
+
+    return state
+}
+
 private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
     def state = [:]
 
@@ -1572,6 +1670,37 @@ private attributesForTrait_Scene(deviceTrait) {
     return [
         sceneReversible: deviceTrait.sceneReversible
     ]
+}
+
+private attributesForTrait_TemperatureControl(deviceTrait) {
+    def attrs = [
+        temperatureUnitForUX:        deviceTrait.temperatureUnit,
+        queryOnlyTemperatureControl: deviceTrait.queryOnly
+    ]
+
+    if (!deviceTrait.queryOnly) {
+        if (deviceTrait.temperatureUnit == "C") {
+            attrs.temperatureRange = [
+                minThresholdCelsius: deviceTrait.minTemperature,
+                maxThresholdCelsius: deviceTrait.maxTemperature
+            ]
+        } else {
+            attrs.temperatureRange = [
+                minThresholdCelsius: fahrenheitToCelsiusRounded(deviceTrait.minTemperature),
+                maxThresholdCelsius: fahrenheitToCelsiusRounded(deviceTrait.maxTemperature)
+            ]
+        }
+
+        if (deviceTrait.temperatureStep) {
+            if (deviceTrait.temperatureUnit == "C") {
+                attrs.temperatureStepCelsius = deviceTrait.temperatureStep
+            } else {
+                attrs.temperatureStepCelsius = fahrenheitToCelsiusRounded(deviceTrait.temperatureStep)
+            }
+        }
+    }
+
+    return attrs
 }
 
 private attributesForTrait_TemperatureSetting(deviceTrait) {
@@ -1752,6 +1881,32 @@ private traitFromSettings_Scene(traitName) {
         sceneTrait.commands << "Deactivate Scene"
     }
     return sceneTrait
+}
+
+private traitFromSettings_TemperatureControl(traitName) {
+    def tempControlTrait = [
+        temperatureUnit:             settings."${traitName}.temperatureUnit",
+        currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute",
+        queryOnly:                   settings."${traitName}.queryOnly",
+        commands:                    []
+    ]
+
+    if (!tempControlTrait.queryOnly) {
+        tempControlTrait << [
+            currentSetpointAttribute: settings."${traitName}.setpointAttribute",
+            setTemperatureCommand:    settings."${traitName}.setTemperatureCommand",
+            minTemperature:           settings."${traitName}.minTemperature",
+            maxTemperature:           settings."${traitName}.maxTemperature"
+        ]
+        tempControlTrait.commands << "Set Temperature"
+
+        def temperatureStep = settings."${traitName}.temperatureStep"
+        if (temperatureStep) {
+            tempControlTrait.temperatureStep = temperatureStep
+        }
+    }
+
+    return tempControlTrait
 }
 
 private traitFromSettings_TemperatureSetting(traitName) {
@@ -1942,6 +2097,17 @@ private deleteDeviceTrait_Scene(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.activateCommand")
     app.removeSetting("${deviceTrait.name}.deactivateCommand")
     app.removeSetting("${deviceTrait.name}.sceneReversible")
+}
+
+private deleteDeviceTrait_TemperatureControl(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.temperatureUnit")
+    app.removeSetting("${deviceTrait.name}.currentTemperatureAttribute")
+    app.removeSetting("${deviceTrait.name}.queryOnly")
+    app.removeSetting("${deviceTrait.name}.setpointAttribute")
+    app.removeSetting("${deviceTrait.name}.setTemperatureCommand")
+    app.removeSetting("${deviceTrait.name}.minTemperature")
+    app.removeSetting("${deviceTrait.name}.maxTemperature")
+    app.removeSetting("${deviceTrait.name}.temperatureStep")
 }
 
 private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
@@ -2305,7 +2471,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //SoftwareUpdate: "Software Update",
     //StartStop: "Start/Stop",
     //StatusReport: "Status Report",
-    //TemperatureControl: "Temperature Control",
+    TemperatureControl: "Temperature Control",
     TemperatureSetting: "Temperature Setting",
     //Timer: "Timer",
     Toggles: "Toggles",
