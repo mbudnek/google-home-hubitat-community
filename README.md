@@ -208,7 +208,7 @@ This trait is intended for devices that can sense or control their own internal 
     - Set Temperature Command: A device command used to set the desired temperature of the device.
     - Minimum Temperature Setting: The minimum temperature to which the device can be set.
     - Maximum Temperature Setting: The maximum temperature to which the device can be set.
-    - Temperature Step: The ammount that the desired temperature will be raised or lowered when you say "Hey Google, turn up/down {device}".
+    - Temperature Step: The amount that the desired temperature will be raised or lowered when you say "Hey Google, turn up/down {device}".
 
 ### Temperature Setting
 
