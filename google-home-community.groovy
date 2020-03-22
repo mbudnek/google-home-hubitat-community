@@ -12,6 +12,22 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+// Changelog:
+//   * Feb 24 2020 - Initial release
+//   * Feb 24 2020 - Add the Sensor device type and the Query Only Open/Close setting to better support contact sensors.
+//   * Feb 27 2020 - Fix issue with devices getting un-selected when linking to Google Home
+//   * Feb 27 2020 - Add Setting to enable/disable debug logging
+//   * Feb 28 2020 - Add support for using a single command with a parameter for the OnOff trait
+//   * Feb 29 2020 - Fall back to using device name if device label isn't defined
+//   * Mar 01 2020 - Add support for the Toggles device trait
+//   * Mar 15 2020 - Add confirmation and PIN code support
+//   * Mar 15 2020 - Fix Open/Close trait when "Discrete Only Open/Close" isn't set
+//   * Mar 17 2020 - Add support for the Lock/Unlock trait
+//   * Mar 18 2020 - Add support for the Color Setting trait
+//   * Mar 19 2020 - Add support for ambient temperature sensors using the "Query Only Temperature Setting" attribute of the Temperature Setting trait
+//   * Mar 20 2020 - Add support for the Temperature Control trait
+//   * Mar 21 2020 - Change Temperature Setting trait to use different setpoint commands and attributes per mode
+
 import groovy.json.JsonOutput
 import groovy.transform.Field
 
@@ -817,79 +833,95 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
     }
 }
 
-private temperatureSettingControlPreferences(deviceTrait) {
-    def googleModes = [
-        "off":      "Off",
-        "on":       "On",
-        "heat":     "Heat",
-        "cool":     "Cool",
-        "heatcool": "Heat/Cool",
-        "auto":     "Auto",
-        "fan-only": "Fan Only",
-        "purifier": "Purifier",
-        "eco":      "Energy Saving",
-        "dry":      "Dry"
+private thermostatSetpointAttributePreferenceForModes(modes) {
+    def setpointAttributeDefaults = [
+        "heatingSetpointAttribute": "heatingSetpoint",
+        "coolingSetpointAttribute": "coolingSetpoint"
     ]
+    def prefs = []
+    modes.each { mode ->
+        def pref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
+        prefs << [
+            name:         pref.name,
+            title:        pref.title,
+            defaultValue: setpointAttributeDefaults[pref.name]
+        ]
+    }
+    return prefs
+}
+
+private thermostatSetpointCommandPreferenceForModes(modes) {
+    def setpointCommandDefaults = [
+        "setHeatingSetpointCommand": "setHeatingSetpoint",
+        "setCoolingSetpointCommand": "setCoolingSetpoint"
+    ]
+    def prefs = []
+    modes.each { mode ->
+        def pref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
+        prefs << [
+            name:         pref.name,
+            title:        pref.title,
+            defaultValue: setpointCommandDefaults[pref.name]
+        ]
+    }
+    return prefs
+}
+
+private temperatureSettingControlPreferences(deviceTrait) {
     input(
         name: "${deviceTrait.name}.modes",
         title: "Supported Modes",
         type: "enum",
-        options: googleModes,
+        options: GOOGLE_THERMOSTAT_MODES,
         multiple: true,
         required: true,
         submitOnChange: true
     )
+
     def supportedModes = settings."${deviceTrait.name}.modes"
-    if (supportedModes) {
-        def notHeatCoolModes = supportedModes.findAll { mode -> mode != "heatcool" }
-        if (notHeatCoolModes) {
-            input(
-                name: "${deviceTrait.name}.setpointAttribute",
-                title: "Set Point Attribute",
-                description: "The attribute used to report the current setpoint for modes other than heat/cool mode",
-                type: "text",
-                required: true,
-                defaultValue: "thermostatSetpoint"
-            )
-            input(
-                name: "${deviceTrait.name}.setSetpointCommand",
-                title: "Set Setpoint Command",
-                type: "text",
-                required: true,
-                defaultValue: "setCoolingSetpoint"
-            )
+    def attributePreferences = []
+    def commandPreferences = []
+    supportedModes.each { mode ->
+        def attrPrefs
+        def commandPrefs
+        if (mode == "heatcool") {
+            attrPrefs = thermostatSetpointAttributePreferenceForModes(["heat", "cool"])
+            commandPrefs = thermostatSetpointCommandPreferenceForModes(["heat", "cool"])
+        } else {
+            attrPrefs = thermostatSetpointAttributePreferenceForModes([mode])
+            commandPrefs = thermostatSetpointCommandPreferenceForModes([mode])
         }
+        attrPrefs.each { attrPref ->
+            if (attributePreferences.find { it.name == attrPref.name } == null) {
+                attributePreferences << attrPref
+            }
+        }
+        commandPrefs.each { commandPref ->
+            if (commandPreferences.find { it.name == commandPref.name } == null) {
+                commandPreferences << commandPref
+            }
+        }
+    }
+    def attributeCommandPairs = [attributePreferences, commandPreferences].transpose()
+    attributeCommandPairs.each { attributePreference, commandPreference ->
+        input(
+            name: "${deviceTrait.name}.${attributePreference.name}",
+            title: attributePreference.title,
+            type: "text",
+            required: true,
+            defaultValue: attributePreference.defaultValue
+        )
+        input(
+            name: "${deviceTrait.name}.${commandPreference.name}",
+            title: commandPreference.title,
+            type: "text",
+            required: true,
+            defaultValue: commandPreference.defaultValue
+        )
+    }
+
+    if (supportedModes) {
         if ("heatcool" in supportedModes) {
-            input(
-                name: "${deviceTrait.name}.heatingSetpointAttribute",
-                title: "Heating Setpoint Attribute",
-                description: "The attribute used to report the current heating setpoint for heat/cool mode",
-                type: "text",
-                required: true,
-                defaultValue: "heatingSetpoint"
-            )
-            input(
-                name: "${deviceTrait.name}.setHeatingSetpointCommand",
-                title: "Set Heating Setpoint Command",
-                type: "text",
-                required: true,
-                defaultValue: "setHeatingSetpoint"
-            )
-            input(
-                name: "${deviceTrait.name}.coolingSetpointAttribute",
-                title: "Cooling Setpoint Attribute",
-                description: "The attribute used to report the current cooling setpoint for heat/cool mode",
-                type: "text",
-                required: true,
-                defaultValue: "coolingSetpoint"
-            )
-            input(
-                name: "${deviceTrait.name}.setCoolingSetpointCommand",
-                title: "Set Cooling Setpoint Command",
-                type: "text",
-                required: true,
-                defaultValue: "setCoolingSetpoint"
-            )
             input(
                 name: "${deviceTrait.name}.heatcoolBuffer",
                 title: "Temperature Buffer",
@@ -912,8 +944,8 @@ private temperatureSettingControlPreferences(deviceTrait) {
         supportedModes.each { mode ->
             input(
                 name: "${deviceTrait.name}.mode.${mode}.hubitatMode",
-                title: "${googleModes[mode]} Hubitat Mode",
-                description: "The mode name used by hubitat for the ${googleModes[mode]} mode",
+                title: "${GOOGLE_THERMOSTAT_MODES[mode]} Hubitat Mode",
+                description: "The mode name used by hubitat for the ${GOOGLE_THERMOSTAT_MODES[mode]} mode",
                 type: "text",
                 required: true,
                 defaultValue: defaultModeMapping[mode]
@@ -1347,10 +1379,14 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     if (temperatureSettingTrait.temperatureUnit == "F") {
         setpoint = celsiusToFahrenheitRounded(setpoint)
     }
-    deviceInfo.device."${temperatureSettingTrait.setSetpointCommand}"(setpoint)
+
+    def hubitatMode = deviceInfo.device.currentValue(temperatureSettingTrait.currentModeAttribute)
+    def googleMode = temperatureSettingTrait.hubitatToGoogleModeMap[hubitatMode]
+    def setSetpointCommand = temperatureSettingTrait.modeSetSetpointCommands[googleMode]
+    deviceInfo.device."${setSetpointCommand}"(setpoint)
 
     return [
-        (temperatureSettingTrait.setpointAttribute): setpoint
+        (temperatureSettingTrait.modeSetpointAttributes[googleMode]): setpoint
     ]
 }
 
@@ -1363,12 +1399,14 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
         coolSetpoint = celsiusToFahrenheitRounded(coolSetpoint)
         heatSetpoint = celsiusToFahrenheitRounded(heatSetpoint)
     }
-    deviceInfo.device."${temperatureSettingTrait.setCoolingSetpointCommand}"(coolSetpoint)
-    deviceInfo.device."${temperatureSettingTrait.setHeatingSetpointCommand}"(heatSetpoint)
+    def setRangeCommands = temperatureSettingTrait.modeSetSetpointCommands["heatcool"]
+    deviceInfo.device."${setRangeCommands.setCoolingSetpointCommand}"(coolSetpoint)
+    deviceInfo.device."${setRangeCommands.setHeatingSetpointCommand}"(heatSetpoint)
 
+    def setRangeAttributes = temperatureSettingTrait.modeSetpointAttributes["heatcool"]
     return [
-        (temperatureSettingTrait.coolingSetpointAttribute): coolSetpoint,
-        (temperatureSettingTrait.heatingSetpointAttribute): heatSetpoint
+        (setRangeAttributes.coolingSetpointAttribute): coolSetpoint,
+        (setRangeAttributes.heatingSetpointAttribute): heatSetpoint
     ]
 }
 
@@ -1547,8 +1585,10 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
         state.thermostatMode = googleMode
 
         if (googleMode == "heatcool") {
-            def heatSetpoint = device.currentValue(deviceTrait.heatingSetpointAttribute)
-            def coolSetpoint = device.currentValue(deviceTrait.coolingSetpointAttribute)
+            def heatingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].heatingSetpointAttribute
+            def coolingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].coolingSetpointAttribute
+            def heatSetpoint = device.currentValue(heatingSetpointAttr)
+            def coolSetpoint = device.currentValue(coolingSetpointAttr)
             if (deviceTrait.temperatureUnit == "F") {
                 heatSetpoint = fahrenheitToCelsiusRounded(heatSetpoint)
                 coolSetpoint = fahrenheitToCelsiusRounded(coolSetpoint)
@@ -1556,7 +1596,8 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
             state.thermostatTemperatureSetpointHigh = coolSetpoint
             state.thermostatTemperatureSetpointLow = heatSetpoint
         } else {
-            def setpoint = device.currentValue(deviceTrait.setpointAttribute)
+            def setpointAttr = deviceTrait.modeSetpointAttributes[googleMode]
+            def setpoint = device.currentValue(setpointAttr)
             if (deviceTrait.temperatureUnit == "F") {
                 setpoint = fahrenheitToCelsiusRounded(setpoint)
             }
@@ -1710,7 +1751,7 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
     ]
 
     if (!deviceTrait.queryOnly) {
-        attrs.availableThermostatModes = deviceTrait.modes.join(",")
+        attrs.availableThermostatModes = deviceTrait.modes
 
         if (deviceTrait.setRangeMin != null) {
             def minSetpoint = deviceTrait.setRangeMin
@@ -1909,6 +1950,28 @@ private traitFromSettings_TemperatureControl(traitName) {
     return tempControlTrait
 }
 
+private thermostatSetpointAttributeForMode(traitName, mode) {
+    def attrPref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
+    def value = settings."${traitName}.${attrPref.name}"
+    // Device types created with older versions of the app may not have this set,
+    // so fall back if the mode-based setting isn't set
+    if (!value) {
+        value = settings."${traitName}.setpointAttribute"
+    }
+    return value
+}
+
+private thermostatSetpointCommandForMode(traitName, mode) {
+    def commandPref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
+    def value = settings."${traitName}.${commandPref.name}"
+    // Device types created with older versions of the app may not have this set,
+    // so fall back if the mode-based setting isn't set
+    if (!value) {
+        value = settings."${traitName}.setSetpointCommand"
+    }
+    return value
+}
+
 private traitFromSettings_TemperatureSetting(traitName) {
     def tempSettingTrait = [
         temperatureUnit:             settings."${traitName}.temperatureUnit",
@@ -1925,7 +1988,9 @@ private traitFromSettings_TemperatureSetting(traitName) {
             setModeCommand:              settings."${traitName}.setModeCommand",
             currentModeAttribute:        settings."${traitName}.currentModeAttribute",
             googleToHubitatModeMap:      [:],
-            hubitatToGoogleModeMap:      [:]
+            hubitatToGoogleModeMap:      [:],
+            modeSetpointAttributes:      [:],
+            modeSetSetpointCommands:     [:],
         ]
         tempSettingTrait.commands << "Set Mode"
 
@@ -1935,25 +2000,24 @@ private traitFromSettings_TemperatureSetting(traitName) {
                 tempSettingTrait.googleToHubitatModeMap[mode] = hubitatMode
                 tempSettingTrait.hubitatToGoogleModeMap[hubitatMode] = mode
             }
-        }
-        def setpointAttr = settings."${traitName}.setpointAttribute"
-        if (setpointAttr != null) {
-            tempSettingTrait.setpointAttribute = setpointAttr
-            tempSettingTrait.setSetpointCommand = settings."${traitName}.setSetpointCommand"
-            tempSettingTrait.commands << "Set Setpoint"
-        }
-        def heatSetpointAttr = settings."${traitName}.heatingSetpointAttribute"
-        if (heatSetpointAttr != null) {
-            tempSettingTrait.heatingSetpointAttribute = heatSetpointAttr
-            tempSettingTrait.setHeatingSetpointCommand = settings."${traitName}.setHeatingSetpointCommand"
-            if (!("Set Setpoint" in tempSettingTrait.commands)) {
+
+            if (mode == "heatcool") {
+                tempSettingTrait.modeSetpointAttributes[mode] = [
+                    heatingSetpointAttribute: thermostatSetpointAttributeForMode(traitName, "heat"),
+                    coolingSetpointAttribute: thermostatSetpointAttributeForMode(traitName, "cool")
+                ]
+                tempSettingTrait.modeSetSetpointCommands[mode] = [
+                    setHeatingSetpointCommand: thermostatSetpointCommandForMode(traitName, "heat"),
+                    setCoolingSetpointCommand: thermostatSetpointCommandForMode(traitName, "cool")
+                ]
+            } else {
+                tempSettingTrait.modeSetpointAttributes[mode] = thermostatSetpointAttributeForMode(traitName, mode)
+                tempSettingTrait.modeSetSetpointCommands[mode] = thermostatSetpointCommandForMode(traitName, mode)
+            }
+
+            if (!("Set Setpoint") in tempSettingTrait.commands) {
                 tempSettingTrait.commands << "Set Setpoint"
             }
-        }
-        def coolSetpointAttr = settings."${traitName}.coolingSetpointAttribute"
-        if (coolSetpointAttr != null) {
-            tempSettingTrait.coolingSetpointAttribute = coolSetpointAttr
-            tempSettingTrait.setCoolingSetpointCommand = settings."${traitName}.setCoolingSetpointCommand"
         }
         def heatcoolBuffer = settings."${traitName}.heatcoolBuffer"
         if (heatcoolBuffer != null) {
@@ -2115,20 +2179,22 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.currentTemperatureAttribute")
     app.removeSetting("${deviceTrait.name}.queryOnly")
     app.removeSetting("${deviceTrait.name}.modes")
-    app.removeSetting("${deviceTrait.name}.setpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setSetpointCommand")
-    app.removeSetting("${deviceTrait.name}.heatingSetpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setHeatingSetpointCommand")
-    app.removeSetting("${deviceTrait.name}.coolingSetpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setCoolingSetpointCommand")
     app.removeSetting("${deviceTrait.name}.heatcoolBuffer")
     app.removeSetting("${deviceTrait.name}.range.min")
     app.removeSetting("${deviceTrait.name}.range.max")
     app.removeSetting("${deviceTrait.name}.setModeCommand")
     app.removeSetting("${deviceTrait.name}.currentModeAttribute")
-    deviceTrait.modes.each { mode ->
+    GOOGLE_THERMOSTAT_MODES.each { mode, display ->
         app.removeSetting("${deviceTrait.name}.mode.${mode}.hubitatMode")
+        def attrPrefName = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode].name
+        app.removeSetting("${deviceTrait.name}.${attrPrefName}")
+        def commandPrefName = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode].name
+        app.removeSetting("${deviceTrait.name}.${commandPrefName}")
     }
+    // These settings are no longer set for new device types, but may still exist
+    // for device types created with older versions of the app
+    app.removeSetting("${deviceTrait.name}.setpointAttribute")
+    app.removeSetting("${deviceTrait.name}.setSetpointCommand")
 }
 
 private deleteDeviceTrait_Toggles(deviceTrait) {
@@ -2476,3 +2542,51 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //Timer: "Timer",
     Toggles: "Toggles",
 ]
+
+@Field
+private static final GOOGLE_THERMOSTAT_MODES = [
+    "off":      "Off",
+    "on":       "On",
+    "heat":     "Heat",
+    "cool":     "Cool",
+    "heatcool": "Heat/Cool",
+    "auto":     "Auto",
+    "fan-only": "Fan Only",
+    "purifier": "Purifier",
+    "eco":      "Energy Saving",
+    "dry":      "Dry"
+]
+
+@Field
+private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
+    "heat": [
+        name:  "setHeatingSetpointCommand",
+        title: "Set Heating Setpoint Command"
+    ],
+    "cool": [
+        name:  "setCoolingSetpointCommand",
+        title: "Set Cooling Setpoint Command"
+    ]
+].withDefault { mode ->
+    [
+        name:  "set${mode.capitalize()}SetpointCommand",
+        title: "Set ${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Command"
+    ]
+}
+
+@Field
+private static final THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
+    "heat": [
+        name:  "heatingSetpointAttribute",
+        title: "Heating Setpoint Attribute"
+    ],
+    "cool": [
+        name:  "coolingSetpointAttribute",
+        title: "Cooling Setpoint Attribute"
+    ]
+].withDefault { mode ->
+    [
+        name:  "${mode}SetpointAttribute",
+        title: "${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Attribute",
+    ]
+}
