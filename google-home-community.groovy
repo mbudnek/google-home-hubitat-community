@@ -28,6 +28,9 @@
 //   * Mar 20 2020 - Add support for the Temperature Control trait
 //   * Mar 21 2020 - Change Temperature Setting trait to use different setpoint commands and attributes per mode
 //   * Mar 21 2020 - Sort device types by name on the main settings page
+//   * Mar 21 2020 - Don't configure setpoint attribute and command for the "off" thermostat mode
+//   * Mar 21 2020 - Fix some Temperture Setting and Temperature Control settings that were using the wrong input type
+//   * Mar 21 2020 - Fix the heat/cool buffer conversion from Fahrenheit to Celsius
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -782,19 +785,19 @@ def deviceTraitPreferences_TemperatureControl(deviceTrait) {
             input(
                 name: "${deviceTrait.name}.minTemperature",
                 title: "Minimum Temperature Setting",
-                type: "real",
+                type: "decimal",
                 required: true
             )
             input(
                 name: "${deviceTrait.name}.maxTemperature",
                 title: "Maximum Temperature Setting",
-                type: "real",
+                type: "decimal",
                 required: true
             )
             input(
                 name: "${deviceTrait.name}.temperatureStep",
                 title: "Temperature Step",
-                type: "real"
+                type: "decimal"
             )
         }
     }
@@ -842,11 +845,13 @@ private thermostatSetpointAttributePreferenceForModes(modes) {
     def prefs = []
     modes.each { mode ->
         def pref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
-        prefs << [
-            name:         pref.name,
-            title:        pref.title,
-            defaultValue: setpointAttributeDefaults[pref.name]
-        ]
+        if (pref) {
+            prefs << [
+                name:         pref.name,
+                title:        pref.title,
+                defaultValue: setpointAttributeDefaults[pref.name]
+            ]
+        }
     }
     return prefs
 }
@@ -859,11 +864,13 @@ private thermostatSetpointCommandPreferenceForModes(modes) {
     def prefs = []
     modes.each { mode ->
         def pref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
-        prefs << [
-            name:         pref.name,
-            title:        pref.title,
-            defaultValue: setpointCommandDefaults[pref.name]
-        ]
+        if (pref) {
+            prefs << [
+                name:         pref.name,
+                title:        pref.title,
+                defaultValue: setpointCommandDefaults[pref.name]
+            ]
+        }
     }
     return prefs
 }
@@ -927,7 +934,7 @@ private temperatureSettingControlPreferences(deviceTrait) {
                 name: "${deviceTrait.name}.heatcoolBuffer",
                 title: "Temperature Buffer",
                 description: "The minimum offset between the heat and cool setpoints when operating in heat/cool mode",
-                type: "real"
+                type: "decimal"
             )
         }
         def defaultModeMapping = [
@@ -971,14 +978,14 @@ private temperatureSettingControlPreferences(deviceTrait) {
     input(
         name: "${deviceTrait.name}.range.min",
         title: "Minimum Set Point",
-        type: "real",
+        type: "decimal",
         required: settings."${deviceTrait.name}.range.max" != null,
         submitOnChange: true
     )
     input(
         name: "${deviceTrait.name}.range.max",
         title: "Maximum Set Point",
-        type: "real",
+        type: "decimal",
         required: settings."${deviceTrait.name}.range.min" != null,
         submitOnChange: true
     )
@@ -1598,11 +1605,13 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
             state.thermostatTemperatureSetpointLow = heatSetpoint
         } else {
             def setpointAttr = deviceTrait.modeSetpointAttributes[googleMode]
-            def setpoint = device.currentValue(setpointAttr)
-            if (deviceTrait.temperatureUnit == "F") {
-                setpoint = fahrenheitToCelsiusRounded(setpoint)
+            if (setpointAttr) {
+                def setpoint = device.currentValue(setpointAttr)
+                if (deviceTrait.temperatureUnit == "F") {
+                    setpoint = fahrenheitToCelsiusRounded(setpoint)
+                }
+                state.thermostatTemperatureSetpoint = setpoint
             }
-            state.thermostatTemperatureSetpoint = setpoint
         }
     }
     return state
@@ -1766,10 +1775,11 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
                 maxThresholdCelsius: maxSetpoint
             ]
         }
+
         if (deviceTrait.heatcoolBuffer != null) {
             def buffer = deviceTrait.heatcoolBuffer
             if (deviceTrait.temperatureUnit == "F") {
-                buffer = fahrenheitToCelsiusRounded(buffer)
+                buffer = buffer * (5 / 9)  // 5/9 is the scale factor for converting from F to C
             }
             attrs.bufferRangeCelsius = buffer
         }
@@ -1937,14 +1947,18 @@ private traitFromSettings_TemperatureControl(traitName) {
         tempControlTrait << [
             currentSetpointAttribute: settings."${traitName}.setpointAttribute",
             setTemperatureCommand:    settings."${traitName}.setTemperatureCommand",
-            minTemperature:           settings."${traitName}.minTemperature",
-            maxTemperature:           settings."${traitName}.maxTemperature"
+            // Min and Max temperature used the wrong input type originally, so coerce them
+            // from String to BigDecimal if this trait was saved with a broken version
+            minTemperature:           settings."${traitName}.minTemperature" as BigDecimal,
+            maxTemperature:           settings."${traitName}.maxTemperature" as BigDecimal
         ]
         tempControlTrait.commands << "Set Temperature"
 
         def temperatureStep = settings."${traitName}.temperatureStep"
         if (temperatureStep) {
-            tempControlTrait.temperatureStep = temperatureStep
+            // Temperature step used the wrong input type originally, so coerce them
+            // from String to BigDecimal if this trait was saved with a broken version
+            tempControlTrait.temperatureStep = temperatureStep as BigDecimal
         }
     }
 
@@ -1953,6 +1967,9 @@ private traitFromSettings_TemperatureControl(traitName) {
 
 private thermostatSetpointAttributeForMode(traitName, mode) {
     def attrPref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
+    if (!attrPref) {
+        return null
+    }
     def value = settings."${traitName}.${attrPref.name}"
     // Device types created with older versions of the app may not have this set,
     // so fall back if the mode-based setting isn't set
@@ -1964,6 +1981,9 @@ private thermostatSetpointAttributeForMode(traitName, mode) {
 
 private thermostatSetpointCommandForMode(traitName, mode) {
     def commandPref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
+    if (!commandPref) {
+        return null
+    }
     def value = settings."${traitName}.${commandPref.name}"
     // Device types created with older versions of the app may not have this set,
     // so fall back if the mode-based setting isn't set
@@ -2020,17 +2040,20 @@ private traitFromSettings_TemperatureSetting(traitName) {
                 tempSettingTrait.commands << "Set Setpoint"
             }
         }
+        // HeatCool buffer, Min temperature, and Max Temperature used the wrong input
+        // type originally, so coerce them from String to BigDecimal if this trait
+        // was saved with a broken version
         def heatcoolBuffer = settings."${traitName}.heatcoolBuffer"
         if (heatcoolBuffer != null) {
-            tempSettingTrait.heatcoolBuffer = heatcoolBuffer
+            tempSettingTrait.heatcoolBuffer = heatcoolBuffer as BigDecimal
         }
         def setRangeMin = settings."${traitName}.range.min"
         if (setRangeMin != null) {
-            tempSettingTrait.setRangeMin = setRangeMin
+            tempSettingTrait.setRangeMin = setRangeMin as BigDecimal
         }
         def setRangeMax = settings."${traitName}.range.max"
         if (setRangeMax != null) {
-            tempSettingTrait.setRangeMax = setRangeMax
+            tempSettingTrait.setRangeMax = setRangeMax as BigDecimal
         }
     }
     return tempSettingTrait
@@ -2187,10 +2210,14 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.currentModeAttribute")
     GOOGLE_THERMOSTAT_MODES.each { mode, display ->
         app.removeSetting("${deviceTrait.name}.mode.${mode}.hubitatMode")
-        def attrPrefName = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode].name
-        app.removeSetting("${deviceTrait.name}.${attrPrefName}")
-        def commandPrefName = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode].name
-        app.removeSetting("${deviceTrait.name}.${commandPrefName}")
+        def attrPrefName = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]?.name
+        if (attrPrefName) {
+            app.removeSetting("${deviceTrait.name}.${attrPrefName}")
+        }
+        def commandPrefName = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]?.name
+        if (commandPrefName) {
+            app.removeSetting("${deviceTrait.name}.${commandPrefName}")
+        }
     }
     // These settings are no longer set for new device types, but may still exist
     // for device types created with older versions of the app
@@ -2560,6 +2587,7 @@ private static final GOOGLE_THERMOSTAT_MODES = [
 
 @Field
 private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
+    "off": null,
     "heat": [
         name:  "setHeatingSetpointCommand",
         title: "Set Heating Setpoint Command"
@@ -2567,7 +2595,7 @@ private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
     "cool": [
         name:  "setCoolingSetpointCommand",
         title: "Set Cooling Setpoint Command"
-    ]
+    ],
 ].withDefault { mode ->
     [
         name:  "set${mode.capitalize()}SetpointCommand",
@@ -2577,6 +2605,7 @@ private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
 
 @Field
 private static final THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
+    "off": null,
     "heat": [
         name:  "heatingSetpointAttribute",
         title: "Heating Setpoint Attribute"
