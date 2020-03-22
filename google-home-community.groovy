@@ -24,13 +24,15 @@
 //   * Mar 15 2020 - Fix Open/Close trait when "Discrete Only Open/Close" isn't set
 //   * Mar 17 2020 - Add support for the Lock/Unlock trait
 //   * Mar 18 2020 - Add support for the Color Setting trait
-//   * Mar 19 2020 - Add support for ambient temperature sensors using the "Query Only Temperature Setting" attribute of the Temperature Setting trait
+//   * Mar 19 2020 - Add support for ambient temperature sensors using the "Query Only Temperature Setting" attribute
+//                   of the Temperature Setting trait
 //   * Mar 20 2020 - Add support for the Temperature Control trait
 //   * Mar 21 2020 - Change Temperature Setting trait to use different setpoint commands and attributes per mode
 //   * Mar 21 2020 - Sort device types by name on the main settings page
 //   * Mar 21 2020 - Don't configure setpoint attribute and command for the "off" thermostat mode
 //   * Mar 21 2020 - Fix some Temperture Setting and Temperature Control settings that were using the wrong input type
-//   * Mar 21 2020 - Fix the heat/cool buffer conversion from Fahrenheit to Celsius
+//   * Mar 21 2020 - Fix the Temperature Setting heat/cool buffer and Temperature Control temperature step conversions
+//                   from Fahrenheit to Celsius
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -1746,7 +1748,8 @@ private attributesForTrait_TemperatureControl(deviceTrait) {
             if (deviceTrait.temperatureUnit == "C") {
                 attrs.temperatureStepCelsius = deviceTrait.temperatureStep
             } else {
-                attrs.temperatureStepCelsius = fahrenheitToCelsiusRounded(deviceTrait.temperatureStep)
+                // 5/9 is the scale factor for converting from F to C
+                attrs.temperatureStepCelsius = deviceTrait.temperatureStep * (5 / 9)
             }
         }
     }
