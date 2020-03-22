@@ -218,18 +218,14 @@ This trait is primarily used for thermostats and ambient temperature sensors.  F
 - Current Temperature Attribute: The device attribute used to query the current temperature reading of the device.  Maps to `temperature` by default.
 - Query Only Temperature Setting: Set to indicate that this device can only be queried for temperature, not set.
 
-The following settings are only availabel if "Query Only Temperature Setting" is unset:
-- Supported Modes: The operating modes that this device supports.
-- Setpoint Attribute: The device attribute used to query the device's current setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `thermostatSetpoint` by default.
-- Set Setpoint Command:  A device command used to set the device's setpoint when in modes other than Heat/Cool mode.  Not available unless a mode other than Heat/Cool is supported.  Maps to `setCoolingSetpoint` by default.
-- Heating Setpoint Attribute: The device attribute used to query the device's current heating setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `heatingSetpoint` by default.
-- Set Heating Setpoint Command:  A device command used to set the device's heating setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `setHeatingSetpoint` by default.
-- Cooling Setpoint Attribute: The device attribute used to query the device's current cooling setpoint when in  Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `coolingSetpoint` by default.
-- Set Cooling Setpoint Command:  A device command used to set the device's cooling setpoint when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Maps to `setCoolingSetpoint` by default.
-- Temperature Buffer: The minimum offset between the heating and cooling setpoints when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Optional.
-- {Mode} Hubitat Mode: The value passed to the Set Mode Command to set the device to this mode and reported by the Current Mode Attribute when the device is in this mode.
+The following settings are only available if "Query Only Temperature Setting" is unset:
+- Supported Modes: The operating modes that this device supports.  For each mode, the following settings are available:
+    - {Mode} Setpoint Attribute: The device attribute used to query the device's current setpoint when in {mode}.  Maps to `{mode}Setpoint` by default. If Heat/Cool mode is selected, the settings for both Heat mode and Cool mode are available.
+    - Set {Mode} Setpoint Command:  A device command used to set the device's setpoint when in {mode}.  Maps to `set{Mode}Setpoint` by default. If Heat/Cool mode is selected, the settings for both Heat mode and Cool mode are available.
+    - {Mode} Hubitat Mode: The value passed to the Set Mode Command to set the device to this mode and reported by the Current Mode Attribute when the device is in this mode.
 - Set Mode Command: A device command used to set the current operating mode of the device.  Should accept any of the {Mode} Hubitat Mode values.
 - Current Mode Attribute: The device attribute used to query the device's current operating mode.  Should always report one of the {Mode} Hubitat Mode values.
+- Temperature Buffer: The minimum offset between the heating and cooling setpoints when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Optional.
 - Minimum Setpoint: The minimum allowed value for the device's setpoint.  Optional, but must be specified if Maximum Setpoint is specified.
 - Maximum Setpoint: The maximum allowed value for the device's setpoint.  Optional, but must be specified if Minimum Setpoint is specified.
 
