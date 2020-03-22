@@ -27,6 +27,7 @@
 //   * Mar 19 2020 - Add support for ambient temperature sensors using the "Query Only Temperature Setting" attribute of the Temperature Setting trait
 //   * Mar 20 2020 - Add support for the Temperature Control trait
 //   * Mar 21 2020 - Change Temperature Setting trait to use different setpoint commands and attributes per mode
+//   * Mar 21 2020 - Sort device types by name on the main settings page
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -100,7 +101,7 @@ def mainPreferences() {
                 multiple: true
             )
         }
-        def allDeviceTypes = deviceTypes()
+        def allDeviceTypes = deviceTypes().sort { it.display }
         section {
             allDeviceTypes.each{ deviceType ->
                 input(
