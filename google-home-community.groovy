@@ -1577,10 +1577,10 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 
 private deviceStateForTrait_HumiditySetting(deviceTrait, device) {
     def deviceState = [
-        humidityAmbientPercent: device.currentValue(deviceTrait.humidityAttribute)
+        humidityAmbientPercent: Math.round(device.currentValue(deviceTrait.humidityAttribute))
     ]
     if (!deviceTrait.queryOnly) {
-        deviceState.humiditySetpointPercent = device.currentValue(deviceTrait.humiditySetpointAttribute)
+        deviceState.humiditySetpointPercent = Math.round(device.currentValue(deviceTrait.humiditySetpointAttribute))
     }
     return deviceState
 }
