@@ -148,6 +148,19 @@ The Fan Speed trait is primarily used for fan controllers with multiple speed se
 - Reversible: Select this if the fan direction can be reversed
 - Reverse Command: Only available if "Reversible" is selected.  A device command that can be used to reverse the device's fan direction.
 
+### Humidity Setting
+
+The Humidity Setting trait is used for devices that can sense and/or control the ambient humidity, such as a humidity sensor, humidifier, or dehumidifier.  It can be controlled by saying things like "Hey Google, set {device} to 60%" and queried by saying things like "Hey Google, what's the humidity of {device}?" or "Hey Google, what's the humidity in {room}?".  It has the following configuration parameters:
+
+- Humidity Attribute: The device attribute used to query the current humidity.  Should return an integer between 0 and 100.  Maps to the `humidity` attribute by default.
+- Query Only Humidity: Set to indicate that this device can only be queried for humidity and not controlled.
+
+The following settings are only available if the "Query Only Humidity" setting is unset:
+- Humidity Setpoint Attribute: The device attribute that reports the current humidity setpoint.
+- Set Humidity Command: A device command that sets the desired humidity.  Should accept an integer in the range [Minimum Setpoint, Maximum Setpoint].
+- Minimum Humidity Setpoint: The minimum humidity setpoint supported for this device type.  Attempting to set the desired humidiy lower will set it to this value instead.  Required if "Maximum Humidity Setpoint" is specified.
+- Maximum Humidity Setpoint: The maximum humidity setpoint supported for this device type.  Attempting to set the desired humidiy higher will set it to this value instead.  Required if "Minimum Humidity Setpoint" is specified.
+
 ### Lock/Unlock
 
 The Lock/Unlock trait is used for anything that can lock and unlock, such as doors and windows.  It can be controlled by saying things like "Hey Google, lock {device}" and queried by saying things like "Hey Google, is {device} locked?".  Since locks are often security-sensitive, it is recommended, though not required, that PIN code support be configured for device types implementing this trait.  The Lock/Unlock trait has the following configuration parameters:
