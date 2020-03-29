@@ -33,6 +33,7 @@
 //   * Mar 21 2020 - Fix some Temperture Setting and Temperature Control settings that were using the wrong input type
 //   * Mar 21 2020 - Fix the Temperature Setting heat/cool buffer and Temperature Control temperature step conversions
 //                   from Fahrenheit to Celsius
+//   * Mar 29 2020 - Add support for the Humidity Setting trait
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -527,6 +528,55 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
                 title: "Reverse Command",
                 type: "text",
                 required: true
+            )
+        }
+    }
+}
+
+private deviceTraitPreferences_HumiditySetting(deviceTrait) {
+    section("Humidity Setting Preferences") {
+        input(
+            name: "${deviceTrait.name}.humidityAttribute",
+            title: "Humidity Attribute",
+            type: "text",
+            defaultValue: "humidity",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.queryOnly",
+            title: "Query Only Humidity",
+            type: "bool",
+            defaultValue: false,
+            require: true,
+            submitOnChange: true
+        )
+        if (!deviceTrait.queryOnly) {
+            input(
+                name: "${deviceTrait.name}.humiditySetpointAttribute",
+                title: "Humidity Setpoint Attribute",
+                type: "text",
+                required: true
+            )
+            input(
+                name: "${deviceTrait.name}.setHumidityCommand",
+                title: "Set Humidity Command",
+                type: "text",
+                required: true
+            )
+            paragraph("If either a minimum or maximum humidity setpoint is configured then the other must be as well")
+            input(
+                name: "${deviceTrait.name}.humidityRange.min",
+                title: "Minimum Humidity Setpoint",
+                type: "number",
+                required: deviceTrait.humidityRange?.max != null,
+                submitOnChange: true
+            )
+            input(
+                name: "${deviceTrait.name}.humidityRange.max",
+                title: "Maximum Humidity Setpoint",
+                type: "number",
+                required: deviceTrait.humidityRange?.min != null,
+                submitOnChange: true
             )
         }
     }
@@ -1345,6 +1395,17 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
     ]
 }
 
+private executeCommand_SetHumidity(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Humidity", command)
+    def humiditySettingTrait = deviceInfo.deviceType.traits.HumiditySetting
+    def humiditySetpoint = command.params.humidity
+
+    deviceInfo.device."${humiditySettingTrait.setHumidityCommand}"(humiditySetpoint)
+    return [
+        (humiditySettingTrait.humiditySetpointAttribute): humiditySetpoint
+    ]
+}
+
 private executeCommand_SetTemperature(deviceInfo, command) {
     checkMfa(deviceInfo.deviceTrait, "Set Temperature", command)
     def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
@@ -1512,6 +1573,16 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     return [
         currentFanSpeedSetting: currentSpeed
     ]
+}
+
+private deviceStateForTrait_HumiditySetting(deviceTrait, device) {
+    def deviceState = [
+        humidityAmbientPercent: device.currentValue(deviceTrait.humidityAttribute)
+    ]
+    if (!deviceTrait.queryOnly) {
+        deviceState.humiditySetpointPercent = device.currentValue(deviceTrait.humiditySetpointAttribute)
+    }
+    return deviceState
 }
 
 private deviceStateForTrait_LockUnlock(deviceTrait, device) {
@@ -1704,6 +1775,19 @@ private attributesForTrait_FanSpeed(deviceTrait) {
     return fanSpeedAttrs
 }
 
+private attributesForTrait_HumiditySetting(deviceTrait) {
+    def attrs = [
+        queryOnlyHumiditySetting: deviceTrait.queryOnly
+    ]
+    if (deviceTrait.humidityRange) {
+        attrs.humiditySetpointRange = [
+            minPercent: deviceTrait.humidityRange.min,
+            maxPercent: deviceTrait.humidityRange.max
+        ]
+    }
+    return attrs
+}
+
 private attributesForTrait_LockUnlock(deviceTrait) {
     return [:]
 }
@@ -1865,6 +1949,32 @@ private traitFromSettings_FanSpeed(traitName) {
     }
 
     return fanSpeedMapping
+}
+
+private traitFromSettings_HumiditySetting(traitName) {
+    def humidityTrait = [
+        humidityAttribute: settings."${traitName}.humidityAttribute",
+        queryOnly:         settings."${traitName}.queryOnly",
+        commands:          []
+    ]
+    if (!humidityTrait.queryOnly) {
+        humidityTrait << [
+            humiditySetpointAttribute: settings."${traitName}.humiditySetpointAttribute",
+            setHumidityCommand:        settings."${traitName}.setHumidityCommand"
+        ]
+        humidityTrait.commands << "Set Humidity"
+
+        def humidityRange = [
+            min: settings."${traitName}.humidityRange.min",
+            max: settings."${traitName}.humidityRange.max"
+        ]
+        if (humidityRange.min != null || humidityRange.max != null) {
+            humidityTrait << [
+                humidityRange: humidityRange
+            ]
+        }
+    }
+    return humidityTrait
 }
 
 private traitFromSettings_LockUnlock(traitName) {
@@ -2152,6 +2262,15 @@ private deleteDeviceTrait_FanSpeed(deviceTrait) {
         app.removeSetting("${deviceTrait.name}.speed.${fanSpeed}.googleNames")
     }
     app.removeSetting("${deviceTrait.name}.fanSpeeds")
+}
+
+private deleteDeviceTrait_HumiditySetting(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.humidityAttribute")
+    app.removeSetting("${deviceTrait.name}.humiditySetpointAttribute")
+    app.removeSetting("${deviceTrait.name}.setHumidityCommand")
+    app.removeSetting("${deviceTrait.name}.humidityRange.min")
+    app.removeSetting("${deviceTrait.name}.humidityRange.max")
+    app.removeSetting("${deviceTrait.name}.queryOnly")
 }
 
 private deleteDeviceTrait_LockUnlock(deviceTrait) {
@@ -2554,7 +2673,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //Dock: "Dock",
     FanSpeed: "Fan Speed",
     //Fill: "Fill",
-    //HumiditySetting: "Humidity Setting",
+    HumiditySetting: "Humidity Setting",
     //LightEffects: "Light Effects",
     //Locator: "Locator",
     LockUnlock: "Lock/Unlock",
