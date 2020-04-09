@@ -34,6 +34,7 @@
 //   * Mar 21 2020 - Fix the Temperature Setting heat/cool buffer and Temperature Control temperature step conversions
 //                   from Fahrenheit to Celsius
 //   * Mar 29 2020 - Add support for the Humidity Setting trait
+//   * Apr 08 2020 - Fix timeout error by making scene activation asynchronous
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -1227,6 +1228,12 @@ private checkMfa(deviceType, commandType, command) {
     }
 }
 
+private controlScene(options) {
+    def allDevices = allKnownDevices()
+    def device = allDevices[options.deviceId].device
+    device."${options.command}"()
+}
+
 private executeCommand_ActivateScene(deviceInfo, command) {
     def sceneTrait = deviceInfo.deviceType.traits.Scene
     if (sceneTrait.name == "hubitat_mode") {
@@ -1234,10 +1241,10 @@ private executeCommand_ActivateScene(deviceInfo, command) {
     } else {
         if (command.params.deactivate) {
             checkMfa(deviceInfo.deviceType, "Deactivate Scene", command)
-            deviceInfo.device."${sceneTrait.deactivateCommand}"()
+            runIn(0, "controlScene", [data: ["deviceId": deviceInfo.device.id, "command": sceneTrait.deactivateCommand]])
         } else {
             checkMfa(deviceInfo.deviceType, "Activate Scene", command)
-            deviceInfo.device."${sceneTrait.activateCommand}"()
+            runIn(0, "controlScene", [data: ["deviceId": deviceInfo.device.id, "command": sceneTrait.activateCommand]])
         }
     }
     return [:]
