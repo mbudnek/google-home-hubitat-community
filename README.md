@@ -202,6 +202,14 @@ The Open/Close trait is used for devices that can be opened and closed such as d
         - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Maps to `open` by default.
         - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Maps to `close` by default.
 
+### Rotation
+
+The Rotation trait is used for devices that can be rotated to a specific position such as slat blinds or a pivoting fan.  It can be controlled by saying things like "Hey Google, rotate {device} to 30%" and queried by saying things like "Hey Google, how far is {device} rotated?".  It has the following configuration parameters:
+
+- Current Rotation Attribute: The device attribute used to determine how far the device is currently rotated.  Should be a number in the range 0-99 with 0 being rotated fully counter-clockwise and 99 being rotated fully clockwise.
+- Set Rotation Command: A device command used to rotate the device to a new position.  Should accept a parameter in the range 0-99 where 0 will rotate the device fully counter-clockwise and 99 will rotate it fully clockwise.
+- Supports Continuous Rotation: This parameter should be set if the device can rotate continuously.  That is, if it can continue rotating clockwise past its position 99 to get back to position 0.
+
 ### Scene
 
 This is used for controlling scenes, and should generally only be used with the "Scene" device type.  It can be controlled by saying things like "Hey Google, activate {scene}" or "Hey Google, deactivate {scene}".  It cannot be queried.  It has the following configuration parameters:

@@ -765,6 +765,29 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
     }
 }
 
+def deviceTraitPreferences_Rotation(deviceTrait) {
+    section("Rotation Preferences") {
+        input(
+            name: "${deviceTrait.name}.rotationAttribute",
+            title: "Current Rotation Attribute",
+            type: "text",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.setRotationCommand",
+            title: "Set Rotation Command",
+            type: "text",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.continuousRotation",
+            title: "Supports Continuous Rotation",
+            type: "bool",
+            defaultValue: false
+        )
+    }
+}
+
 def deviceTraitPreferences_Scene(deviceTrait) {
     section("Scene Preferences") {
         input(
@@ -1391,6 +1414,17 @@ private executeCommand_OpenClose(deviceInfo, command) {
     ]
 }
 
+private executeCommand_RotateAbsolute(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Rotate", command)
+    def rotationTrait = deviceInfo.deviceType.traits.Rotation
+    def position = command.params.rotationPercent
+
+    deviceInfo.device."${rotationTrait.setRotationCommand}"(position)
+    return [
+        (rotationTrait.rotationAttribute): position
+    ]
+}
+
 private executeCommand_SetFanSpeed(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
@@ -1629,6 +1663,12 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
     ]
 }
 
+private deviceStateForTrait_Rotation(deviceTrait, device) {
+    return [
+        rotationPercent: device.currentValue(deviceTrait.rotationAttribute)
+    ]
+}
+
 private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
 }
@@ -1807,6 +1847,14 @@ private attributesForTrait_OpenClose(deviceTrait) {
     return [
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
+    ]
+}
+
+private attributesForTrait_Rotation(deviceTrait) {
+    return [
+        supportsContinuousRotation: deviceTrait.continuousRotation,
+        supportsPercent:            true,
+        supportsDegrees:            false
     ]
 }
 
@@ -2040,6 +2088,15 @@ private traitFromSettings_OpenClose(traitName) {
     }
 
     return openCloseTrait
+}
+
+private traitFromSettings_Rotation(traitName) {
+    return [
+        rotationAttribute:  settings."${traitName}.rotationAttribute",
+        setRotationCommand: settings."${traitName}.setRotationCommand",
+        continuousRotation: settings."${traitName}.continuousRotation",
+        commands:        ["Rotate"]
+    ]
 }
 
 private traitFromSettings_Scene(traitName) {
@@ -2308,6 +2365,12 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.closeCommand")
     app.removeSetting("${deviceTrait.name}.openPositionCommand")
     app.removeSetting("${deviceTrait.name}.queryOnly")
+}
+
+private deleteDeviceTrait_Rotation(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.rotationAttribute")
+    app.removeSetting("${deviceTrait.name}.setRotationCommand")
+    app.removeSetting("${deviceTrait.name}.continuousRotation")
 }
 
 private deleteDeviceTrait_Scene(deviceTrait) {
@@ -2688,7 +2751,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     OnOff: "On/Off",
     OpenClose: "Open/Close",
     //Reboot: "Reboot",
-    //Rotation: "Rotation",
+    Rotation: "Rotation",
     //RunCycle: "Run Cycle",
     Scene: "Scene",
     //SoftwareUpdate: "Software Update",
