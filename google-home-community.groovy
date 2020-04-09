@@ -35,6 +35,7 @@
 //                   from Fahrenheit to Celsius
 //   * Mar 29 2020 - Add support for the Humidity Setting trait
 //   * Apr 08 2020 - Fix timeout error by making scene activation asynchronous
+//   * Apr 08 2020 - Add support for the Rotation trait
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
