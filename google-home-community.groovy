@@ -38,6 +38,7 @@
 //   * Apr 08 2020 - Add support for the Rotation trait
 //   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
+//   * Apt 10 2020 - Add support for the Volume trait
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -1134,6 +1135,76 @@ def toggleDelete(toggle) {
     }
 }
 
+private deviceTraitPreferences_Volume(deviceTrait) {
+    section("Volume Preferences") {
+        input(
+            name: "${deviceTrait.name}.volumeAttribute",
+            title: "Current Volume Attribute",
+            type: "text",
+            required: true,
+            defaultValue: "volume"
+        )
+        input(
+            name: "${deviceTrait.name}.setVolumeCommand",
+            title: "Set Rotation Command",
+            type: "text",
+            required: true,
+            defaultValue: "setVolume"
+        )
+        input(
+            name: "${deviceTrait.name}.volumeStep",
+            title: "Volume Level Step",
+            type: "number",
+            required: true,
+            defaultValue: 1
+        )
+        input(
+            name: "${deviceTrait.name}.canMuteUnmute",
+            title: "Supports Mute And Unmute",
+            type: "bool",
+            defaultValue: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.canMuteUnmute) {
+            input(
+                name: "${deviceTrait.name}.muteAttribute",
+                title: "Mute State Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "mute"
+            )
+            input(
+                name: "${deviceTrait.name}.mutedValue",
+                title: "Muted Value",
+                type: "text",
+                required: true,
+                defaultValue: "muted"
+            )
+            input(
+                name: "${deviceTrait.name}.unmutedValue",
+                title: "Unmuted Value",
+                type: "text",
+                required: true,
+                defaultValue: "unmuted"
+            )
+            input(
+                name: "${deviceTrait.name}.muteCommand",
+                title: "Mute Command",
+                type: "text",
+                required: true,
+                defaultValue: "mute"
+            )
+            input(
+                name: "${deviceTrait.name}.unmuteCommand",
+                title: "Unmute Command",
+                type: "text",
+                required: true,
+                defaultValue: "unmute"
+            )
+        }
+    }
+}
+
 def handleAction() {
     LOGGER.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
@@ -1357,6 +1428,24 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     ]
 }
 
+private executeCommand_mute(deviceInfo, command) {
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def checkValue
+    if (command.params.mute) {
+        checkMfa(deviceInfo.deviceType, "Mute", command)
+        deviceInfo.device."${volumeTrait.muteCommand}"()
+        checkValue = volumeTrait.mutedValue
+    } else {
+        checkMfa(deviceInfo.deviceType, "Unmute", command)
+        deviceInfo.device."${volumeTrait.unmuteCommand}"()
+        checkValue = volumeTrait.unmutedValue
+    }
+
+    return [
+        (volumeTrait.muteAttribute): checkValue
+    ]
+}
+
 private executeCommand_OnOff(deviceInfo, command) {
     def onOffTrait = deviceInfo.deviceType.traits.OnOff
 
@@ -1487,6 +1576,17 @@ private executeCommand_SetToggles(deviceInfo, command) {
     return statesToCheck
 }
 
+private executeCommand_setVolume(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def volumeLevel = command.params.volumeLevel
+    deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
+
+    return [
+        (volumeTrait.volumeAttribute): volumeLevel
+    ]
+}
+
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
@@ -1534,6 +1634,22 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
 
     return [
         (temperatureSettingTrait.currentModeAttribute): hubitatMode
+    ]
+}
+
+private executeCommand_volumeRelative(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def volumeChange = command.params.relativeSteps
+    def device = deviceInfo.device
+
+    def currentVolume = device.currentValue(volumeTrait.volumeAttribute)
+    // volumeChange will be negative when decreasing volume
+    def newVolume = currentVolume + volumeChange
+    device."${volumeTrait.setVolumeCommand}"(newVolume)
+
+    return [
+        (volumeTrait.volumeAttribute): newVolume
     ]
 }
 
@@ -1748,6 +1864,16 @@ private deviceStateForTrait_Toggles(deviceTrait, device) {
     ]
 }
 
+private deviceStateForTrait_Volume(deviceTrait, device) {
+    def deviceState = [
+        currentVolume: device.currentValue(deviceTrait.volumeAttribute)
+    ]
+    if (deviceTrait.canMuteUnmute) {
+        deviceState.isMuted = device.currentValue(deviceTrait.muteAttribute) == deviceTrait.mutedValue
+    }
+    return deviceState
+}
+
 private handleSyncRequest(request) {
     def resp = [
         requestId: request.JSON.requestId,
@@ -1945,6 +2071,14 @@ private attributesForTrait_Toggles(deviceTrait) {
                 ]
             ]
         }
+    ]
+}
+
+private attributesForTrait_Volume(deviceTrait) {
+    return [
+        volumeMaxLevel:         100,
+        volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
+        levelStepSize:          deviceTrait.volumeStep
     ]
 }
 
@@ -2265,6 +2399,33 @@ private traitFromSettings_Toggles(traitName) {
     return togglesTrait
 }
 
+private traitFromSettings_Volume(traitName) {
+    def canMuteUnmute = settings."${traitName}.canMuteUnmute"
+    if (canMuteUnmute == null) {
+        canMuteUnmute = true
+    }
+    def volumeTrait = [
+        volumeAttribute:  settings."${traitName}.volumeAttribute",
+        setVolumeCommand: settings."${traitName}.setVolumeCommand",
+        volumeStep:       settings."${traitName}.volumeStep",
+        canMuteUnmute:    canMuteUnmute,
+        commands: ["Set Volume"],
+    ]
+
+    if (canMuteUnmute) {
+        volumeTrait << [
+            muteAttribute: settings."${traitName}.muteAttribute",
+            mutedValue:    settings."${traitName}.mutedValue",
+            unmutedValue:  settings."${traitName}.unmutedValue",
+            muteCommand:   settings."${traitName}.muteCommand",
+            unmuteCommand: settings."${traitName}.unmuteCommand"
+        ]
+        volumeTrait.commands += ["Mute", "Unmute"]
+    }
+
+    return volumeTrait
+}
+
 private deviceTraitsFromState(deviceType) {
     if (state.deviceTraits == null) {
         state.deviceTraits = [:]
@@ -2418,6 +2579,18 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     // for device types created with older versions of the app
     app.removeSetting("${deviceTrait.name}.setpointAttribute")
     app.removeSetting("${deviceTrait.name}.setSetpointCommand")
+}
+
+private deleteDeviceTrait_Volume(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.volumeAttribute")
+    app.removeSetting("${deviceTrait.name}.setVolumeCommand")
+    app.removeSetting("${deviceTrait.name}.volumeStep")
+    app.removeSetting("${deviceTrait.name}.canMuteUnmute")
+    app.removeSetting("${deviceTrait.name}.muteAttribute")
+    app.removeSetting("${deviceTrait.name}.mutedValue")
+    app.removeSetting("${deviceTrait.name}.unmutedValue")
+    app.removeSetting("${deviceTrait.name}.muteCommand")
+    app.removeSetting("${deviceTrait.name}.unmuteCommand")
 }
 
 private deleteDeviceTrait_Toggles(deviceTrait) {
@@ -2772,6 +2945,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     TemperatureSetting: "Temperature Setting",
     //Timer: "Timer",
     Toggles: "Toggles",
+    Volume: "Volume",
 ]
 
 @Field
