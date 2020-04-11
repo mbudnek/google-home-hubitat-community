@@ -1430,19 +1430,20 @@ private executeCommand_LockUnlock(deviceInfo, command) {
 
 private executeCommand_mute(deviceInfo, command) {
     def volumeTrait = deviceInfo.deviceType.traits.Volume
-    if (mute) {
+    def checkValue
+    if (command.params.mute) {
         checkMfa(deviceInfo.deviceType, "Mute", command)
         deviceInfo.device."${volumeTrait.muteCommand}"()
-        return [
-            (volumeTrait.muteAttribute): volumeTrait.mutedValue
-        ]
+        checkValue = volumeTrait.mutedValue
     } else {
         checkMfa(deviceInfo.deviceType, "Unmute", command)
         deviceInfo.device."${volumeTrait.unmuteCommand}"()
-        return [
-            (volumeTrait.muteAttribute): volumeTrait.unmutedValue
-        ]
+        checkValue = volumeTrait.unmutedValue
     }
+
+    return [
+        (volumeTrait.muteAttribute): checkValue
+    ]
 }
 
 private executeCommand_OnOff(deviceInfo, command) {
