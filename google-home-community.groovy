@@ -1666,9 +1666,13 @@ private handleQueryRequest(request) {
     requestedDevices.each { requestedDevice ->
         def deviceInfo = knownDevices."${requestedDevice.id}"
         def deviceState = [:]
-        deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
-            deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
-        }
+		if(deviceInfo != null){
+			deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
+				deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
+			}
+		}else{
+			LOGGER.warn("Requested device ${requestedDevice.name} not found.")
+		}
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
     LOGGER.debug(resp)
