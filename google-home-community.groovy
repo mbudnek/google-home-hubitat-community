@@ -34,6 +34,11 @@
 //   * Mar 21 2020 - Fix the Temperature Setting heat/cool buffer and Temperature Control temperature step conversions
 //                   from Fahrenheit to Celsius
 //   * Mar 29 2020 - Add support for the Humidity Setting trait
+//   * Apr 08 2020 - Fix timeout error by making scene activation asynchronous
+//   * Apr 08 2020 - Add support for the Rotation trait
+//   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
+//                   Smoke Detector, Television, Water Purifier, and Water Softener
+//   * Apt 10 2020 - Add support for the Volume trait
 
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -764,6 +769,29 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
     }
 }
 
+def deviceTraitPreferences_Rotation(deviceTrait) {
+    section("Rotation Preferences") {
+        input(
+            name: "${deviceTrait.name}.rotationAttribute",
+            title: "Current Rotation Attribute",
+            type: "text",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.setRotationCommand",
+            title: "Set Rotation Command",
+            type: "text",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.continuousRotation",
+            title: "Supports Continuous Rotation",
+            type: "bool",
+            defaultValue: false
+        )
+    }
+}
+
 def deviceTraitPreferences_Scene(deviceTrait) {
     section("Scene Preferences") {
         input(
@@ -1107,6 +1135,76 @@ def toggleDelete(toggle) {
     }
 }
 
+private deviceTraitPreferences_Volume(deviceTrait) {
+    section("Volume Preferences") {
+        input(
+            name: "${deviceTrait.name}.volumeAttribute",
+            title: "Current Volume Attribute",
+            type: "text",
+            required: true,
+            defaultValue: "volume"
+        )
+        input(
+            name: "${deviceTrait.name}.setVolumeCommand",
+            title: "Set Rotation Command",
+            type: "text",
+            required: true,
+            defaultValue: "setVolume"
+        )
+        input(
+            name: "${deviceTrait.name}.volumeStep",
+            title: "Volume Level Step",
+            type: "number",
+            required: true,
+            defaultValue: 1
+        )
+        input(
+            name: "${deviceTrait.name}.canMuteUnmute",
+            title: "Supports Mute And Unmute",
+            type: "bool",
+            defaultValue: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.canMuteUnmute) {
+            input(
+                name: "${deviceTrait.name}.muteAttribute",
+                title: "Mute State Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "mute"
+            )
+            input(
+                name: "${deviceTrait.name}.mutedValue",
+                title: "Muted Value",
+                type: "text",
+                required: true,
+                defaultValue: "muted"
+            )
+            input(
+                name: "${deviceTrait.name}.unmutedValue",
+                title: "Unmuted Value",
+                type: "text",
+                required: true,
+                defaultValue: "unmuted"
+            )
+            input(
+                name: "${deviceTrait.name}.muteCommand",
+                title: "Mute Command",
+                type: "text",
+                required: true,
+                defaultValue: "mute"
+            )
+            input(
+                name: "${deviceTrait.name}.unmuteCommand",
+                title: "Unmute Command",
+                type: "text",
+                required: true,
+                defaultValue: "unmute"
+            )
+        }
+    }
+}
+
 def handleAction() {
     LOGGER.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
@@ -1227,6 +1325,12 @@ private checkMfa(deviceType, commandType, command) {
     }
 }
 
+private controlScene(options) {
+    def allDevices = allKnownDevices()
+    def device = allDevices[options.deviceId].device
+    device."${options.command}"()
+}
+
 private executeCommand_ActivateScene(deviceInfo, command) {
     def sceneTrait = deviceInfo.deviceType.traits.Scene
     if (sceneTrait.name == "hubitat_mode") {
@@ -1234,10 +1338,10 @@ private executeCommand_ActivateScene(deviceInfo, command) {
     } else {
         if (command.params.deactivate) {
             checkMfa(deviceInfo.deviceType, "Deactivate Scene", command)
-            deviceInfo.device."${sceneTrait.deactivateCommand}"()
+            runIn(0, "controlScene", [data: ["deviceId": deviceInfo.device.id, "command": sceneTrait.deactivateCommand]])
         } else {
             checkMfa(deviceInfo.deviceType, "Activate Scene", command)
-            deviceInfo.device."${sceneTrait.activateCommand}"()
+            runIn(0, "controlScene", [data: ["deviceId": deviceInfo.device.id, "command": sceneTrait.activateCommand]])
         }
     }
     return [:]
@@ -1324,6 +1428,24 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     ]
 }
 
+private executeCommand_mute(deviceInfo, command) {
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def checkValue
+    if (command.params.mute) {
+        checkMfa(deviceInfo.deviceType, "Mute", command)
+        deviceInfo.device."${volumeTrait.muteCommand}"()
+        checkValue = volumeTrait.mutedValue
+    } else {
+        checkMfa(deviceInfo.deviceType, "Unmute", command)
+        deviceInfo.device."${volumeTrait.unmuteCommand}"()
+        checkValue = volumeTrait.unmutedValue
+    }
+
+    return [
+        (volumeTrait.muteAttribute): checkValue
+    ]
+}
+
 private executeCommand_OnOff(deviceInfo, command) {
     def onOffTrait = deviceInfo.deviceType.traits.OnOff
 
@@ -1381,6 +1503,17 @@ private executeCommand_OpenClose(deviceInfo, command) {
     }
     return [
         (openCloseTrait.openCloseAttribute): checkValue
+    ]
+}
+
+private executeCommand_RotateAbsolute(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Rotate", command)
+    def rotationTrait = deviceInfo.deviceType.traits.Rotation
+    def position = command.params.rotationPercent
+
+    deviceInfo.device."${rotationTrait.setRotationCommand}"(position)
+    return [
+        (rotationTrait.rotationAttribute): position
     ]
 }
 
@@ -1443,6 +1576,17 @@ private executeCommand_SetToggles(deviceInfo, command) {
     return statesToCheck
 }
 
+private executeCommand_setVolume(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def volumeLevel = command.params.volumeLevel
+    deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
+
+    return [
+        (volumeTrait.volumeAttribute): volumeLevel
+    ]
+}
+
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
@@ -1490,6 +1634,22 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
 
     return [
         (temperatureSettingTrait.currentModeAttribute): hubitatMode
+    ]
+}
+
+private executeCommand_volumeRelative(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    def volumeChange = command.params.relativeSteps
+    def device = deviceInfo.device
+
+    def currentVolume = device.currentValue(volumeTrait.volumeAttribute)
+    // volumeChange will be negative when decreasing volume
+    def newVolume = currentVolume + volumeChange
+    device."${volumeTrait.setVolumeCommand}"(newVolume)
+
+    return [
+        (volumeTrait.volumeAttribute): newVolume
     ]
 }
 
@@ -1622,6 +1782,12 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
     ]
 }
 
+private deviceStateForTrait_Rotation(deviceTrait, device) {
+    return [
+        rotationPercent: device.currentValue(deviceTrait.rotationAttribute)
+    ]
+}
+
 private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
 }
@@ -1696,6 +1862,16 @@ private deviceStateForTrait_Toggles(deviceTrait, device) {
             [toggle.name, deviceStateForTrait_OnOff(toggle, device).on]
         }
     ]
+}
+
+private deviceStateForTrait_Volume(deviceTrait, device) {
+    def deviceState = [
+        currentVolume: device.currentValue(deviceTrait.volumeAttribute)
+    ]
+    if (deviceTrait.canMuteUnmute) {
+        deviceState.isMuted = device.currentValue(deviceTrait.muteAttribute) == deviceTrait.mutedValue
+    }
+    return deviceState
 }
 
 private handleSyncRequest(request) {
@@ -1803,6 +1979,14 @@ private attributesForTrait_OpenClose(deviceTrait) {
     ]
 }
 
+private attributesForTrait_Rotation(deviceTrait) {
+    return [
+        supportsContinuousRotation: deviceTrait.continuousRotation,
+        supportsPercent:            true,
+        supportsDegrees:            false
+    ]
+}
+
 private attributesForTrait_Scene(deviceTrait) {
     return [
         sceneReversible: deviceTrait.sceneReversible
@@ -1887,6 +2071,14 @@ private attributesForTrait_Toggles(deviceTrait) {
                 ]
             ]
         }
+    ]
+}
+
+private attributesForTrait_Volume(deviceTrait) {
+    return [
+        volumeMaxLevel:         100,
+        volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
+        levelStepSize:          deviceTrait.volumeStep
     ]
 }
 
@@ -2033,6 +2225,15 @@ private traitFromSettings_OpenClose(traitName) {
     }
 
     return openCloseTrait
+}
+
+private traitFromSettings_Rotation(traitName) {
+    return [
+        rotationAttribute:  settings."${traitName}.rotationAttribute",
+        setRotationCommand: settings."${traitName}.setRotationCommand",
+        continuousRotation: settings."${traitName}.continuousRotation",
+        commands:        ["Rotate"]
+    ]
 }
 
 private traitFromSettings_Scene(traitName) {
@@ -2198,6 +2399,33 @@ private traitFromSettings_Toggles(traitName) {
     return togglesTrait
 }
 
+private traitFromSettings_Volume(traitName) {
+    def canMuteUnmute = settings."${traitName}.canMuteUnmute"
+    if (canMuteUnmute == null) {
+        canMuteUnmute = true
+    }
+    def volumeTrait = [
+        volumeAttribute:  settings."${traitName}.volumeAttribute",
+        setVolumeCommand: settings."${traitName}.setVolumeCommand",
+        volumeStep:       settings."${traitName}.volumeStep",
+        canMuteUnmute:    canMuteUnmute,
+        commands: ["Set Volume"],
+    ]
+
+    if (canMuteUnmute) {
+        volumeTrait << [
+            muteAttribute: settings."${traitName}.muteAttribute",
+            mutedValue:    settings."${traitName}.mutedValue",
+            unmutedValue:  settings."${traitName}.unmutedValue",
+            muteCommand:   settings."${traitName}.muteCommand",
+            unmuteCommand: settings."${traitName}.unmuteCommand"
+        ]
+        volumeTrait.commands += ["Mute", "Unmute"]
+    }
+
+    return volumeTrait
+}
+
 private deviceTraitsFromState(deviceType) {
     if (state.deviceTraits == null) {
         state.deviceTraits = [:]
@@ -2303,6 +2531,12 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.queryOnly")
 }
 
+private deleteDeviceTrait_Rotation(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.rotationAttribute")
+    app.removeSetting("${deviceTrait.name}.setRotationCommand")
+    app.removeSetting("${deviceTrait.name}.continuousRotation")
+}
+
 private deleteDeviceTrait_Scene(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.activateCommand")
     app.removeSetting("${deviceTrait.name}.deactivateCommand")
@@ -2345,6 +2579,18 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     // for device types created with older versions of the app
     app.removeSetting("${deviceTrait.name}.setpointAttribute")
     app.removeSetting("${deviceTrait.name}.setSetpointCommand")
+}
+
+private deleteDeviceTrait_Volume(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.volumeAttribute")
+    app.removeSetting("${deviceTrait.name}.setVolumeCommand")
+    app.removeSetting("${deviceTrait.name}.volumeStep")
+    app.removeSetting("${deviceTrait.name}.canMuteUnmute")
+    app.removeSetting("${deviceTrait.name}.muteAttribute")
+    app.removeSetting("${deviceTrait.name}.mutedValue")
+    app.removeSetting("${deviceTrait.name}.unmutedValue")
+    app.removeSetting("${deviceTrait.name}.muteCommand")
+    app.removeSetting("${deviceTrait.name}.unmuteCommand")
 }
 
 private deleteDeviceTrait_Toggles(deviceTrait) {
@@ -2600,66 +2846,74 @@ private static final HUBITAT_DEVICE_TYPES = [
 
 @Field
 private static final GOOGLE_DEVICE_TYPES = [
-    AC_UNIT:        "Air conditioning unit",
-    AIRFRESHENER:   "Air freshener",
-    AIRPURIFIER:    "Air purifier",
-    AWNING:         "Awning",
-    BATHTUB:        "Bathtub",
-    BED:            "Bed",
-    BLENDER:        "Blender",
-    BLINDS:         "Blinds",
-    BOILER:         "Boiler",
-    CAMERA:         "Camera",
-    CLOSET:         "Closet",
-    COFFEE_MAKER:   "Coffee maker",
-    COOKTOP:        "Cooktop",
-    CURTAIN:        "Curtain",
-    DEHUMIDIFIER:   "Dehumidifier",
-    DEHYDRATOR:     "Dehydrator",
-    DISHWASHER:     "Dishwasher",
-    DOOR:           "Door",
-    DRAWER:         "Drawer",
-    DRYER:          "Dryer",
-    FAN:            "Fan",
-    FAUCET:         "Faucet",
-    FIREPLACE:      "Fireplace",
-    FRYER:          "Fryer",
-    GARAGE:         "Garage Door",
-    GATE:           "Gate",
-    GRILL:          "Grill",
-    HEATER:         "Heater",
-    HOOD:           "Hood",
-    HUMIDIFIER:     "Humidifier",
-    KETTLE:         "Kettle",
-    LIGHT:          "Light",
-    LOCK:           "Lock",
-    MOP:            "Mop",
-    MOWER:          "Mower",
-    MICROWAVE:      "Microwave",
-    MULTICOOKER:    "Multicooker",
-    OUTLET:         "Outlet",
-    OVEN:           "Oven",
-    PERGOLA:        "Pergola",
-    PETFEEDER:      "Pet Feeder",
-    PRESSURECOOKER: "Pressure cooker",
-    RADIATOR:       "Radiator",
-    REFRIGERATOR:   "Refrigerator",
-    SCENE:          "Scene",
-    SECURITYSYSTEM: "Security system",
-    SENSOR:         "Sensor",
-    SHUTTER:        "Shutter",
-    SHOWER:         "Shower",
-    SOUSVIDE:       "Sous vide",
-    SPRINKLER:      "Sprinkler",
-    STANDMIXER:     "Stand Mixer",
-    SWITCH:         "Switch",
-    THERMOSTAT:     "Thermostat",
-    VACUUM:         "Vacuum",
-    VALVE:          "Valve",
-    WASHER:         "Washer",
-    WATERHEATER:    "Water heater",
-    WINDOW:         "Window",
-    YOGURTMAKER:    "Yogurt maker"
+    AC_UNIT:                "Air Conditioning Unit",
+    AIRFRESHENER:           "Air Freshener",
+    AIRPURIFIER:            "Air Purifier",
+    AWNING:                 "Awning",
+    BATHTUB:                "Bathtub",
+    BED:                    "Bed",
+    BLENDER:                "Blender",
+    BLINDS:                 "Blinds",
+    BOILER:                 "Boiler",
+    CAMERA:                 "Camera",
+    CARBON_MONOXIDE_SENSOR: "Carbon Monoxide Sensor",
+    CHARGER:                "Charger",
+    CLOSET:                 "Closet",
+    COFFEE_MAKER:           "Coffee Maker",
+    COOKTOP:                "Cooktop",
+    CURTAIN:                "Curtain",
+    DEHUMIDIFIER:           "Dehumidifier",
+    DEHYDRATOR:             "Dehydrator",
+    DISHWASHER:             "Dishwasher",
+    DOOR:                   "Door",
+    DRAWER:                 "Drawer",
+    DRYER:                  "Dryer",
+    FAN:                    "Fan",
+    FAUCET:                 "Faucet",
+    FIREPLACE:              "Fireplace",
+    FRYER:                  "Fryer",
+    GARAGE:                 "Garage Door",
+    GATE:                   "Gate",
+    GRILL:                  "Grill",
+    HEATER:                 "Heater",
+    HOOD:                   "Hood",
+    HUMIDIFIER:             "Humidifier",
+    KETTLE:                 "Kettle",
+    LIGHT:                  "Light",
+    LOCK:                   "Lock",
+    MICROWAVE:              "Microwave",
+    MOP:                    "Mop",
+    MOWER:                  "Mower",
+    MULTICOOKER:            "Multicooker",
+    OUTLET:                 "Outlet",
+    OVEN:                   "Oven",
+    PERGOLA:                "Pergola",
+    PETFEEDER:              "Pet Feeder",
+    PRESSURECOOKER:         "Pressure Cooker",
+    RADIATOR:               "Radiator",
+    REFRIGERATOR:           "Refrigerator",
+    REMOTECONTROL:          "Remote Control",
+    SCENE:                  "Scene",
+    SECURITYSYSTEM:         "Security System",
+    SENSOR:                 "Sensor",
+    SETTOP:                 "Set-Top Box",
+    SHOWER:                 "Shower",
+    SHUTTER:                "Shutter",
+    SMOKE_DETECTOR:         "Smoke Detector",
+    SOUSVIDE:               "Sous Vide",
+    SPRINKLER:              "Sprinkler",
+    STANDMIXER:             "Stand Mixer",
+    SWITCH:                 "Switch",
+    TV:                     "Television",
+    THERMOSTAT:             "Thermostat",
+    VACUUM:                 "Vacuum",
+    VALVE:                  "Valve",
+    WASHER:                 "Washer",
+    WATERHEATER:            "Water Heater",
+    WATERPURIFIER:          "Water Purifier",
+    WATERSOFTENER:          "Water Softener",
+    WINDOW:                 "Window",
+    YOGURTMAKER:            "Yogurt Maker"
 ]
 
 @Field
@@ -2681,7 +2935,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     OnOff: "On/Off",
     OpenClose: "Open/Close",
     //Reboot: "Reboot",
-    //Rotation: "Rotation",
+    Rotation: "Rotation",
     //RunCycle: "Run Cycle",
     Scene: "Scene",
     //SoftwareUpdate: "Software Update",
@@ -2691,6 +2945,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     TemperatureSetting: "Temperature Setting",
     //Timer: "Timer",
     Toggles: "Toggles",
+    Volume: "Volume",
 ]
 
 @Field

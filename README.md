@@ -202,6 +202,14 @@ The Open/Close trait is used for devices that can be opened and closed such as d
         - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Maps to `open` by default.
         - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Maps to `close` by default.
 
+### Rotation
+
+The Rotation trait is used for devices that can be rotated to a specific position such as slat blinds or a pivoting fan.  It can be controlled by saying things like "Hey Google, rotate {device} to 30%" and queried by saying things like "Hey Google, how far is {device} rotated?".  It has the following configuration parameters:
+
+- Current Rotation Attribute: The device attribute used to determine how far the device is currently rotated.  Should be a number in the range 0-99 with 0 being rotated fully counter-clockwise and 99 being rotated fully clockwise.
+- Set Rotation Command: A device command used to rotate the device to a new position.  Should accept a parameter in the range 0-99 where 0 will rotate the device fully counter-clockwise and 99 will rotate it fully clockwise.
+- Supports Continuous Rotation: This parameter should be set if the device can rotate continuously.  That is, if it can continue rotating clockwise past its position 99 to get back to position 0.
+
 ### Scene
 
 This is used for controlling scenes, and should generally only be used with the "Scene" device type.  It can be controlled by saying things like "Hey Google, activate {scene}" or "Hey Google, deactivate {scene}".  It cannot be queried.  It has the following configuration parameters:
@@ -249,3 +257,17 @@ This trait is used for devices that have one or more independently togglable on/
 Multiple toggles may be defined for a device type, each has all of the parameters defined for the [On/Off trait](#onoff), as well as the following:
 
 - Toggle Names: A comma-separated list of names that can be used to control or query this toggle.  The Google Assistant will accept any of the defined names, but will always respond with the first name in the list.
+
+### Volume
+
+This trait is used for devices that can have their volume controlled such as TVs or speakers.  It can be controlled by saying things like "Hey Google, set {device} volume to 65%" or "Hey Google, turn up {device}".  It has the following configuration parameters:
+
+- Current Volume Attribute: The device attribute used to query the current volume of the device.  Should be an integer in the range 0-100.  Maps to `volume` by default.
+- Set Volume Command: A device command used to set the desired volume.  Should accept an integer parameter in the range 0-100.  Maps to `setVolume` by default.
+- Volume Level Step:  The amount by which to raise or lower the volume when requested to turn up or down the volume without requesting a specific amount.  Defaults to `1`.
+- Supports Mute And Unmute:  Set unset this if your device cannot be muted separately from setting its volume to 0.  If set, the following configuration parameters are available:
+    - Mute State Attribute:  The device attribute used to determine if the device is muted or not.  Maps to `mute` by default.
+    - Muted Value:  The value that the Mute State Attribute will report when the device is muted.  Defaults to `muted`.
+    - Unmuted Value:  The value that the Mute State Attribute will report when the device is unmuted.  Defaults to `unmuted`.
+    - Mute Command:  A device command used to mute the device.  Should accept no parameters.  Maps to `mute` by default.
+    - Unmute Command:  A device command used to unmute the device.  Should accept no parameters.  Maps to `unmute` by default.
