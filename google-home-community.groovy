@@ -1671,7 +1671,7 @@ private handleQueryRequest(request) {
 				deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
 			}
 		}else{
-			LOGGER.warn("Request device ${requestedDevice.name} not found.")
+			LOGGER.warn("Requested device ${requestedDevice.name} not found.")
 		}
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
