@@ -1,0 +1,381 @@
+<ruleset xmlns="http://codenarc.org/ruleset/1.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://codenarc.org/ruleset/1.0 http://codenarc.org/ruleset-schema.xsd"
+         xsi:noNamespaceSchemaLocation="http://codenarc.org/ruleset-schema.xsd">
+
+  <description>
+    A Sample Groovy RuleSet containing all CodeNarc Rules, grouped by category.
+    You can use this as a template for your own custom RuleSet.
+    Just delete the rules that you don't want to include.
+  </description>
+
+  <!--  rulesets/basic.xml -->
+  <rule class='org.codenarc.rule.basic.AssertWithinFinallyBlockRule'/>
+  <rule class='org.codenarc.rule.basic.AssignmentInConditionalRule'/>
+  <rule class='org.codenarc.rule.basic.BigDecimalInstantiationRule'/>
+  <rule class='org.codenarc.rule.basic.BitwiseOperatorInConditionalRule'/>
+  <rule class='org.codenarc.rule.basic.BooleanGetBooleanRule'/>
+  <rule class='org.codenarc.rule.basic.BrokenNullCheckRule'/>
+  <rule class='org.codenarc.rule.basic.BrokenOddnessCheckRule'/>
+  <rule class='org.codenarc.rule.basic.ClassForNameRule'/>
+  <rule class='org.codenarc.rule.basic.ComparisonOfTwoConstantsRule'/>
+  <rule class='org.codenarc.rule.basic.ComparisonWithSelfRule'/>
+  <rule class='org.codenarc.rule.basic.ConstantAssertExpressionRule'/>
+  <rule class='org.codenarc.rule.basic.ConstantIfExpressionRule'/>
+  <rule class='org.codenarc.rule.basic.ConstantTernaryExpressionRule'/>
+  <rule class='org.codenarc.rule.basic.DeadCodeRule'/>
+  <rule class='org.codenarc.rule.basic.DoubleNegativeRule'/>
+  <rule class='org.codenarc.rule.basic.DuplicateCaseStatementRule'/>
+  <rule class='org.codenarc.rule.basic.DuplicateMapKeyRule'/>
+  <rule class='org.codenarc.rule.basic.DuplicateSetValueRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyCatchBlockRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyClassRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyElseBlockRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyFinallyBlockRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyForStatementRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyIfStatementRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyInstanceInitializerRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyMethodRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyStaticInitializerRule'/>
+  <rule class='org.codenarc.rule.basic.EmptySwitchStatementRule'/>
+  <rule class='org.codenarc.rule.basic.EmptySynchronizedStatementRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyTryBlockRule'/>
+  <rule class='org.codenarc.rule.basic.EmptyWhileStatementRule'/>
+  <rule class='org.codenarc.rule.basic.EqualsAndHashCodeRule'/>
+  <rule class='org.codenarc.rule.basic.EqualsOverloadedRule'/>
+  <rule class='org.codenarc.rule.basic.ExplicitGarbageCollectionRule'/>
+  <rule class='org.codenarc.rule.basic.ForLoopShouldBeWhileLoopRule'/>
+  <rule class='org.codenarc.rule.basic.HardCodedWindowsFileSeparatorRule'/>
+  <rule class='org.codenarc.rule.basic.HardCodedWindowsRootDirectoryRule'/>
+  <rule class='org.codenarc.rule.basic.IntegerGetIntegerRule'/>
+  <rule class='org.codenarc.rule.basic.MultipleUnaryOperatorsRule'/>
+  <rule class='org.codenarc.rule.basic.RandomDoubleCoercedToZeroRule'/>
+  <rule class='org.codenarc.rule.basic.RemoveAllOnSelfRule'/>
+  <rule class='org.codenarc.rule.basic.ReturnFromFinallyBlockRule'/>
+  <rule class='org.codenarc.rule.basic.ThrowExceptionFromFinallyBlockRule'/>
+
+  <!--  rulesets/braces.xml -->
+  <rule class='org.codenarc.rule.braces.ElseBlockBracesRule'/>
+  <rule class='org.codenarc.rule.braces.ForStatementBracesRule'/>
+  <rule class='org.codenarc.rule.braces.IfStatementBracesRule'/>
+  <rule class='org.codenarc.rule.braces.WhileStatementBracesRule'/>
+
+  <!--  rulesets/comments.xml -->
+  <rule class='org.codenarc.rule.comments.ClassJavadocRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocConsecutiveEmptyLinesRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyAuthorTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyExceptionTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyFirstLineRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyLastLineRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyParamTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyReturnTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptySeeTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptySinceTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyThrowsTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocEmptyVersionTagRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocMissingExceptionDescriptionRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocMissingParamDescriptionRule'/>
+  <rule class='org.codenarc.rule.comments.JavadocMissingThrowsDescriptionRule'/>
+
+  <!--  rulesets/concurrency.xml -->
+  <rule class='org.codenarc.rule.concurrency.BusyWaitRule'/>
+  <rule class='org.codenarc.rule.concurrency.DoubleCheckedLockingRule'/>
+  <rule class='org.codenarc.rule.concurrency.InconsistentPropertyLockingRule'/>
+  <rule class='org.codenarc.rule.concurrency.InconsistentPropertySynchronizationRule'/>
+  <rule class='org.codenarc.rule.concurrency.NestedSynchronizationRule'/>
+  <rule class='org.codenarc.rule.concurrency.StaticCalendarFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.StaticConnectionRule'/>
+  <rule class='org.codenarc.rule.concurrency.StaticDateFormatFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.StaticMatcherFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.StaticSimpleDateFormatFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedMethodRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedOnBoxedPrimitiveRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedOnGetClassRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedOnReentrantLockRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedOnStringRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedOnThisRule'/>
+  <rule class='org.codenarc.rule.concurrency.SynchronizedReadObjectMethodRule'/>
+  <rule class='org.codenarc.rule.concurrency.SystemRunFinalizersOnExitRule'/>
+  <rule class='org.codenarc.rule.concurrency.ThisReferenceEscapesConstructorRule'/>
+  <rule class='org.codenarc.rule.concurrency.ThreadGroupRule'/>
+  <rule class='org.codenarc.rule.concurrency.ThreadLocalNotStaticFinalRule'/>
+  <rule class='org.codenarc.rule.concurrency.ThreadYieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.UseOfNotifyMethodRule'/>
+  <rule class='org.codenarc.rule.concurrency.VolatileArrayFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.VolatileLongOrDoubleFieldRule'/>
+  <rule class='org.codenarc.rule.concurrency.WaitOutsideOfWhileLoopRule'/>
+
+  <!--  rulesets/convention.xml -->
+  <rule class='org.codenarc.rule.convention.ConfusingTernaryRule'/>
+  <rule class='org.codenarc.rule.convention.CouldBeElvisRule'/>
+  <rule class='org.codenarc.rule.convention.FieldTypeRequiredRule'/>
+  <rule class='org.codenarc.rule.convention.HashtableIsObsoleteRule'/>
+  <rule class='org.codenarc.rule.convention.IfStatementCouldBeTernaryRule'/>
+  <rule class='org.codenarc.rule.convention.InvertedConditionRule'/>
+  <rule class='org.codenarc.rule.convention.InvertedIfElseRule'/>
+  <rule class='org.codenarc.rule.convention.LongLiteralWithLowerCaseLRule'/>
+  <rule class='org.codenarc.rule.convention.NoDoubleRule'/>
+  <rule class='org.codenarc.rule.convention.NoFloatRule'/>
+  <rule class='org.codenarc.rule.convention.NoJavaUtilDateRule'/>
+  <rule class='org.codenarc.rule.convention.NoTabCharacterRule'/>
+  <rule class='org.codenarc.rule.convention.StaticFieldsBeforeInstanceFieldsRule'/>
+  <rule class='org.codenarc.rule.convention.StaticMethodsBeforeInstanceMethodsRule'/>
+  <rule class='org.codenarc.rule.convention.TernaryCouldBeElvisRule'/>
+  <!-- The CodeNarc crashes on the TrailingComma rule as of version 1.5 -->
+  <!--<rule class='org.codenarc.rule.convention.TrailingCommaRule'/>-->
+  <rule class='org.codenarc.rule.convention.VectorIsObsoleteRule'/>
+
+  <!--  rulesets/design.xml -->
+  <rule class='org.codenarc.rule.design.AbstractClassWithPublicConstructorRule'/>
+  <rule class='org.codenarc.rule.design.AbstractClassWithoutAbstractMethodRule'/>
+  <rule class='org.codenarc.rule.design.AssignmentToStaticFieldFromInstanceMethodRule'/>
+  <rule class='org.codenarc.rule.design.BooleanMethodReturnsNullRule'/>
+  <rule class='org.codenarc.rule.design.BuilderMethodWithSideEffectsRule'/>
+  <rule class='org.codenarc.rule.design.CloneableWithoutCloneRule'/>
+  <rule class='org.codenarc.rule.design.CloseWithoutCloseableRule'/>
+  <rule class='org.codenarc.rule.design.CompareToWithoutComparableRule'/>
+  <rule class='org.codenarc.rule.design.ConstantsOnlyInterfaceRule'/>
+  <rule class='org.codenarc.rule.design.EmptyMethodInAbstractClassRule'/>
+  <rule class='org.codenarc.rule.design.FinalClassWithProtectedMemberRule'/>
+  <rule class='org.codenarc.rule.design.ImplementationAsTypeRule'/>
+  <rule class='org.codenarc.rule.design.LocaleSetDefaultRule'/>
+  <rule class='org.codenarc.rule.design.NestedForLoopRule'/>
+  <rule class='org.codenarc.rule.design.PrivateFieldCouldBeFinalRule'/>
+  <rule class='org.codenarc.rule.design.PublicInstanceFieldRule'/>
+  <rule class='org.codenarc.rule.design.ReturnsNullInsteadOfEmptyArrayRule'/>
+  <rule class='org.codenarc.rule.design.ReturnsNullInsteadOfEmptyCollectionRule'/>
+  <rule class='org.codenarc.rule.design.SimpleDateFormatMissingLocaleRule'/>
+  <rule class='org.codenarc.rule.design.StatelessSingletonRule'/>
+  <rule class='org.codenarc.rule.design.ToStringReturnsNullRule'/>
+
+  <!--  rulesets/enhanced.xml -->
+  <rule class='org.codenarc.rule.design.CloneWithoutCloneableRule'/>
+  <rule class='org.codenarc.rule.enhanced.MissingOverrideAnnotationRule'/>
+  <rule class='org.codenarc.rule.security.UnsafeImplementationAsMapRule'/>
+
+  <!--  rulesets/exceptions.xml -->
+  <rule class='org.codenarc.rule.exceptions.CatchArrayIndexOutOfBoundsExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.CatchErrorRule'/>
+  <!--<rule class='org.codenarc.rule.exceptions.CatchExceptionRule'/>-->
+  <rule class='org.codenarc.rule.exceptions.CatchIllegalMonitorStateExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.CatchIndexOutOfBoundsExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.CatchNullPointerExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.CatchRuntimeExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.CatchThrowableRule'/>
+  <rule class='org.codenarc.rule.exceptions.ConfusingClassNamedExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.ExceptionExtendsErrorRule'/>
+  <rule class='org.codenarc.rule.exceptions.ExceptionExtendsThrowableRule'/>
+  <rule class='org.codenarc.rule.exceptions.ExceptionNotThrownRule'/>
+  <rule class='org.codenarc.rule.exceptions.MissingNewInThrowStatementRule'/>
+  <rule class='org.codenarc.rule.exceptions.ReturnNullFromCatchBlockRule'/>
+  <rule class='org.codenarc.rule.exceptions.SwallowThreadDeathRule'/>
+  <rule class='org.codenarc.rule.exceptions.ThrowErrorRule'/>
+  <!--<rule class='org.codenarc.rule.exceptions.ThrowExceptionRule'/>-->
+  <rule class='org.codenarc.rule.exceptions.ThrowNullPointerExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.ThrowRuntimeExceptionRule'/>
+  <rule class='org.codenarc.rule.exceptions.ThrowThrowableRule'/>
+
+  <!--  rulesets/formatting.xml -->
+  <rule class='org.codenarc.rule.formatting.BlankLineBeforePackageRule'/>
+  <rule class='org.codenarc.rule.formatting.BlockEndsWithBlankLineRule'/>
+  <rule class='org.codenarc.rule.formatting.BlockStartsWithBlankLineRule'/>
+  <rule class='org.codenarc.rule.formatting.BracesForClassRule'/>
+  <rule class='org.codenarc.rule.formatting.BracesForForLoopRule'/>
+  <rule class='org.codenarc.rule.formatting.BracesForIfElseRule'/>
+  <rule class='org.codenarc.rule.formatting.BracesForMethodRule'/>
+  <rule class='org.codenarc.rule.formatting.BracesForTryCatchFinallyRule'/>
+  <rule class='org.codenarc.rule.formatting.ClassEndsWithBlankLineRule'/>
+  <rule class='org.codenarc.rule.formatting.ClassStartsWithBlankLineRule'/>
+  <rule class='org.codenarc.rule.formatting.ClosureStatementOnOpeningLineOfMultipleLineClosureRule'/>
+  <rule class='org.codenarc.rule.formatting.ConsecutiveBlankLinesRule'/>
+  <rule class='org.codenarc.rule.formatting.FileEndsWithoutNewlineRule'/>
+  <rule class='org.codenarc.rule.formatting.IndentationRule'/>
+  <rule class='org.codenarc.rule.formatting.LineLengthRule'>
+      <property name='ignoreLineRegex' value='^.*IgnoreLineLength$'/>
+  </rule>
+  <rule class='org.codenarc.rule.formatting.MissingBlankLineAfterImportsRule'/>
+  <rule class='org.codenarc.rule.formatting.MissingBlankLineAfterPackageRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterCatchRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterClosingBraceRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterCommaRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterForRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterIfRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterOpeningBraceRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterSemicolonRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterSwitchRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAfterWhileRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceAroundClosureArrowRule'/>
+  <!-- TODO: The SpaceAroundMapEntryColon rule doesn't seem to work right -->
+  <!--<rule class='org.codenarc.rule.formatting.SpaceAroundMapEntryColonRule'/>-->
+  <rule class='org.codenarc.rule.formatting.SpaceAroundOperatorRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceBeforeClosingBraceRule'/>
+  <rule class='org.codenarc.rule.formatting.SpaceBeforeOpeningBraceRule'/>
+  <rule class='org.codenarc.rule.formatting.TrailingWhitespaceRule'/>
+
+  <!--  rulesets/generic.xml -->
+  <rule class='org.codenarc.rule.generic.IllegalClassMemberRule'/>
+  <rule class='org.codenarc.rule.generic.IllegalClassReferenceRule'/>
+  <rule class='org.codenarc.rule.generic.IllegalPackageReferenceRule'/>
+  <rule class='org.codenarc.rule.generic.IllegalRegexRule'/>
+  <rule class='org.codenarc.rule.generic.IllegalStringRule'/>
+  <rule class='org.codenarc.rule.generic.IllegalSubclassRule'/>
+  <rule class='org.codenarc.rule.generic.RequiredRegexRule'/>
+  <rule class='org.codenarc.rule.generic.RequiredStringRule'/>
+  <rule class='org.codenarc.rule.generic.StatelessClassRule'/>
+
+  <!--  rulesets/groovyism.xml -->
+  <rule class='org.codenarc.rule.groovyism.AssignCollectionSortRule'/>
+  <rule class='org.codenarc.rule.groovyism.AssignCollectionUniqueRule'/>
+  <rule class='org.codenarc.rule.groovyism.ClosureAsLastMethodParameterRule'/>
+  <rule class='org.codenarc.rule.groovyism.CollectAllIsDeprecatedRule'/>
+  <rule class='org.codenarc.rule.groovyism.ConfusingMultipleReturnsRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitArrayListInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToAndMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToCompareToMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToDivMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToEqualsMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToGetAtMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToLeftShiftMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToMinusMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToModMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToMultiplyMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToOrMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToPlusMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToPowerMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToPutAtMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToRightShiftMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitCallToXorMethodRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitHashMapInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitHashSetInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitLinkedHashMapInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitLinkedListInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitStackInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.ExplicitTreeSetInstantiationRule'/>
+  <rule class='org.codenarc.rule.groovyism.GStringAsMapKeyRule'/>
+  <rule class='org.codenarc.rule.groovyism.GStringExpressionWithinStringRule'/>
+  <rule class='org.codenarc.rule.groovyism.GetterMethodCouldBePropertyRule'/>
+  <rule class='org.codenarc.rule.groovyism.GroovyLangImmutableRule'/>
+  <rule class='org.codenarc.rule.groovyism.UseCollectManyRule'/>
+  <rule class='org.codenarc.rule.groovyism.UseCollectNestedRule'/>
+
+  <!--  rulesets/imports.xml -->
+  <rule class='org.codenarc.rule.imports.DuplicateImportRule'/>
+  <rule class='org.codenarc.rule.imports.ImportFromSamePackageRule'/>
+  <rule class='org.codenarc.rule.imports.ImportFromSunPackagesRule'/>
+  <rule class='org.codenarc.rule.imports.MisorderedStaticImportsRule'/>
+  <rule class='org.codenarc.rule.imports.NoWildcardImportsRule'/>
+  <rule class='org.codenarc.rule.imports.UnnecessaryGroovyImportRule'/>
+  <rule class='org.codenarc.rule.imports.UnusedImportRule'/>
+
+  <!--  rulesets/logging.xml -->
+  <rule class='org.codenarc.rule.logging.LoggerForDifferentClassRule'/>
+  <rule class='org.codenarc.rule.logging.LoggerWithWrongModifiersRule'/>
+  <rule class='org.codenarc.rule.logging.LoggingSwallowsStacktraceRule'/>
+  <rule class='org.codenarc.rule.logging.MultipleLoggersRule'/>
+  <rule class='org.codenarc.rule.logging.PrintStackTraceRule'/>
+  <rule class='org.codenarc.rule.logging.PrintlnRule'/>
+  <rule class='org.codenarc.rule.logging.SystemErrPrintRule'/>
+  <rule class='org.codenarc.rule.logging.SystemOutPrintRule'/>
+
+  <!--  rulesets/naming.xml -->
+  <rule class='org.codenarc.rule.naming.AbstractClassNameRule'/>
+  <rule class='org.codenarc.rule.naming.ClassNameRule'/>
+  <rule class='org.codenarc.rule.naming.ClassNameSameAsFilenameRule'/>
+  <rule class='org.codenarc.rule.naming.ClassNameSameAsSuperclassRule'/>
+  <rule class='org.codenarc.rule.naming.ConfusingMethodNameRule'/>
+  <rule class='org.codenarc.rule.naming.FactoryMethodNameRule'/>
+  <rule class='org.codenarc.rule.naming.FieldNameRule'/>
+  <rule class='org.codenarc.rule.naming.InterfaceNameRule'/>
+  <rule class='org.codenarc.rule.naming.InterfaceNameSameAsSuperInterfaceRule'/>
+  <rule class='org.codenarc.rule.naming.MethodNameRule'/>
+  <rule class='org.codenarc.rule.naming.ObjectOverrideMisspelledMethodNameRule'/>
+  <rule class='org.codenarc.rule.naming.PackageNameRule'/>
+  <rule class='org.codenarc.rule.naming.PackageNameMatchesFilePathRule'/>
+  <rule class='org.codenarc.rule.naming.ParameterNameRule'/>
+  <rule class='org.codenarc.rule.naming.PropertyNameRule'/>
+  <rule class='org.codenarc.rule.naming.VariableNameRule'/>
+
+  <!--  rulesets/security.xml -->
+  <rule class='org.codenarc.rule.security.FileCreateTempFileRule'/>
+  <rule class='org.codenarc.rule.security.InsecureRandomRule'/>
+  <rule class='org.codenarc.rule.security.JavaIoPackageAccessRule'/>
+  <rule class='org.codenarc.rule.security.NonFinalPublicFieldRule'/>
+  <rule class='org.codenarc.rule.security.NonFinalSubclassOfSensitiveInterfaceRule'/>
+  <rule class='org.codenarc.rule.security.ObjectFinalizeRule'/>
+  <rule class='org.codenarc.rule.security.PublicFinalizeMethodRule'/>
+  <rule class='org.codenarc.rule.security.SystemExitRule'/>
+  <rule class='org.codenarc.rule.security.UnsafeArrayDeclarationRule'/>
+
+  <!--  rulesets/serialization.xml -->
+  <rule class='org.codenarc.rule.serialization.EnumCustomSerializationIgnoredRule'/>
+  <rule class='org.codenarc.rule.serialization.SerialPersistentFieldsRule'/>
+  <rule class='org.codenarc.rule.serialization.SerialVersionUIDRule'/>
+  <rule class='org.codenarc.rule.serialization.SerializableClassMustDefineSerialVersionUIDRule'/>
+
+  <!--  rulesets/size.xml -->
+  <!--  Requires the GMetrics jar -->
+  <!--<rule class='org.codenarc.rule.size.AbcMetricRule'/>-->
+  <rule class='org.codenarc.rule.size.ClassSizeRule'/>
+  <!--  Requires the GMetrics jar and a Cobertura coverage file -->
+  <!--<rule class='org.codenarc.rule.size.CrapMetricRule'/>-->
+  <!--  Requires the GMetrics jar -->
+  <!--<rule class='org.codenarc.rule.size.CyclomaticComplexityRule'/>-->
+  <rule class='org.codenarc.rule.size.MethodSizeRule'/>
+  <rule class='org.codenarc.rule.size.NestedBlockDepthRule'/>
+  <rule class='org.codenarc.rule.size.ParameterCountRule'/>
+
+  <!--  rulesets/unnecessary.xml -->
+  <rule class='org.codenarc.rule.unnecessary.AddEmptyStringRule'/>
+  <rule class='org.codenarc.rule.unnecessary.ConsecutiveLiteralAppendsRule'/>
+  <rule class='org.codenarc.rule.unnecessary.ConsecutiveStringConcatenationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryBigDecimalInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryBigIntegerInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryBooleanExpressionRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryBooleanInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCallForLastElementRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCallToSubstringRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCastRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCatchBlockRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCollectCallRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryCollectionCallRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryConstructorRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryDefInFieldDeclarationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryDefInMethodDeclarationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryDefInVariableDeclarationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryDotClassRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryDoubleInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryElseStatementRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryFinalOnPrivateMethodRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryFloatInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryGetterRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryIfStatementRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryInstanceOfCheckRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryInstantiationToGetClassRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryIntegerInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryLongInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryModOneRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryNullCheckRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryNullCheckBeforeInstanceOfRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryOverridingMethodRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryPackageReferenceRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryParenthesesForMethodCallWithClosureRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryPublicModifierRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessarySafeNavigationOperatorRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessarySelfAssignmentRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessarySemicolonRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessarySetterRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryStringInstantiationRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessarySubstringRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryTernaryExpressionRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryToStringRule'/>
+  <rule class='org.codenarc.rule.unnecessary.UnnecessaryTransientModifierRule'/>
+
+  <!--  rulesets/unused.xml -->
+  <rule class='org.codenarc.rule.unused.UnusedArrayRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedMethodParameterRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedObjectRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedPrivateFieldRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedPrivateMethodRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedPrivateMethodParameterRule'/>
+  <rule class='org.codenarc.rule.unused.UnusedVariableRule'/>
+</ruleset>
