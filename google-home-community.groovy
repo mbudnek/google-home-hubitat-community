@@ -40,6 +40,7 @@
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
 //   * Apt 10 2020 - Add support for the Volume trait
 
+import groovy.json.JsonException
 import groovy.json.JsonOutput
 import groovy.transform.Field
 
@@ -1243,11 +1244,17 @@ private handleExecuteRequest(request) {
                         status: "SUCCESS"
                     ]
                 } catch (Exception ex) {
-                    LOGGER.debug("Error executing command ${commandName} on device ${device.device.getName()}: ${ex.message}")
                     results[device.device] = [
                         status: "ERROR"
                     ]
-                    results[device.device] << parseJson(ex.message)
+                    try {
+                        results[device.device] << parseJson(ex.message)
+                    } catch (JsonException jex) {
+                        LOGGER.exception("Error executing command ${commandName} on device ${device.device.getName()}", ex)
+                        results[device.device] << [
+                            errorCode: "hardError"
+                        ]
+                    }
                 }
             }
         }
@@ -2750,7 +2757,16 @@ private LOGGER = [
     debug: { if (settings.debugLogging) log.debug(it) },
     info: { log.info(it) },
     warn: { log.warn(it) },
-    error: { log.error(it) }
+    error: { log.error(it) },
+    exception: { message, exception ->
+        def relevantEntries = exception.stackTrace.findAll { entry -> entry.className.startsWith("user_app") }
+        def line = relevantEntries[0].lineNumber
+        def method = relevantEntries[0].methodName
+        log.error("${message}: ${exception} at line ${line} (${method})")
+        if (settings.debugLogging) {
+            log.debug("App exception stack trace:\n${relevantEntries.join("\n")}")
+        }
+    }
 ]
 
 @Field
