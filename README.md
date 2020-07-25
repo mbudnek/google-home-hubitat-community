@@ -42,8 +42,8 @@ To create your Google smart home Action:
 
 1. Navigate to https://console.actions.google.com
 2. Click "New project"
-3. Enter a name for the project and click "Create project".
-4. Select "Smart Home"
+3. Enter a name for the project and click "Create project"
+4. Select "Smart Home" and click "Start Building"
 5. Click the "Develop" tab.
 6. On the "Invocation" screen, give your Action a name
 7. Click "Actions" in the menu
@@ -54,21 +54,22 @@ To create your Google smart home Action:
 11. Enter `https://oauth.cloud.hubitat.com/oauth/authorize` as the Authorization URL
 12. Enter `https://oauth.cloud.hubitat.com/oauth/token` as the Token URL
 13. Click "Next"
-14. In the "Configure your client (optional)" section, enter "app" in the Scopes box
-15. Click "Save"
-16. Click the "Test" tab
-17. In the top-right of the page, hover your mouse over the icon that looks like a phone in front of a laptop, you should see "Testing on Device: Enabled"
-    - Note: You may need to wait a few minutes at this point for Google's backend to get itself sorted out.  If after several minutes you get a quick loading screen and bounced back to the list after step 22 below, you may need to make a trivial change (such as removing and re-adding a character from the Action's display name) and save the Action to force it to figure its life out.
-18. Open the Google Home app on your phone or tablet
-19. Tap the "+" in the top-left corner
-20. Tap "Set up device"
-21. Tap "Have something already set up?"
-22. In the list, find the entry `[test] {your action name}`
-23. Enter your Hubitat account credentials and click "Sign In"
-24. Select your hub and tap "Select"
-25. Make sure at least one device is selected to expose to Google Home
+14. Leave everything unchecked in the "Use your app for account linking (optional)" section and click "Next"
+15. In the "Configure your client (optional)" section, enter "app" in the Scopes box
+16. Click "Save"
+17. Click the "Test" tab
+18. In the top-right of the page, click "Settings" and ensure "On device testing" is enabled
+    - Note: You may need to wait a few minutes at this point for Google's backend to get itself sorted out.  If after several minutes you get a quick loading screen and bounced back to the list after step 23 below, you may need to make a trivial change (such as removing and re-adding a character from the Action's display name) and save the Action to force it to figure its life out.
+19. Open the Google Home app on your phone or tablet
+20. Tap the "+" in the top-left corner
+21. Tap "Set up device"
+22. Tap "Have something already set up?"
+23. In the list, find the entry `[test] {your action name}`
+24. Enter your Hubitat account credentials and click "Sign In"
+25. Select your hub and tap "Select"
+26. Make sure at least one device is selected to expose to Google Home
     - Note: If you do not select any devices linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
-26. Tap "Authorize"
+27. Tap "Authorize"
 
 
 # Configuring Devices
