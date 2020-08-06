@@ -38,7 +38,8 @@
 //   * Apr 08 2020 - Add support for the Rotation trait
 //   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
-//   * Apt 10 2020 - Add support for the Volume trait
+//   * Apr 10 2020 - Add support for the Volume trait
+//   * Aug 05 2020 - Lyle Pakula - Added Camera support
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -782,6 +783,19 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+def deviceTraitPreferences_CameraStream(deviceTrait) {
+    section("Stream Camera") {
+        input(
+            name: "${deviceTrait.name}.cameraStreamAttribute",
+            title: "Camera Stream URL Attribute",
+            type: "text",
+            defaultValue: "settings",
+            required: true
+        )      
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_Rotation(deviceTrait) {
     section("Rotation Preferences") {
         input(
@@ -1224,7 +1238,7 @@ private deviceTraitPreferences_Volume(deviceTrait) {
     }
 }
 
-def handleAction() {
+def handleAction() {   
     LOGGER.debug(request.JSON)
     def requestType = request.JSON.inputs[0].intent
     if (requestType == "action.devices.SYNC") {
@@ -1264,6 +1278,7 @@ private handleExecuteRequest(request) {
 
     def knownDevices = allKnownDevices()
     def commands = request.JSON.inputs[0].payload.commands
+    
     commands.each { command ->
         def devices = command.devices.collect { device -> knownDevices."${device.id}" }
         def attrsToAwait = [:].withDefault { [:] }
@@ -1363,6 +1378,11 @@ private controlScene(options) {
     def allDevices = allKnownDevices()
     def device = allDevices[options.deviceId].device
     device."${options.command}"()
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_GetCameraStream(deviceInfo, command) {
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1749,6 +1769,15 @@ private handleQueryRequest(request) {
     return resp
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_CameraStream(deviceTrait, device) {     
+    return [
+        cameraStreamAccessUrl: device.currentValue(deviceTrait.cameraStreamAttribute),
+        cameraStreamReceiverAppId: null,
+        cameraStreamAuthToken: null,     
+    ]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Brightness(deviceTrait, device) {
     return [
@@ -1968,6 +1997,7 @@ private handleSyncRequest(request) {
             devices: []
         ]
     ]
+
     (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
         def traits = deviceType.traits.collect { traitType, deviceTrait ->
             "action.devices.traits.${traitType}"
@@ -1990,6 +2020,7 @@ private handleSyncRequest(request) {
             ]
         }
     }
+    
     LOGGER.debug(resp)
     return resp
 }
@@ -2071,6 +2102,16 @@ private attributesForTrait_OpenClose(deviceTrait) {
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private attributesForTrait_CameraStream(deviceTrait) {
+    // NOTE: as of 2020-08-01 Google does not support any protocols other than Chromecast.  Protocols below are unused defaults.
+    return [
+        cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
+        cameraStreamNeedAuthToken:      false,
+        cameraStreamNeedDrmEncryption:  false
+    ]	
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2332,6 +2373,19 @@ private traitFromSettings_OpenClose(traitName) {
     }
 
     return openCloseTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_CameraStream(traitName) {
+    // NOTE: as of 2020-08-01 Google does not support any protocols other than Chromecast.  Protocols below are unused defaults, and StreamToChromecast must be true.
+    return [
+        cameraStreamAttribute: settings."${traitName}.cameraStreamAttribute",
+        commands:        [],
+        params: [
+            StreamToChromecast: true,
+            SupportedStreamProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"]   
+        ]
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2644,6 +2698,12 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.closeCommand")
     app.removeSetting("${deviceTrait.name}.openPositionCommand")
     app.removeSetting("${deviceTrait.name}.queryOnly")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_CameraStream(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.GetCameraStream")
+    app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3050,7 +3110,7 @@ private static final GOOGLE_DEVICE_TYPES = [
 private static final GOOGLE_DEVICE_TRAITS = [
     //ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
-    //CameraStream: "Camera Stream",
+    CameraStream: "Camera Stream",
     ColorSetting: "Color Setting",
     //Cook: "Cook",
     //Dispense: "Dispense",
