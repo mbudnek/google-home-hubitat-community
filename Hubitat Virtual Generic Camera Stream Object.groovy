@@ -13,10 +13,10 @@
  *  Camera Stream Object
  *
  *  Driver does nothing but bridge an HTTP stream into Google Home to display as a video camera.
- *  Saving the preferences creates the video URL link which will be passed to a Chromecast device: 
- *      http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD} 
- *     
- *  NOTE:  Chromecast requires H.264 video, and AAC audio enabled in the above stream 
+ *  Saving the preferences creates the video URL link which will be passed to a Chromecast device:
+ *      http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}
+ *
+ *  NOTE:  Chromecast requires H.264 video, and AAC audio enabled in the above stream
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
@@ -24,30 +24,30 @@
  */
 
 preferences {
-     input "deviceURL", "text", title: "Camera stream HTTP URL", required: true
+    input "deviceURL", "text", title: "Camera stream HTTP URL", required: true
 }
 
 metadata {
-     definition (name: "Virtual Generic Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
-         capability  "VideoCamera"
+    definition (name: "Virtual Generic Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
+        capability  "VideoCamera"
 		
-         attribute   "camera", "enum"
-         attribute   "mute", "enum"
-         attribute   "settings", "JSON_OBJECT"
-         attribute   "statusMessage", "string"
+        attribute   "camera", "enum"
+        attribute   "mute", "enum"
+        attribute   "settings", "JSON_OBJECT"
+        attribute   "statusMessage", "string"
      }
 }
 
 def installed() {
-     updated()
+    updated()
 }
 
 def updated() {
-     log.info "${device.label}: Updated"
-     sendEvent(name: "camera", value: "on")
-     sendEvent(name: "mute", value: "off")
+    log.info "${device.label}: Updated"
+    sendEvent(name: "camera", value: "on")
+    sendEvent(name: "mute", value: "off")
     sendEvent(name: "settings", value: "${deviceURL}")
-	 sendEvent(name: "statusMessage", value: "SUCCESS")
+	sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
 def on() {

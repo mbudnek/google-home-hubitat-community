@@ -13,10 +13,10 @@
  *  Camera Stream Object
  *
  *  Driver does nothing but bridge an HTTP stream into Google Home to display as a video camera.
- *  Saving the preferences creates the video URL link which will be passed to a Chromecast device: 
- *      http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD} 
- *     
- *  NOTE:  Chromecast requires H.264 video, and AAC audio enabled in the above stream 
+ *  Saving the preferences creates the video URL link which will be passed to a Chromecast device:
+ *      http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}
+ *
+ *  NOTE:  Chromecast requires H.264 video, and AAC audio enabled in the above stream
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
@@ -24,38 +24,38 @@
  */
 
 preferences {
-     input "deviceIP", "text", title: "Webserver HTTP URL:Port", required: true
-     input "deviceName", "text", title: "Camera Short Name", required: true
-     input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
-     input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
+    input "deviceIP", "text", title: "Webserver HTTP URL:Port", required: true
+    input "deviceName", "text", title: "Camera Short Name", required: true
+    input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
+    input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
 }
 
 metadata {
-     definition (name: "Virtual BlueIris Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
-         capability  "VideoCamera"
+    definition (name: "Virtual BlueIris Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
+        capability  "VideoCamera"
 		
-         attribute   "camera", "enum"
-         attribute   "mute", "enum"
-         attribute   "settings", "JSON_OBJECT"
-         attribute   "statusMessage", "string"
-     }
+        attribute   "camera", "enum"
+        attribute   "mute", "enum"
+        attribute   "settings", "JSON_OBJECT"
+        attribute   "statusMessage", "string"
+    }
 }
 
 def installed() {
-     updated()
+    updated()
 }
 
 def updated() {
-     log.info "${device.label}: Updated"
-     sendEvent(name: "camera", value: "on")
-     sendEvent(name: "mute", value: "off")
-     // check if a user and password was entered, and add it to the URL, otherwise just create the URL
-     if (deviceUser && devicePWD) {
-         sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
-     } else {
-         sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
-     }
-	 sendEvent(name: "statusMessage", value: "SUCCESS")
+    log.info "${device.label}: Updated"
+    sendEvent(name: "camera", value: "on")
+    sendEvent(name: "mute", value: "off")
+    // check if a user and password was entered, and add it to the URL, otherwise just create the URL
+    if (deviceUser && devicePWD) {
+        sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
+    } else {
+        sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
+    }
+	sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
 def on() {
