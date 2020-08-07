@@ -55,7 +55,7 @@ def updated() {
     } else {
         sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
     }
-	sendEvent(name: "statusMessage", value: "SUCCESS")
+    sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
 def on() {
