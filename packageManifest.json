@@ -1,11 +1,11 @@
 {
   "packageName": "Google Home Community",
   "author": "Miles Budnek",
-  "version": "0.23",
+  "version": "0.24",
   "minimumHEVersion": "0.0",
   "documentationLink": "https://github.com/mbudnek/google-home-hubitat-community/blob/master/README.md",
   "communityLink": "https://community.hubitat.com/t/alpha-community-maintained-google-home-integration/34957",
-  "dateReleased": "2020-02-24",
+  "dateReleased": "2020-08-06",
   "apps": [
     {
       "id": "b2ff1880-4b4c-4b1d-81d7-fce0ced1044a",

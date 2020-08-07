@@ -38,7 +38,8 @@
 //   * Apr 08 2020 - Add support for the Rotation trait
 //   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
-//   * Apt 10 2020 - Add support for the Volume trait
+//   * Apr 10 2020 - Add support for the Volume trait
+//   * Aug 05 2020 - Add suppoer for Camera trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -369,6 +370,19 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
             title: "Set Brightness Command",
             type: "text",
             defaultValue: "setLevel",
+            required: true
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+def deviceTraitPreferences_CameraStream(deviceTrait) {
+    section("Stream Camera") {
+        input(
+            name: "${deviceTrait.name}.cameraStreamAttribute",
+            title: "Camera Stream URL Attribute",
+            type: "text",
+            defaultValue: "settings",
             required: true
         )
     }
@@ -1264,6 +1278,7 @@ private handleExecuteRequest(request) {
 
     def knownDevices = allKnownDevices()
     def commands = request.JSON.inputs[0].payload.commands
+
     commands.each { command ->
         def devices = command.devices.collect { device -> knownDevices."${device.id}" }
         def attrsToAwait = [:].withDefault { [:] }
@@ -1324,6 +1339,7 @@ private handleExecuteRequest(request) {
             resp.payload.commands << result
         }
     }
+
     LOGGER.debug(resp)
     return resp
 }
@@ -1411,6 +1427,11 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     return [
         (brightnessTrait.brightnessAttribute): brightnessToSet
     ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private executeCommand_GetCameraStream(deviceInfo, command) {
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1756,6 +1777,15 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
     ]
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_CameraStream(deviceTrait, device) {
+    return [
+        cameraStreamAccessUrl: device.currentValue(deviceTrait.cameraStreamAttribute),
+        cameraStreamReceiverAppId: null,
+        cameraStreamAuthToken: null
+    ]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_ColorSetting(deviceTrait, device) {
     def colorMode
@@ -1968,6 +1998,7 @@ private handleSyncRequest(request) {
             devices: []
         ]
     ]
+
     (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
         def traits = deviceType.traits.collect { traitType, deviceTrait ->
             "action.devices.traits.${traitType}"
@@ -1990,6 +2021,7 @@ private handleSyncRequest(request) {
             ]
         }
     }
+
     LOGGER.debug(resp)
     return resp
 }
@@ -1997,6 +2029,15 @@ private handleSyncRequest(request) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_Brightness(deviceTrait) {
     return [:]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_CameraStream(deviceTrait) {
+    return [
+        cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
+        cameraStreamNeedAuthToken:      false,
+        cameraStreamNeedDrmEncryption:  false
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2188,6 +2229,14 @@ private traitFromSettings_Brightness(traitName) {
         brightnessAttribute:  settings."${traitName}.brightnessAttribute",
         setBrightnessCommand: settings."${traitName}.setBrightnessCommand",
         commands:             ["Set Brightness"]
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_CameraStream(traitName) {
+    return [
+        cameraStreamAttribute: settings."${traitName}.cameraStreamAttribute",
+        commands:              []
     ]
 }
 
@@ -2572,6 +2621,11 @@ private deleteDeviceTrait(deviceTrait) {
 private deleteDeviceTrait_Brightness(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.brightnessAttribute")
     app.removeSetting("${deviceTrait.name}.setBrightnessCommand")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_CameraStream(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3050,7 +3104,7 @@ private static final GOOGLE_DEVICE_TYPES = [
 private static final GOOGLE_DEVICE_TRAITS = [
     //ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
-    //CameraStream: "Camera Stream",
+    CameraStream: "Camera Stream",
     ColorSetting: "Color Setting",
     //Cook: "Cook",
     //Dispense: "Dispense",
