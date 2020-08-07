@@ -119,7 +119,9 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 
 The CameraStream trait is used to map compatible video streams for viewing on ChromeCast enabled devices (Nest Hubs, ChromeCast, etc).
 
-It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.  This can be accomplished using one or both of the supplied drivers:
+It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.  
+
+- This can be accomplished using one or both of the supplied drivers:
     -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URL in the `Camera stream HTTP URL` input field.
     -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`. 
 	
