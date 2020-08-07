@@ -51,7 +51,7 @@ def updated() {
     sendEvent(name: "mute", value: "off")
     // check if a user and password was entered, and add it to the URL, otherwise just create the URL
     if (deviceUser && devicePWD) {
-        sendEvent(name: "settings", 
+        sendEvent(name: "settings",
 		    value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
     } else {
         sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
