@@ -115,6 +115,16 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 - Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
 - Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 
+### CameraStream
+
+The CameraStream trait is used to map compatible video streams for viewing on ChromeCast enabled devices (Nest Hubs, ChromeCast, etc).
+
+It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.  This can be accomplished using one or both of the supplied drivers:
+    -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URL in the `Camera stream HTTP URL` input field.
+    -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`. 
+	
+NOTE: These drivers offer no other functionality other than a placeholder for the stream URL.  The buttons are non-functional.	
+
 ### Color Setting
 
 The Color Setting trait is intended primarily for smart lights that can have their color set.  It supports both full-spectrum color and color temperature.  It can be controlled by saying things like "Hey Goolge, set {device} to blue" or "Hey Google, set {device} to 3500K".  Color cannot currently be queried.  The Color Setting trait has the following configuration parameters:
