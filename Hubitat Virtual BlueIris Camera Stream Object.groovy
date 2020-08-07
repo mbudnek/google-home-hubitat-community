@@ -33,7 +33,7 @@ preferences {
 metadata {
     definition (name: "Virtual BlueIris Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
         capability  "VideoCamera"
-		
+
         attribute   "camera", "enum"
         attribute   "mute", "enum"
         attribute   "settings", "JSON_OBJECT"

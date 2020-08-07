@@ -30,7 +30,7 @@ preferences {
 metadata {
     definition (name: "Virtual Generic Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
         capability  "VideoCamera"
-		
+
         attribute   "camera", "enum"
         attribute   "mute", "enum"
         attribute   "settings", "JSON_OBJECT"
@@ -47,7 +47,7 @@ def updated() {
     sendEvent(name: "camera", value: "on")
     sendEvent(name: "mute", value: "off")
     sendEvent(name: "settings", value: "${deviceURL}")
-	sendEvent(name: "statusMessage", value: "SUCCESS")
+    sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
 def on() {
