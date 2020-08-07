@@ -1431,8 +1431,6 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_GetCameraStream(deviceInfo, command) {
-    deviceInfo = deviceInfo
-	command = command
     return [:]
 }
 
@@ -2035,7 +2033,6 @@ private attributesForTrait_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_CameraStream(deviceTrait) {
-    deviceTrait = deviceTrait
     return [
         cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
         cameraStreamNeedAuthToken:      false,
