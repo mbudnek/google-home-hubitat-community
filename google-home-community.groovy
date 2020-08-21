@@ -178,6 +178,12 @@ def mainPreferences() {
                 type: "bool",
                 defaultValue: false
             )
+            input(
+                name: "immediateResponse",
+                title: "Respond to Google before device is at new state",
+                type: "bool",
+                defaultValue: false
+            )
         }
         section("Global PIN Codes") {
             globalPinCodes?.pinCodes?.each { pinCode ->
@@ -1766,7 +1772,9 @@ private handleExecuteRequest(request) {
             }
         }
         // Wait up to 5 seconds for devices to report their new state
-        for (def i = 0; i < 50; ++i) {
+        // Reduce wait time to 0.1 second if immediate response requested
+        def waitTime = (settings.immediateResponse) ? 1 : 50
+        for (def i = 0; i < waitTime; ++i) {
             def ready = attrsToAwait.every { device, attributes ->
                 attributes.every { attrName, attrValue ->
                     attributeHasExpectedValue(device, attrName, attrValue)
@@ -1782,7 +1790,8 @@ private handleExecuteRequest(request) {
         devices.each { device ->
             def result = results[device.device]
             result.ids = [device.device.id]
-            if (result.status == "SUCCESS") {
+            // Return true regardless of decvice state if immediate reponse requested
+            if (result.status == "SUCCESS" || settings.immediateResponse) {
                 def deviceState = [
                     online: true
                 ]
