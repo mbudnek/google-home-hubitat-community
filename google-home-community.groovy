@@ -170,7 +170,7 @@ def mainPreferences() {
             )
         }
         section("Global PIN Codes") {
-            globalPinCodes.pinCodes?.each { pinCode ->
+            globalPinCodes?.pinCodes?.each { pinCode ->
                 input(
                     name: "GlobalPinCodes.pin.${pinCode.id}.name",
                     title: "PIN Code Name",
