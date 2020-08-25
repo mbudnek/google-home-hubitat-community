@@ -1771,27 +1771,27 @@ private handleExecuteRequest(request) {
                 }
             }
         }
-        // Wait up to 5 seconds for devices to report their new state
-        // Reduce wait time to 0.1 second if immediate response requested
-        def waitTime = (settings.immediateResponse) ? 1 : 50
-        for (def i = 0; i < waitTime; ++i) {
-            def ready = attrsToAwait.every { device, attributes ->
-                attributes.every { attrName, attrValue ->
-                    attributeHasExpectedValue(device, attrName, attrValue)
+        // Skip loop if immediateResponse desired
+        if (!settings.immediateResponse) {
+            // Wait up to 5 seconds for devices to report their new state
+            for (def i = 0; i < 50; ++i) {
+                def ready = attrsToAwait.every { device, attributes ->
+                    attributes.every { attrName, attrValue ->
+                        attributeHasExpectedValue(device, attrName, attrValue)
+                    }
                 }
-            }
-            if (ready) {
-                break
-            } else {
-                pauseExecution(100)
+                if (ready) {
+                    break
+                } else {
+                    pauseExecution(100)
+                }
             }
         }
         // Now build our response message
         devices.each { device ->
             def result = results[device.device]
             result.ids = [device.device.id]
-            // Return true regardless of decvice state if immediate reponse requested
-            if (result.status == "SUCCESS" || settings.immediateResponse) {
+            if (result.status == "SUCCESS") {
                 def deviceState = [
                     online: true
                 ]
@@ -1803,7 +1803,6 @@ private handleExecuteRequest(request) {
             resp.payload.commands << result
         }
     }
-
     LOGGER.debug(resp)
     return resp
 }
