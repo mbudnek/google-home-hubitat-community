@@ -40,6 +40,7 @@
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
 //   * Apr 10 2020 - Add support for the Volume trait
 //   * Aug 05 2020 - Add suppoer for Camera trait
+//   * Aug 25 2020 - Add suppoer for Global PIN Codes
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -92,7 +93,15 @@ def appButtonHandler(buttonPressed) {
     }
 }
 
+@SuppressWarnings('MethodSize')
 def mainPreferences() {
+    // Make sure that the deviceTypeFromSettings returns by giving it a display name
+    app.updateSetting("GlobalPinCodes.display", "Global PIN Codes")
+    def globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
+    if (state.pinToDelete) {
+        deleteDeviceTypePin(globalPinCodes, state.pinToDelete)
+        state.remove("pinToDelete")
+    }
     if (settings.deviceTypeToEdit != null) {
         def toEdit = settings.deviceTypeToEdit
         app.removeSetting("deviceTypeToEdit")
@@ -159,6 +168,35 @@ def mainPreferences() {
                 title: "Enable Debug Logging",
                 type: "bool",
                 defaultValue: false
+            )
+        }
+        section("Global PIN Codes") {
+            globalPinCodes?.pinCodes?.each { pinCode ->
+                input(
+                    name: "GlobalPinCodes.pin.${pinCode.id}.name",
+                    title: "PIN Code Name",
+                    type: "text",
+                    required: true,
+                    width: 6
+                )
+                input(
+                    name: "GlobalPinCodes.pin.${pinCode.id}.value",
+                    title: "PIN Code Value",
+                    type: "password",
+                    required: true,
+                    width: 5
+                )
+                input(
+                    name: "deletePin:GlobalPinCodes.pin.${pinCode.id}",
+                    title: "X",
+                    type: "button",
+                    width: 1
+                )
+            }
+            input(
+                name: "addPin:GlobalPinCodes",
+                title: "Add PIN Code",
+                type: "button"
             )
         }
     }
@@ -1356,6 +1394,7 @@ private checkMfa(deviceType, commandType, command) {
         ]))
     }
     if (commandType in deviceType.secureCommands) {
+        def globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
         if (!command.challenge?.pin) {
             throw new Exception(JsonOutput.toJson([
                 errorCode: "challengeNeeded",
@@ -1363,7 +1402,8 @@ private checkMfa(deviceType, commandType, command) {
                     type: "pinNeeded"
                 ]
             ]))
-        } else if (!(command.challenge.pin in deviceType.pinCodes*.value)) {
+        } else if (!(command.challenge.pin in deviceType.pinCodes*.value)
+                   && !(command.challenge.pin in globalPinCodes.pinCodes*.value)) {
             throw new Exception(JsonOutput.toJson([
                 errorCode: "challengeNeeded",
                 challengeNeeded: [
