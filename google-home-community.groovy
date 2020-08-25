@@ -40,6 +40,7 @@
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
 //   * Apr 10 2020 - Add support for the Volume trait
 //   * Aug 05 2020 - Add suppoer for Camera trait
+//   * Aug 25 2020 - Add suppoer for Global PIN Codes
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
