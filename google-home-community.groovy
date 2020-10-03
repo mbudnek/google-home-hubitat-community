@@ -1812,7 +1812,7 @@ private executeCommand_volumeRelative(deviceInfo, command) {
         }
 
         device."${volumeChangeCommand}"()
-        for (int i = 1; i < volumeTrait.volumeStep; i++) {
+        for (int i = 1; i < Math.abs(volumeChange); i++) {
             pauseExecution(100)
             device."${volumeChangeCommand}"()
         }
