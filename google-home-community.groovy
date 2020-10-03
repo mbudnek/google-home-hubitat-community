@@ -39,8 +39,9 @@
 //   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
 //   * Apr 10 2020 - Add support for the Volume trait
-//   * Aug 05 2020 - Add suppoer for Camera trait
-//   * Aug 25 2020 - Add suppoer for Global PIN Codes
+//   * Aug 05 2020 - Add support for Camera trait
+//   * Aug 25 2020 - Add support for Global PIN Codes
+//   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
