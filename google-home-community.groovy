@@ -2300,7 +2300,6 @@ private attributesForTrait_Volume(deviceTrait) {
     return [
         volumeMaxLevel:         100,
         volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
-        volumeCanSetVolume:     deviceTrait.canSetVolume,
         levelStepSize:          deviceTrait.volumeStep
     ]
 }
