@@ -39,8 +39,9 @@
 //   * Apr 10 2020 - Add new device types: Carbon Monoxide Sensor, Charger, Remote Control, Set-Top Box,
 //                   Smoke Detector, Television, Water Purifier, and Water Softener
 //   * Apr 10 2020 - Add support for the Volume trait
-//   * Aug 05 2020 - Add suppoer for Camera trait
-//   * Aug 25 2020 - Add suppoer for Global PIN Codes
+//   * Aug 05 2020 - Add support for Camera trait
+//   * Aug 25 2020 - Add support for Global PIN Codes
+//   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1216,12 +1217,36 @@ private deviceTraitPreferences_Volume(deviceTrait) {
             defaultValue: "volume"
         )
         input(
-            name: "${deviceTrait.name}.setVolumeCommand",
-            title: "Set Rotation Command",
-            type: "text",
-            required: true,
-            defaultValue: "setVolume"
+            name: "${deviceTrait.name}.canSetVolume",
+            title: "Use `setVolume` command (otherwise will use Volume Up/Down instead)",
+            type: "bool",
+            defaultValue: true,
+            submitOnChange: true
         )
+        if (deviceTrait.canSetVolume) {
+            input(
+                name: "${deviceTrait.name}.setVolumeCommand",
+                title: "Set Rotation Command",
+                type: "text",
+                required: true,
+                defaultValue: "setVolume"
+            )
+        } else {
+            input(
+                name: "${deviceTrait.name}.volumeUpCommand",
+                title: "Set Increase Volume Command",
+                type: "text",
+                required: true,
+                defaultValue: "volumeUp"
+            )
+            input(
+                name: "${deviceTrait.name}.volumeDownCommand",
+                title: "Set Decrease Volume Command",
+                type: "text",
+                required: true,
+                defaultValue: "volumeDown"
+            )
+        }
         input(
             name: "${deviceTrait.name}.volumeStep",
             title: "Volume Level Step",
@@ -1774,10 +1799,27 @@ private executeCommand_volumeRelative(deviceInfo, command) {
     def volumeChange = command.params.relativeSteps
     def device = deviceInfo.device
 
-    def currentVolume = device.currentValue(volumeTrait.volumeAttribute)
-    // volumeChange will be negative when decreasing volume
-    def newVolume = currentVolume + volumeChange
-    device."${volumeTrait.setVolumeCommand}"(newVolume)
+    def newVolume
+
+    if (volumeTrait.canSetVolume) {
+        def currentVolume = device.currentValue(volumeTrait.volumeAttribute)
+        // volumeChange will be negative when decreasing volume
+        newVolume = currentVolume + volumeChange
+        device."${volumeTrait.setVolumeCommand}"(newVolume)
+    } else {
+        def volumeChangeCommand = volumeTrait.volumeUpCommand
+        if (volumeChange < 0) {
+            volumeChangeCommand = volumeTrait.volumeDownCommand
+        }
+
+        device."${volumeChangeCommand}"()
+        for (int i = 1; i < Math.abs(volumeChange); i++) {
+            pauseExecution(100)
+            device."${volumeChangeCommand}"()
+        }
+
+        newVolume = device.currentValue(volumeTrait.volumeAttribute)
+    }
 
     return [
         (volumeTrait.volumeAttribute): newVolume
@@ -2602,11 +2644,20 @@ private traitFromSettings_Volume(traitName) {
     if (canMuteUnmute == null) {
         canMuteUnmute = true
     }
+
+    def canSetVolume = settings."${traitName}.canSetVolume"
+    if (canSetVolume == null) {
+        canSetVolume = true
+    }
+
     def volumeTrait = [
-        volumeAttribute:  settings."${traitName}.volumeAttribute",
-        setVolumeCommand: settings."${traitName}.setVolumeCommand",
-        volumeStep:       settings."${traitName}.volumeStep",
-        canMuteUnmute:    canMuteUnmute,
+        volumeAttribute:   settings."${traitName}.volumeAttribute",
+        setVolumeCommand:  settings."${traitName}.setVolumeCommand",
+        volumeUpCommand:   settings."${traitName}.volumeUpCommand",
+        volumeDownCommand: settings."${traitName}.volumeDownCommand",
+        volumeStep:        settings."${traitName}.volumeStep",
+        canMuteUnmute:     canMuteUnmute,
+        canSetVolume:      canSetVolume,
         commands: ["Set Volume"],
     ]
 
@@ -2800,6 +2851,7 @@ private deleteDeviceTrait_Volume(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.setVolumeCommand")
     app.removeSetting("${deviceTrait.name}.volumeStep")
     app.removeSetting("${deviceTrait.name}.canMuteUnmute")
+    app.removeSetting("${deviceTrait.name}.canSetVolume")
     app.removeSetting("${deviceTrait.name}.muteAttribute")
     app.removeSetting("${deviceTrait.name}.mutedValue")
     app.removeSetting("${deviceTrait.name}.unmutedValue")
