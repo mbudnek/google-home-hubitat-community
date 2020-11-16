@@ -2000,11 +2000,11 @@ private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
     if (deviceTrait.queryOnly) {
         state.temperatureSetpointCelsius = currentTemperature
     } else {
-        def setpoint = device.currentValue(deviceTrait.setpointAttribute)
+        def setpoint = device.currentValue(deviceTrait.currentSetpointAttribute)
         if (deviceTrait.temperatureUnit == "F") {
             setpoint = fahrenheitToCelsiusRounded(setpoint)
         }
-        state.temperatureSetpiontCelsius = setpoint
+        state.temperatureSetpointCelsius = setpoint
     }
 
     return state
