@@ -42,6 +42,7 @@
 //   * Aug 05 2020 - Add support for Camera trait
 //   * Aug 25 2020 - Add support for Global PIN Codes
 //   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
+//   * Jan 06 2021 - Add support for setting thermostat temperature when mode is off
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -988,6 +989,7 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
 
 private thermostatSetpointAttributePreferenceForModes(modes) {
     def setpointAttributeDefaults = [
+        "offSetpointAttribute": "heatingSetpoint",
         "heatingSetpointAttribute": "heatingSetpoint",
         "coolingSetpointAttribute": "coolingSetpoint"
     ]
@@ -1007,6 +1009,7 @@ private thermostatSetpointAttributePreferenceForModes(modes) {
 
 private thermostatSetpointCommandPreferenceForModes(modes) {
     def setpointCommandDefaults = [
+        "setOffSetpointCommand": "setHeatingSetpoint",
         "setHeatingSetpointCommand": "setHeatingSetpoint",
         "setCoolingSetpointCommand": "setCoolingSetpoint"
     ]
@@ -3240,7 +3243,6 @@ private static final GOOGLE_THERMOSTAT_MODES = [
 
 @Field
 private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
-    "off": null,
     "heat": [
         name:  "setHeatingSetpointCommand",
         title: "Set Heating Setpoint Command"
@@ -3258,7 +3260,6 @@ private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
 
 @Field
 private static final THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
-    "off": null,
     "heat": [
         name:  "heatingSetpointAttribute",
         title: "Heating Setpoint Attribute"
