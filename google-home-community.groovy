@@ -43,6 +43,7 @@
 //   * Aug 25 2020 - Add support for Global PIN Codes
 //   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
 //   * Jan 18 2021 - Fix SetTemperature command of the TemperatureControl trait
+//   * Jan 19 2021 - Added Dock and StartStop Traits
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1897,10 +1898,9 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
     }else{
         checkMfa(deviceInfo.deviceType, "UnPause", command)
         deviceInfo.device."${startStopTrait.unPauseCommand}"()
-        checkValue = startStopTrait.unPauseValue 
-        
-         } 
-               return [
+        checkValue = startStopTrait.unPauseValue
+    }
+    return [
         (startStopTrait.pauseUnPauseAttribute): checkValue
     ]              
 }
@@ -2085,7 +2085,7 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
 private deviceStateForTrait_Dock(deviceTrait, device) {
     def isDocked = device.currentValue(deviceTrait.dockAttribute) == deviceTrait.dockValue
     return [
-       isDocked:isDocked        
+        isDocked:isDocked
     ]
 }
 
@@ -2163,7 +2163,7 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_StartStop(deviceTrait, device) {
-     def deviceState = [
+    def deviceState = [
         isRunning: device.currentValue(deviceTrait.startStopAttribute) == deviceTrait.startValue
     ]
     if (deviceTrait.canPause) {
@@ -2557,10 +2557,10 @@ private traitFromSettings_ColorSetting(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Dock(traitName) {
     return [
-        dockAttribute:settings."${traitName}.dockAttribute",
-        dockValue:             settings."${traitName}.dockValue",
-        dockCommand:           settings."${traitName}.dockCommand",
-        commands:              ["Dock"]
+        dockAttribute: settings."${traitName}.dockAttribute",
+        dockValue:     settings."${traitName}.dockValue",
+        dockCommand:   settings."${traitName}.dockCommand",
+        commands:      ["Dock"]
     ]
 }
 
@@ -2710,17 +2710,17 @@ private traitFromSettings_StartStop(traitName){
          stopCommand:   settings."${traitName}.stopCommand",
          canPause:      canPause,
          commands:                ["Start","Stop"],
-        ]    
-      if (canPause){
-          startStopTrait <<[
-          pauseUnPauseAttribute:  settings."${traitName}.pauseUnPauseAttribute",
-          pauseValue:  settings."${traitName}.pauseValue",
-          unPauseValue:  settings."${traitName}.unPauseValue",
-          pauseCommand:   settings."${traitName}.pauseCommand",
-          unPauseCommand:   settings."${traitName}.unPauseCommand"
-      ]
+        ]
+    if (canPause){
+        startStopTrait <<[
+            pauseUnPauseAttribute:  settings."${traitName}.pauseUnPauseAttribute",
+            pauseValue:  settings."${traitName}.pauseValue",
+            unPauseValue:  settings."${traitName}.unPauseValue",
+            pauseCommand:   settings."${traitName}.pauseCommand",
+            unPauseCommand:   settings."${traitName}.unPauseCommand"
+            ]
         startStopTrait.commands += ["Pause","UnPause"]
-      }    
+    }     
     return  startStopTrait
   
 }   
