@@ -558,7 +558,6 @@ private deviceTraitPreferences_Dock(deviceTrait) {
     }
 }
 
-
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_FanSpeed(deviceTrait) {
     hubitatFanSpeeds = [
@@ -1001,12 +1000,10 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
             required: true,
             defaultValue: "start"
             
-          )
- 
+          ) 
         }
     }
 }
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_TemperatureControl(deviceTrait) {
@@ -1671,13 +1668,10 @@ private executeCommand_Dock(deviceInfo, command) {
         checkMfa(deviceInfo.deviceType,"Dock",command)
         checkValue = dockTrait.dockValue
         deviceInfo.device."${dockTrait.dockCommand}"()
-    
-
     return [
         (dockTrait.dockAttribute): checkValue
     ]
 }
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_Reverse(deviceInfo, command) {
@@ -1896,7 +1890,7 @@ private executeCommand_StartStop(deviceInfo, command) {
 private executeCommand_PauseUnpause(deviceInfo, command) {
     def startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
-        if (command.params.pause){
+    if (command.params.pause){
         checkMfa(deviceInfo.deviceType, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
         checkValue = startStopTrait.pauseValue     
@@ -1908,10 +1902,8 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
          } 
                return [
         (startStopTrait.pauseUnPauseAttribute): checkValue
-    ]  
-            
+    ]              
 }
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
@@ -2093,11 +2085,9 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
 private deviceStateForTrait_Dock(deviceTrait, device) {
     def isDocked = device.currentValue(deviceTrait.dockAttribute) == deviceTrait.dockValue
     return [
-       isDocked:isDocked
-        
+       isDocked:isDocked        
     ]
 }
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
@@ -2179,10 +2169,8 @@ private deviceStateForTrait_StartStop(deviceTrait, device) {
     if (deviceTrait.canPause) {
         deviceState.isPaused = device.currentValue(deviceTrait.pauseUnPauseAttribute) == deviceTrait.pauseValue
     }
-    return deviceState
-    
+    return deviceState    
 }   
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
@@ -2343,7 +2331,6 @@ private attributesForTrait_Dock(deviceTrait) {
     return [:]
 }
 
-
 @SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_FanSpeed(deviceTrait) {
     def fanSpeedAttrs = [
@@ -2418,11 +2405,9 @@ private attributesForTrait_Scene(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_StartStop(deviceTrait) {
     return [
-        pausable: deviceTrait.canPause     
-      
+        pausable: deviceTrait.canPause           
     ]   
 }    
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_TemperatureControl(deviceTrait) {
@@ -2579,7 +2564,6 @@ private traitFromSettings_Dock(traitName) {
     ]
 }
 
-
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_FanSpeed(traitName) {
     def fanSpeedMapping = [
@@ -2726,8 +2710,7 @@ private traitFromSettings_StartStop(traitName){
          stopCommand:   settings."${traitName}.stopCommand",
          canPause:      canPause,
          commands:                ["Start","Stop"],
-        ]
-    
+        ]    
       if (canPause){
           startStopTrait <<[
           pauseUnPauseAttribute:  settings."${traitName}.pauseUnPauseAttribute",
@@ -2737,13 +2720,10 @@ private traitFromSettings_StartStop(traitName){
           unPauseCommand:   settings."${traitName}.unPauseCommand"
       ]
         startStopTrait.commands += ["Pause","UnPause"]
-
-      }
-    
+      }    
     return  startStopTrait
   
 }   
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_TemperatureControl(traitName) {
@@ -2753,7 +2733,6 @@ private traitFromSettings_TemperatureControl(traitName) {
         queryOnly:                   settings."${traitName}.queryOnly",
         commands:                    []
     ]
-
     if (!tempControlTrait.queryOnly) {
         tempControlTrait << [
             currentSetpointAttribute: settings."${traitName}.setpointAttribute",
@@ -2999,7 +2978,6 @@ private deleteDeviceTrait_Dock(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.dockCommand")
 }
 
-
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_FanSpeed(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.currentSpeedAttribute")
@@ -3083,7 +3061,6 @@ private deleteDeviceTrait_StartStop(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.pauseCommand")
     app.removeSetting("${deviceTrait.name}.unPauseCommand")
 } 
-
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_TemperatureControl(deviceTrait) {
