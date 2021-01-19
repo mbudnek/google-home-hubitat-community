@@ -2693,7 +2693,7 @@ private traitFromSettings_Scene(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_StartStop(traitName){
+private traitFromSettings_StartStop(traitName) {
     def canPause = settings."${traitName}.canPause"
     if (canPause == null) {
         canPause = true
@@ -2718,7 +2718,6 @@ private traitFromSettings_StartStop(traitName){
         startStopTrait.commands += ["Pause", "UnPause"]
     }
     return startStopTrait
-
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
