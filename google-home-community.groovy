@@ -934,7 +934,7 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
             defaultValue: "running",
             required: true
         )
-         input(
+        input(
             name: "${deviceTrait.name}.stopValue",
             title: "Stop Value",
             type: "text",
@@ -956,48 +956,48 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
             required: true
         )
         input(
-	    name:"${deviceTrait.name}.canPause",
-	    type: "bool", 
-	    title: "Is this device pausable? disable this option if not pausable",  
-	    defaultValue: true,
-	    submitOnChange: true
-	    )
-         if (deviceTrait.canPause) {
-        input(
-            name: "${deviceTrait.name}.pauseUnPauseAttribute",
-            title: "Pause/UnPause Attribute",
-            type: "text",
-            required: true,
-            defaultValue: "status"
-        ) 
-	    input(
-            name: "${deviceTrait.name}.pauseValue",
-            title: "Pause Value",
-            type: "text",
-            required: true,
-            defaultValue: "paused",
-        )	
-	    input(
-            name: "${deviceTrait.name}.unPauseValue",
-            title: "UnPause Value",
-            type: "text",
-            required: true,
-            defaultValue: "running"            
-        )	
-	    input(
-            name: "${deviceTrait.name}.pauseCommand",
-            title: "Pause Command",
-            type: "text",
-            required: true,
-            defaultValue: "pause"            
+            name:"${deviceTrait.name}.canPause",
+            type: "bool",
+            title: "Is this device pausable? disable this option if not pausable",
+            defaultValue: true,
+            submitOnChange: true
         )
-	    input(
-            name: "${deviceTrait.name}.unPauseCommand",
-            title: "UnPause Command",
-            type: "text",
-            required: true,
-            defaultValue: "start"            
-          ) 
+        if (deviceTrait.canPause) {
+            input(
+                name: "${deviceTrait.name}.pauseUnPauseAttribute",
+                title: "Pause/UnPause Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "status"
+            )
+            input(
+                name: "${deviceTrait.name}.pauseValue",
+                title: "Pause Value",
+                type: "text",
+                required: true,
+                defaultValue: "paused",
+            )
+            input(
+                name: "${deviceTrait.name}.unPauseValue",
+                title: "UnPause Value",
+                type: "text",
+                required: true,
+                defaultValue: "running"
+            )
+            input(
+                name: "${deviceTrait.name}.pauseCommand",
+                title: "Pause Command",
+                type: "text",
+                required: true,
+                defaultValue: "pause"
+            )
+            input(
+                name: "${deviceTrait.name}.unPauseCommand",
+                title: "UnPause Command",
+                type: "text",
+                required: true,
+                defaultValue: "start"
+            )
         }
     }
 }
@@ -1871,16 +1871,16 @@ private executeCommand_StartStop(deviceInfo, command) {
     def checkValue
     if (command.params.start){
         checkMfa(deviceInfo.deviceType, "Start", command)
-        checkValue = startStopTrait.startValue 
+        checkValue = startStopTrait.startValue
         deviceInfo.device."${startStopTrait.startCommand}"()
     }else{
         checkMfa(deviceInfo.deviceType, "Stop", command)
-        checkValue ={it=startStopTrait.startValue} 
-        deviceInfo.device."${startStopTrait.stopCommand}"()  
+        checkValue ={it=startStopTrait.startValue}
+        deviceInfo.device."${startStopTrait.stopCommand}"()
     }
     return [
         (startStopTrait.startStopAttribute): checkValue
-    ]          
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1890,7 +1890,7 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
     if (command.params.pause){
         checkMfa(deviceInfo.deviceType, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
-        checkValue = startStopTrait.pauseValue     
+        checkValue = startStopTrait.pauseValue
     }else{
         checkMfa(deviceInfo.deviceType, "UnPause", command)
         deviceInfo.device."${startStopTrait.unPauseCommand}"()
@@ -1898,7 +1898,7 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
     }
     return [
         (startStopTrait.pauseUnPauseAttribute): checkValue
-    ]              
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2165,8 +2165,8 @@ private deviceStateForTrait_StartStop(deviceTrait, device) {
     if (deviceTrait.canPause) {
         deviceState.isPaused = device.currentValue(deviceTrait.pauseUnPauseAttribute) == deviceTrait.pauseValue
     }
-    return deviceState    
-}   
+    return deviceState
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
@@ -2401,9 +2401,9 @@ private attributesForTrait_Scene(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_StartStop(deviceTrait) {
     return [
-        pausable: deviceTrait.canPause           
-    ]   
-}    
+        pausable: deviceTrait.canPause
+    ]
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_TemperatureControl(deviceTrait) {
@@ -2716,10 +2716,10 @@ private traitFromSettings_StartStop(traitName){
             unPauseCommand:        settings."${traitName}.unPauseCommand"
             ]
         startStopTrait.commands += ["Pause","UnPause"]
-    }     
+    }
     return  startStopTrait
-  
-}   
+
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_TemperatureControl(traitName) {
@@ -3056,7 +3056,7 @@ private deleteDeviceTrait_StartStop(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.stopCommand")
     app.removeSetting("${deviceTrait.name}.pauseCommand")
     app.removeSetting("${deviceTrait.name}.unPauseCommand")
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_TemperatureControl(deviceTrait) {
