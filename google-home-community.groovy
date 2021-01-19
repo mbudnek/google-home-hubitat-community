@@ -2703,21 +2703,21 @@ private traitFromSettings_StartStop(traitName){
         canPause = true
     }
     def  startStopTrait = [
-         startStopAttribute:  settings."${traitName}.startStopAttribute",
-         startValue:  settings."${traitName}.startValue",
-         stopValue:  settings."${traitName}.stopValue",
-         startCommand:   settings."${traitName}.startCommand",
-         stopCommand:   settings."${traitName}.stopCommand",
-         canPause:      canPause,
-         commands:                ["Start","Stop"],
+         startStopAttribute: settings."${traitName}.startStopAttribute",
+         startValue:         settings."${traitName}.startValue",
+         stopValue:          settings."${traitName}.stopValue",
+         startCommand:       settings."${traitName}.startCommand",
+         stopCommand:        settings."${traitName}.stopCommand",
+         canPause:           canPause,
+         commands:           ["Start","Stop"],
         ]
     if (canPause){
         startStopTrait <<[
-            pauseUnPauseAttribute:  settings."${traitName}.pauseUnPauseAttribute",
-            pauseValue:  settings."${traitName}.pauseValue",
-            unPauseValue:  settings."${traitName}.unPauseValue",
-            pauseCommand:   settings."${traitName}.pauseCommand",
-            unPauseCommand:   settings."${traitName}.unPauseCommand"
+            pauseUnPauseAttribute: settings."${traitName}.pauseUnPauseAttribute",
+            pauseValue:            settings."${traitName}.pauseValue",
+            unPauseValue:          settings."${traitName}.unPauseValue",
+            pauseCommand:          settings."${traitName}.pauseCommand",
+            unPauseCommand:        settings."${traitName}.unPauseCommand"
             ]
         startStopTrait.commands += ["Pause","UnPause"]
     }     
