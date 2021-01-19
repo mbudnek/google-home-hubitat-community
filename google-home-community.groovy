@@ -969,8 +969,7 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
             type: "text",
             required: true,
             defaultValue: "status"
-            
-            )
+        ) 
 	    input(
             name: "${deviceTrait.name}.pauseValue",
             title: "Pause Value",
@@ -983,24 +982,21 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
             title: "UnPause Value",
             type: "text",
             required: true,
-            defaultValue: "running"
-            
+            defaultValue: "running"            
         )	
 	    input(
             name: "${deviceTrait.name}.pauseCommand",
             title: "Pause Command",
             type: "text",
             required: true,
-            defaultValue: "pause"
-            
-         )
+            defaultValue: "pause"            
+        )
 	    input(
             name: "${deviceTrait.name}.unPauseCommand",
             title: "UnPause Command",
             type: "text",
             required: true,
-            defaultValue: "start"
-            
+            defaultValue: "start"            
           ) 
         }
     }
