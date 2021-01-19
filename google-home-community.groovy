@@ -1662,9 +1662,9 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
 private executeCommand_Dock(deviceInfo, command) {
     def dockTrait = deviceInfo.deviceType.traits.Dock
     def checkValue
-        checkMfa(deviceInfo.deviceType,"Dock",command)
-        checkValue = dockTrait.dockValue
-        deviceInfo.device."${dockTrait.dockCommand}"()
+    checkMfa(deviceInfo.deviceType, "Dock", command)
+    checkValue = dockTrait.dockValue
+    deviceInfo.device."${dockTrait.dockCommand}"()
     return [
         (dockTrait.dockAttribute): checkValue
     ]
@@ -1869,13 +1869,13 @@ private executeCommand_setVolume(deviceInfo, command) {
 private executeCommand_StartStop(deviceInfo, command) {
     def startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
-    if (command.params.start){
+    if (command.params.start) {
         checkMfa(deviceInfo.deviceType, "Start", command)
         checkValue = startStopTrait.startValue
         deviceInfo.device."${startStopTrait.startCommand}"()
-    }else{
+    } else {
         checkMfa(deviceInfo.deviceType, "Stop", command)
-        checkValue ={it=startStopTrait.startValue}
+        checkValue = { it = startStopTrait.startValue }
         deviceInfo.device."${startStopTrait.stopCommand}"()
     }
     return [
@@ -1887,11 +1887,11 @@ private executeCommand_StartStop(deviceInfo, command) {
 private executeCommand_PauseUnpause(deviceInfo, command) {
     def startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
-    if (command.params.pause){
+    if (command.params.pause) {
         checkMfa(deviceInfo.deviceType, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
         checkValue = startStopTrait.pauseValue
-    }else{
+    } else {
         checkMfa(deviceInfo.deviceType, "UnPause", command)
         deviceInfo.device."${startStopTrait.unPauseCommand}"()
         checkValue = startStopTrait.unPauseValue
@@ -2705,19 +2705,19 @@ private traitFromSettings_StartStop(traitName){
          startCommand:       settings."${traitName}.startCommand",
          stopCommand:        settings."${traitName}.stopCommand",
          canPause:           canPause,
-         commands:           ["Start","Stop"],
-        ]
-    if (canPause){
-        startStopTrait <<[
+         commands:           ["Start", "Stop"]
+    ]
+    if (canPause) {
+        startStopTrait << [
             pauseUnPauseAttribute: settings."${traitName}.pauseUnPauseAttribute",
             pauseValue:            settings."${traitName}.pauseValue",
             unPauseValue:          settings."${traitName}.unPauseValue",
             pauseCommand:          settings."${traitName}.pauseCommand",
             unPauseCommand:        settings."${traitName}.unPauseCommand"
-            ]
-        startStopTrait.commands += ["Pause","UnPause"]
+        ]
+        startStopTrait.commands += ["Pause", "UnPause"]
     }
-    return  startStopTrait
+    return startStopTrait
 
 }
 
@@ -2729,6 +2729,7 @@ private traitFromSettings_TemperatureControl(traitName) {
         queryOnly:                   settings."${traitName}.queryOnly",
         commands:                    []
     ]
+
     if (!tempControlTrait.queryOnly) {
         tempControlTrait << [
             currentSetpointAttribute: settings."${traitName}.setpointAttribute",
