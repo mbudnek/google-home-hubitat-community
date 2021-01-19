@@ -42,6 +42,7 @@
 //   * Aug 05 2020 - Add support for Camera trait
 //   * Aug 25 2020 - Add support for Global PIN Codes
 //   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
+//   * Jan 18 2021 - Fix SetTemperature command of the TemperatureControl trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1690,7 +1691,7 @@ private executeCommand_SetHumidity(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetTemperature(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceTrait, "Set Temperature", command)
+    checkMfa(deviceInfo.deviceType, "Set Temperature", command)
     def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
     def setpoint = command.params.temperature
     if (temperatureControlTrait.temperatureUnit == "F") {
