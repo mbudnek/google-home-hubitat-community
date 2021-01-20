@@ -978,25 +978,11 @@ private deviceTraitPreferences_StartStop(deviceTrait) {
                 defaultValue: "paused",
             )
             input(
-                name: "${deviceTrait.name}.unPauseValue",
-                title: "UnPause Value",
-                type: "text",
-                required: true,
-                defaultValue: "running"
-            )
-            input(
                 name: "${deviceTrait.name}.pauseCommand",
                 title: "Pause Command",
                 type: "text",
                 required: true,
                 defaultValue: "pause"
-            )
-            input(
-                name: "${deviceTrait.name}.unPauseCommand",
-                title: "UnPause Command",
-                type: "text",
-                required: true,
-                defaultValue: "start"
             )
         }
     }
@@ -1875,7 +1861,7 @@ private executeCommand_StartStop(deviceInfo, command) {
         deviceInfo.device."${startStopTrait.startCommand}"()
     } else {
         checkMfa(deviceInfo.deviceType, "Stop", command)
-        checkValue = { it = startStopTrait.startValue }
+        checkValue = { it != startStopTrait.startValue }
         deviceInfo.device."${startStopTrait.stopCommand}"()
     }
     return [
@@ -1891,10 +1877,6 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
         checkMfa(deviceInfo.deviceType, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
         checkValue = startStopTrait.pauseValue
-    } else {
-        checkMfa(deviceInfo.deviceType, "UnPause", command)
-        deviceInfo.device."${startStopTrait.unPauseCommand}"()
-        checkValue = startStopTrait.unPauseValue
     }
     return [
         (startStopTrait.pauseUnPauseAttribute): checkValue
@@ -2711,11 +2693,9 @@ private traitFromSettings_StartStop(traitName) {
         startStopTrait << [
             pauseUnPauseAttribute: settings."${traitName}.pauseUnPauseAttribute",
             pauseValue:            settings."${traitName}.pauseValue",
-            unPauseValue:          settings."${traitName}.unPauseValue",
-            pauseCommand:          settings."${traitName}.pauseCommand",
-            unPauseCommand:        settings."${traitName}.unPauseCommand"
+            pauseCommand:          settings."${traitName}.pauseCommand"
         ]
-        startStopTrait.commands += ["Pause", "UnPause"]
+        startStopTrait.commands += ["Pause"]
     }
     return startStopTrait
 }
@@ -3051,11 +3031,9 @@ private deleteDeviceTrait_StartStop(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.startValue")
     app.removeSetting("${deviceTrait.name}.stopValue")
     app.removeSetting("${deviceTrait.name}.pauseValue")
-    app.removeSetting("${deviceTrait.name}.unPauseValue")
     app.removeSetting("${deviceTrait.name}.startCommand")
     app.removeSetting("${deviceTrait.name}.stopCommand")
     app.removeSetting("${deviceTrait.name}.pauseCommand")
-    app.removeSetting("${deviceTrait.name}.unPauseCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
