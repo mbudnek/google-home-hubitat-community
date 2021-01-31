@@ -2834,6 +2834,9 @@ private traitFromSettings_Toggles(traitName) {
             traitName: traitName,
             labels: settings."${toggle}.labels"?.split(",")
         ]
+        if (toggleAttrs.labels == null) {
+            toggleAttrs.labels = ["Unknown"]
+        }
         toggleAttrs << traitFromSettings_OnOff(toggle)
         toggleAttrs
     }
