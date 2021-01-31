@@ -44,6 +44,7 @@
 //   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
 //   * Jan 18 2021 - Fix SetTemperature command of the TemperatureControl trait
 //   * Jan 19 2021 - Added Dock and StartStop Traits
+//   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2834,6 +2835,9 @@ private traitFromSettings_Toggles(traitName) {
             traitName: traitName,
             labels: settings."${toggle}.labels"?.split(",")
         ]
+        if (toggleAttrs.labels == null) {
+            toggleAttrs.labels = ["Unknown"]
+        }
         toggleAttrs << traitFromSettings_OnOff(toggle)
         toggleAttrs
     }
