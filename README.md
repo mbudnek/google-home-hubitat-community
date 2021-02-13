@@ -151,6 +151,14 @@ If both "Full-Spectrum Color Control" and "Color Temperature Control" are set, t
 - Full-Spectrum Mode Value: The value reported by the "Color Mode Attribute" when the device has been set to a full-spectrum color.  Default is "RGB".
 - Color Temperature Mode Value: The value reported by the "Color Mode Attribute" when the device has been set to a color temperature.  Default is "CT".
 
+### Dock
+
+The Dock trait is intended to be used for devices such as robot vacuum cleaners that can be commanded to return to their charging dock.  It can be controlled by saying things like "Hey Google, tell {device} to return to its dock" and queried by saying things like "Hey Google, is {device} docked?".  The Dock trait has the following configuration paramters:
+
+- Dock Attribute: The device attribute used to determine if the device is currently docked or not.  Maps to `status` by default.
+- Docked Value: The value of the "Docked Attribute" that indicates that the device is currently docked.  Defaults to `docked`.
+- Dock Command: A device command used to tell the device to return to its dock.  Maps to `returnToDock` by default.
+
 ### Fan Speed
 
 The Fan Speed trait is primarily used for fan controllers with multiple speed settings.  It can be controlled by saying things like "Hey Google, set {device} to {speed}" and queried by saying things like "Hey Google, what's the {device} speed?".  It has the following configuration parameters:
@@ -231,6 +239,20 @@ This is used for controlling scenes, and should generally only be used with the 
 - Activate Command: A device command used to activate this scene.  Maps to `on` by default.
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
 - Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
+
+### Start/Stop
+
+This trait is used for devices that support starting, stopping, and optionally pausing operation.  It has the following configuration paramters:
+
+- Start/Stop Attribute: The device attribute used to determine if the is currently running.  Maps to `status` by default.
+- Start Value: The value of the "Start/Stop Attribute" that indicates that the device is running.  Defaults to "running".
+- Stop Value: The value of the "Start/Stop Attribute" that indicates that the device is currently stopped.
+- Start Command: A device command to start the device running.  Maps to `start` by default.
+- Stop Command: A device command to stop the device.
+- Pausable: Turn this on if the device is capable of pausing and resuming operation.  This is distinct from stopping and starting in that a device that has been paused will resume its operation from where it was when it was paused, while a device that is stopped will begin anew from the beginning of its operation.  If this parameter is enabled, the following parameters become available:
+    - Pause/UnPause Attribute: The device attribute used to determine if the device is currently paused.  Maps to `status` by default.
+    - Pause Value: The value of the "Pause/UnPause Attribute" that indicates that the device is currently paused.  Defaults to "paused".
+    - Pause Command: A device command used to pause the device.  Maps to `pause` by default.
 
 ### Temperature Control
 
