@@ -21,6 +21,7 @@ To install the Hubitat App:
 6. Click "Update"
 7. Click "OAuth" again
 8. Make a note of the values in the "Client ID" and "Client Secret" fields
+    - Note: Using keyboard shortcuts to copy from the Client ID and Client Secret fields doesn't work in some browsers (notably Google Chrome).  You may need to either right-click and copy from the context menu or type the values out manually.
 9. Navigate to "Apps" in Hubitat
 10. Click "Add User App" and select "Google Home Community"
 11. Make a note of the app's ID.  This can be found in your web browser's URL bar.
@@ -119,13 +120,13 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 
 The CameraStream trait is used to map compatible video streams for viewing on ChromeCast enabled devices (Nest Hubs, ChromeCast, etc).
 
-It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.  
+It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.
 
 - This can be accomplished using one or both of the supplied drivers:
     -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URL in the `Camera stream HTTP URL` input field.
-    -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`. 
-	
-NOTE: These drivers offer no other functionality other than a placeholder for the stream URL.  The buttons are non-functional.	
+    -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`.
+
+NOTE: These drivers offer no other functionality other than a placeholder for the stream URL.  The buttons are non-functional.
 
 ### Color Setting
 
@@ -290,10 +291,10 @@ This trait is used for devices that can have their volume controlled such as TVs
 ## Global PIN Codes
 
 These PIN Codes apply to **all** device types that have **Actions requireng PIN** set.
-They function in the same manner as the per-device-type PIN Codes. 
+They function in the same manner as the per-device-type PIN Codes.
 This allows a single user/pin combination to apply to all security actions.
-- IE: If you have both a Door Lock Device Type and a Garage Door Device Type that have the unlock and the open actions secured respectivly, these pins will apply to both device types. This removes the need to maintain the same user and pin combination for the two device types seperately.  
+- IE: If you have both a Door Lock Device Type and a Garage Door Device Type that have the unlock and the open actions secured respectivly, these pins will apply to both device types. This removes the need to maintain the same user and pin combination for the two device types seperately.
 
-Note that using the Global PIN Codes does not preclude the use of the per-device-type codes; that is, you can use both. 
+Note that using the Global PIN Codes does not preclude the use of the per-device-type codes; that is, you can use both.
 If you have users that should have access to control everything, then use the Global PIN Codes; for the other users, you can set them up on the specific device type
 - IE: Mr. Smith should have access to the entire system - setup a Global PIN; Johnny Jr. should have access to only the Door Locks - setup a user/pin on the Door Lock Device Type
