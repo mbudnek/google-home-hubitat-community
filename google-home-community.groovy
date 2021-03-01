@@ -45,6 +45,7 @@
 //   * Jan 18 2021 - Fix SetTemperature command of the TemperatureControl trait
 //   * Jan 19 2021 - Added Dock and StartStop Traits
 //   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
+//   * Feb 28 2021 - Add new device types supported by Google
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -3358,8 +3359,10 @@ private static final HUBITAT_DEVICE_TYPES = [
 @Field
 private static final GOOGLE_DEVICE_TYPES = [
     AC_UNIT:                "Air Conditioning Unit",
+    AIRCOOLER:              "Air Cooler",
     AIRFRESHENER:           "Air Freshener",
     AIRPURIFIER:            "Air Purifier",
+    AUDIO_VIDEO_RECEIVER:   "Audio/Video Receiver",
     AWNING:                 "Awning",
     BATHTUB:                "Bathtub",
     BED:                    "Bed",
@@ -3382,6 +3385,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     FAN:                    "Fan",
     FAUCET:                 "Faucet",
     FIREPLACE:              "Fireplace",
+    FREEZER:                "Freezer",
     FRYER:                  "Fryer",
     GARAGE:                 "Garage Door",
     GATE:                   "Gate",
@@ -3396,6 +3400,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     MOP:                    "Mop",
     MOWER:                  "Mower",
     MULTICOOKER:            "Multicooker",
+    NETWORK:                "Network",
     OUTLET:                 "Outlet",
     OVEN:                   "Oven",
     PERGOLA:                "Pergola",
@@ -3404,6 +3409,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     RADIATOR:               "Radiator",
     REFRIGERATOR:           "Refrigerator",
     REMOTECONTROL:          "Remote Control",
+    ROUTER:                 "Router",
     SCENE:                  "Scene",
     SECURITYSYSTEM:         "Security System",
     SENSOR:                 "Sensor",
@@ -3412,8 +3418,12 @@ private static final GOOGLE_DEVICE_TYPES = [
     SHUTTER:                "Shutter",
     SMOKE_DETECTOR:         "Smoke Detector",
     SOUSVIDE:               "Sous Vide",
+    SPEAKER:                "Speaker",
     SPRINKLER:              "Sprinkler",
     STANDMIXER:             "Stand Mixer",
+    STREAMING_BOX:          "Streaming Box",
+    STREAMING_SOUNDBAR:     "Streaming Soundbar",
+    STREAMING_STICK:        "Streaming Stick",
     SWITCH:                 "Switch",
     TV:                     "Television",
     THERMOSTAT:             "Thermostat",
