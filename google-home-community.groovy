@@ -42,7 +42,11 @@
 //   * Aug 05 2020 - Add support for Camera trait
 //   * Aug 25 2020 - Add support for Global PIN Codes
 //   * Oct 03 2020 - Add support for devices not allowing volumeSet command when changing volume
-//   * Jan 06 2021 - Add support for setting thermostat temperature when mode is off
+//   * Jan 18 2021 - Fix SetTemperature command of the TemperatureControl trait
+//   * Jan 19 2021 - Added Dock and StartStop Traits
+//   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
+//   * Feb 28 2021 - Add new device types supported by Google
+//   * Mar 31 2021 - Add support for setting thermostat temperature when mode is off
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -532,6 +536,33 @@ private deviceTraitPreferences_ColorSetting(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_Dock(deviceTrait) {
+    section("Dock Settings") {
+        input(
+            name: "${deviceTrait.name}.dockAttribute",
+            title: "Dock Attribute",
+            type: "text",
+            defaultValue: "status",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.dockValue",
+            title: "Docked Value",
+            type: "text",
+            defaultValue: "docked",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.dockCommand",
+            title: "Dock Command",
+            type: "text",
+            defaultValue: "returnToDock",
+            required: true
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_FanSpeed(deviceTrait) {
     hubitatFanSpeeds = [
         "low":         "Low",
@@ -884,6 +915,77 @@ def deviceTraitPreferences_Scene(deviceTrait) {
                 type: "text",
                 defaultValue: "off",
                 required: true
+            )
+        }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_StartStop(deviceTrait) {
+    section("Start/Stop Settings") {
+        input(
+            name: "${deviceTrait.name}.startStopAttribute",
+            title: "Start/Stop Attribute",
+            type: "text",
+            defaultValue: "status",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.startValue",
+            title: "Start Value",
+            type: "text",
+            defaultValue: "running",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.stopValue",
+            title: "Stop Value",
+            type: "text",
+            defaultValue: "returning to dock",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.startCommand",
+            title: "Start Command",
+            type: "text",
+            defaultValue: "start",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.stopCommand",
+            title: "Stop Command",
+            type: "text",
+            defaultValue: "returnToDock",
+            required: true
+        )
+        input(
+            name:"${deviceTrait.name}.canPause",
+            type: "bool",
+            title: "Is this device pausable? disable this option if not pausable",
+            defaultValue: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.canPause) {
+            input(
+                name: "${deviceTrait.name}.pauseUnPauseAttribute",
+                title: "Pause/UnPause Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "status"
+            )
+            input(
+                name: "${deviceTrait.name}.pauseValue",
+                title: "Pause Value",
+                type: "text",
+                required: true,
+                defaultValue: "paused",
+            )
+            input(
+                name: "${deviceTrait.name}.pauseCommand",
+                title: "Pause Command",
+                type: "text",
+                required: true,
+                defaultValue: "pause"
             )
         }
     }
@@ -1548,6 +1650,18 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_Dock(deviceInfo, command) {
+    def dockTrait = deviceInfo.deviceType.traits.Dock
+    def checkValue
+    checkMfa(deviceInfo.deviceType, "Dock", command)
+    checkValue = dockTrait.dockValue
+    deviceInfo.device."${dockTrait.dockCommand}"()
+    return [
+        (dockTrait.dockAttribute): checkValue
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_Reverse(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
@@ -1693,7 +1807,7 @@ private executeCommand_SetHumidity(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetTemperature(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceTrait, "Set Temperature", command)
+    checkMfa(deviceInfo.deviceType, "Set Temperature", command)
     def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
     def setpoint = command.params.temperature
     if (temperatureControlTrait.temperatureUnit == "F") {
@@ -1739,6 +1853,38 @@ private executeCommand_setVolume(deviceInfo, command) {
 
     return [
         (volumeTrait.volumeAttribute): volumeLevel
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_StartStop(deviceInfo, command) {
+    def startStopTrait = deviceInfo.deviceType.traits.StartStop
+    def checkValue
+    if (command.params.start) {
+        checkMfa(deviceInfo.deviceType, "Start", command)
+        checkValue = startStopTrait.startValue
+        deviceInfo.device."${startStopTrait.startCommand}"()
+    } else {
+        checkMfa(deviceInfo.deviceType, "Stop", command)
+        checkValue = { it != startStopTrait.startValue }
+        deviceInfo.device."${startStopTrait.stopCommand}"()
+    }
+    return [
+        (startStopTrait.startStopAttribute): checkValue
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_PauseUnpause(deviceInfo, command) {
+    def startStopTrait = deviceInfo.deviceType.traits.StartStop
+    def checkValue
+    if (command.params.pause) {
+        checkMfa(deviceInfo.deviceType, "Pause", command)
+        deviceInfo.device."${startStopTrait.pauseCommand}"()
+        checkValue = startStopTrait.pauseValue
+    }
+    return [
+        (startStopTrait.pauseUnPauseAttribute): checkValue
     ]
 }
 
@@ -1919,6 +2065,14 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_Dock(deviceTrait, device) {
+    def isDocked = device.currentValue(deviceTrait.dockAttribute) == deviceTrait.dockValue
+    return [
+        isDocked:isDocked
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
@@ -1988,6 +2142,17 @@ private deviceStateForTrait_Rotation(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_StartStop(deviceTrait, device) {
+    def deviceState = [
+        isRunning: device.currentValue(deviceTrait.startStopAttribute) == deviceTrait.startValue
+    ]
+    if (deviceTrait.canPause) {
+        deviceState.isPaused = device.currentValue(deviceTrait.pauseUnPauseAttribute) == deviceTrait.pauseValue
+    }
+    return deviceState
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2144,6 +2309,11 @@ private attributesForTrait_ColorSetting(deviceTrait) {
     return colorAttrs
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_Dock(deviceTrait) {
+    return [:]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_FanSpeed(deviceTrait) {
     def fanSpeedAttrs = [
@@ -2212,6 +2382,13 @@ private attributesForTrait_Rotation(deviceTrait) {
 private attributesForTrait_Scene(deviceTrait) {
     return [
         sceneReversible: deviceTrait.sceneReversible
+    ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_StartStop(deviceTrait) {
+    return [
+        pausable: deviceTrait.canPause
     ]
 }
 
@@ -2361,6 +2538,16 @@ private traitFromSettings_ColorSetting(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_Dock(traitName) {
+    return [
+        dockAttribute: settings."${traitName}.dockAttribute",
+        dockValue:     settings."${traitName}.dockValue",
+        dockCommand:   settings."${traitName}.dockCommand",
+        commands:      ["Dock"]
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_FanSpeed(traitName) {
     def fanSpeedMapping = [
         currentSpeedAttribute: settings."${traitName}.currentSpeedAttribute",
@@ -2490,6 +2677,32 @@ private traitFromSettings_Scene(traitName) {
         sceneTrait.commands << "Deactivate Scene"
     }
     return sceneTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_StartStop(traitName) {
+    def canPause = settings."${traitName}.canPause"
+    if (canPause == null) {
+        canPause = true
+    }
+    def  startStopTrait = [
+         startStopAttribute: settings."${traitName}.startStopAttribute",
+         startValue:         settings."${traitName}.startValue",
+         stopValue:          settings."${traitName}.stopValue",
+         startCommand:       settings."${traitName}.startCommand",
+         stopCommand:        settings."${traitName}.stopCommand",
+         canPause:           canPause,
+         commands:           ["Start", "Stop"]
+    ]
+    if (canPause) {
+        startStopTrait << [
+            pauseUnPauseAttribute: settings."${traitName}.pauseUnPauseAttribute",
+            pauseValue:            settings."${traitName}.pauseValue",
+            pauseCommand:          settings."${traitName}.pauseCommand"
+        ]
+        startStopTrait.commands += ["Pause"]
+    }
+    return startStopTrait
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2626,6 +2839,9 @@ private traitFromSettings_Toggles(traitName) {
             traitName: traitName,
             labels: settings."${toggle}.labels"?.split(",")
         ]
+        if (toggleAttrs.labels == null) {
+            toggleAttrs.labels = ["Unknown"]
+        }
         toggleAttrs << traitFromSettings_OnOff(toggle)
         toggleAttrs
     }
@@ -2740,6 +2956,13 @@ private deleteDeviceTrait_ColorSetting(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_Dock(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.dockAttribute")
+    app.removeSetting("${deviceTrait.name}.dockValue")
+    app.removeSetting("${deviceTrait.name}.dockCommand")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_FanSpeed(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.currentSpeedAttribute")
     app.removeSetting("${deviceTrait.name}.setFanSpeedCommand")
@@ -2806,6 +3029,19 @@ private deleteDeviceTrait_Scene(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.activateCommand")
     app.removeSetting("${deviceTrait.name}.deactivateCommand")
     app.removeSetting("${deviceTrait.name}.sceneReversible")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_StartStop(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.canPause")
+    app.removeSetting("${deviceTrait.name}.startStopAttribute")
+    app.removeSetting("${deviceTrait.name}.pauseUnPauseAttribute")
+    app.removeSetting("${deviceTrait.name}.startValue")
+    app.removeSetting("${deviceTrait.name}.stopValue")
+    app.removeSetting("${deviceTrait.name}.pauseValue")
+    app.removeSetting("${deviceTrait.name}.startCommand")
+    app.removeSetting("${deviceTrait.name}.stopCommand")
+    app.removeSetting("${deviceTrait.name}.pauseCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3126,8 +3362,10 @@ private static final HUBITAT_DEVICE_TYPES = [
 @Field
 private static final GOOGLE_DEVICE_TYPES = [
     AC_UNIT:                "Air Conditioning Unit",
+    AIRCOOLER:              "Air Cooler",
     AIRFRESHENER:           "Air Freshener",
     AIRPURIFIER:            "Air Purifier",
+    AUDIO_VIDEO_RECEIVER:   "Audio/Video Receiver",
     AWNING:                 "Awning",
     BATHTUB:                "Bathtub",
     BED:                    "Bed",
@@ -3150,6 +3388,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     FAN:                    "Fan",
     FAUCET:                 "Faucet",
     FIREPLACE:              "Fireplace",
+    FREEZER:                "Freezer",
     FRYER:                  "Fryer",
     GARAGE:                 "Garage Door",
     GATE:                   "Gate",
@@ -3164,6 +3403,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     MOP:                    "Mop",
     MOWER:                  "Mower",
     MULTICOOKER:            "Multicooker",
+    NETWORK:                "Network",
     OUTLET:                 "Outlet",
     OVEN:                   "Oven",
     PERGOLA:                "Pergola",
@@ -3172,6 +3412,7 @@ private static final GOOGLE_DEVICE_TYPES = [
     RADIATOR:               "Radiator",
     REFRIGERATOR:           "Refrigerator",
     REMOTECONTROL:          "Remote Control",
+    ROUTER:                 "Router",
     SCENE:                  "Scene",
     SECURITYSYSTEM:         "Security System",
     SENSOR:                 "Sensor",
@@ -3180,8 +3421,12 @@ private static final GOOGLE_DEVICE_TYPES = [
     SHUTTER:                "Shutter",
     SMOKE_DETECTOR:         "Smoke Detector",
     SOUSVIDE:               "Sous Vide",
+    SPEAKER:                "Speaker",
     SPRINKLER:              "Sprinkler",
     STANDMIXER:             "Stand Mixer",
+    STREAMING_BOX:          "Streaming Box",
+    STREAMING_SOUNDBAR:     "Streaming Soundbar",
+    STREAMING_STICK:        "Streaming Stick",
     SWITCH:                 "Switch",
     TV:                     "Television",
     THERMOSTAT:             "Thermostat",
@@ -3203,7 +3448,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     ColorSetting: "Color Setting",
     //Cook: "Cook",
     //Dispense: "Dispense",
-    //Dock: "Dock",
+    Dock: "Dock",
     FanSpeed: "Fan Speed",
     //Fill: "Fill",
     HumiditySetting: "Humidity Setting",
@@ -3218,7 +3463,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //RunCycle: "Run Cycle",
     Scene: "Scene",
     //SoftwareUpdate: "Software Update",
-    //StartStop: "Start/Stop",
+    StartStop: "Start/Stop",
     //StatusReport: "Status Report",
     TemperatureControl: "Temperature Control",
     TemperatureSetting: "Temperature Setting",
