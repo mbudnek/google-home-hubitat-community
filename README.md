@@ -183,6 +183,13 @@ The following settings are only available if the "Query Only Humidity" setting i
 - Minimum Humidity Setpoint: The minimum humidity setpoint supported for this device type.  Attempting to set the desired humidiy lower will set it to this value instead.  Required if "Maximum Humidity Setpoint" is specified.
 - Maximum Humidity Setpoint: The maximum humidity setpoint supported for this device type.  Attempting to set the desired humidiy higher will set it to this value instead.  Required if "Minimum Humidity Setpoint" is specified.
 
+### Locator
+
+The Locator trait is used for finding devices that have audible or visual indicators, such as vacuums, or other devices that beep, ring or flash.  It can be controlled by saying things like "Hey Google, where is {device}" or "Hey Google, find my {device}".  Locator trait has the following configuration parameters:
+
+- Locator Command: A device command used to locate the device.  Should not require any parameters.  Maps to `locate` by default.
+
+
 ### Lock/Unlock
 
 The Lock/Unlock trait is used for anything that can lock and unlock, such as doors and windows.  It can be controlled by saying things like "Hey Google, lock {device}" and queried by saying things like "Hey Google, is {device} locked?".  Since locks are often security-sensitive, it is recommended, though not required, that PIN code support be configured for device types implementing this trait.  The Lock/Unlock trait has the following configuration parameters:
