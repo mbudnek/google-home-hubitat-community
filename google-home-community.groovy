@@ -681,7 +681,7 @@ private deviceTraitPreferences_HumiditySetting(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_Locator(deviceTrait) {
-    section("Locator Settings") {     
+    section("Locator Settings") {
         input(
             name: "${deviceTrait.name}.locatorCommand",
             title: "Locator Command",
@@ -2627,9 +2627,9 @@ private traitFromSettings_HumiditySetting(traitName) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Locator(traitName) {
-    return [     
+    return [
         locatorCommand:   settings."${traitName}.locatorCommand",
-        commands:         ["Find my","Where is"]
+        commands:         ["Find my", "Where is"]
     ]
 }
 
