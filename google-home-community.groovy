@@ -1682,7 +1682,6 @@ private executeCommand_Reverse(deviceInfo, command) {
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_Locate(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Locator", command)
     def locatorTrait = deviceInfo.deviceType.traits.Locator
     deviceInfo.device."${locatorTrait.locatorCommand}"()
     return [:]
@@ -2629,7 +2628,7 @@ private traitFromSettings_HumiditySetting(traitName) {
 private traitFromSettings_Locator(traitName) {
     return [
         locatorCommand:   settings."${traitName}.locatorCommand",
-        commands:         ["Find my", "Where is"]
+        commands:         ["Locate"]
     ]
 }
 
