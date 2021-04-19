@@ -1683,6 +1683,7 @@ private executeCommand_Reverse(deviceInfo, command) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_Locate(deviceInfo, command) {
     def locatorTrait = deviceInfo.deviceType.traits.Locator
+    checkMfa(deviceInfo.deviceType, "Locate", command)
     deviceInfo.device."${locatorTrait.locatorCommand}"()
     return [:]
 }
