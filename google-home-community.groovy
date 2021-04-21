@@ -46,6 +46,7 @@
 //   * Jan 19 2021 - Added Dock and StartStop Traits
 //   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
 //   * Feb 28 2021 - Add new device types supported by Google
+//   * Apr 18 2021 - Added Locator Traits
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -675,6 +676,19 @@ private deviceTraitPreferences_HumiditySetting(deviceTrait) {
                 submitOnChange: true
             )
         }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_Locator(deviceTrait) {
+    section("Locator Settings") {
+        input(
+            name: "${deviceTrait.name}.locatorCommand",
+            title: "Locator Command",
+            type: "text",
+            defaultValue: "locate",
+            required: true
+        )
     }
 }
 
@@ -1666,6 +1680,14 @@ private executeCommand_Reverse(deviceInfo, command) {
     return [:]
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private executeCommand_Locate(deviceInfo, command) {
+    def locatorTrait = deviceInfo.deviceType.traits.Locator
+    checkMfa(deviceInfo.deviceType, "Locate", command)
+    deviceInfo.device."${locatorTrait.locatorCommand}"()
+    return [:]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_LockUnlock(deviceInfo, command) {
     def lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
@@ -2089,6 +2111,11 @@ private deviceStateForTrait_HumiditySetting(deviceTrait, device) {
     return deviceState
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_Locator(deviceTrait, device) {
+    return [:]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_LockUnlock(deviceTrait, device) {
     def isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue
@@ -2329,7 +2356,9 @@ private attributesForTrait_FanSpeed(deviceTrait) {
             },
             ordered: true
         ],
-        reversible: deviceTrait.reversible
+        reversible: deviceTrait.reversible,
+        supportsFanSpeedPercent: false,
+        commandOnlyFanSpeed: false
     ]
     return fanSpeedAttrs
 }
@@ -2346,6 +2375,11 @@ private attributesForTrait_HumiditySetting(deviceTrait) {
         ]
     }
     return attrs
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_Locator(deviceTrait) {
+    return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
@@ -2592,6 +2626,14 @@ private traitFromSettings_HumiditySetting(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_Locator(traitName) {
+    return [
+        locatorCommand:   settings."${traitName}.locatorCommand",
+        commands:         ["Locate"]
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_LockUnlock(traitName) {
     return [
         lockedUnlockedAttribute: settings."${traitName}.lockedUnlockedAttribute",
@@ -2658,7 +2700,7 @@ private traitFromSettings_Rotation(traitName) {
         rotationAttribute:  settings."${traitName}.rotationAttribute",
         setRotationCommand: settings."${traitName}.setRotationCommand",
         continuousRotation: settings."${traitName}.continuousRotation",
-        commands:        ["Rotate"]
+        commands:           ["Rotate"]
     ]
 }
 
@@ -2979,6 +3021,11 @@ private deleteDeviceTrait_HumiditySetting(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.humidityRange.min")
     app.removeSetting("${deviceTrait.name}.humidityRange.max")
     app.removeSetting("${deviceTrait.name}.queryOnly")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_Locator(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.locatorCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3439,25 +3486,35 @@ private static final GOOGLE_DEVICE_TYPES = [
 
 @Field
 private static final GOOGLE_DEVICE_TRAITS = [
+    //AppSelector: "App Selector",
     //ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
     CameraStream: "Camera Stream",
+    //Channel: "Channel",
     ColorSetting: "Color Setting",
+    //ColorSpectrum: "Color Spectrum",
+    //ColorTemperature: "Color Temperature",
     //Cook: "Cook",
     //Dispense: "Dispense",
     Dock: "Dock",
+    //EnergyStorage: "Energy Storage",
     FanSpeed: "Fan Speed",
     //Fill: "Fill",
     HumiditySetting: "Humidity Setting",
+    //InputSelector: "Input Selector",
     //LightEffects: "Light Effects",
-    //Locator: "Locator",
+    Locator: "Locator",
     LockUnlock: "Lock/Unlock",
+    //MediaState: "Media State",
     //Modes: "Modes",
+    //NetworkControl: "Network Control",
+    //ObjectDetection: "Object Detection",
     OnOff: "On/Off",
     OpenClose: "Open/Close",
     //Reboot: "Reboot",
     Rotation: "Rotation",
     //RunCycle: "Run Cycle",
+    //SensorState: "Sensor State",
     Scene: "Scene",
     //SoftwareUpdate: "Software Update",
     StartStop: "Start/Stop",
@@ -3466,6 +3523,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     TemperatureSetting: "Temperature Setting",
     //Timer: "Timer",
     Toggles: "Toggles",
+    //TransportControl: "Transport Control",
     Volume: "Volume",
 ]
 
