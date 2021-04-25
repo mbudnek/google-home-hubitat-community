@@ -50,7 +50,6 @@
 //   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and
 //                   Timer (commands untested) Traits.  Added missing camera trait protocol attributes.
 
-
 import groovy.json.JsonException
 import groovy.json.JsonOutput
 import groovy.transform.Field
@@ -2270,8 +2269,8 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerAdjust(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "TimerAdjust", command)
-    def TimerTrait = deviceInfo.deviceType.traits.Timer
-    deviceInfo.device."${TimerTrait.timerAdjustCommand}"()
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerAdjustCommand}"()
     def retVal = [:]
     if (!deviceTrait.commandOnlyTimer) {
         retVal= [
@@ -2284,32 +2283,32 @@ private executeCommand_TimerAdjust(deviceInfo, command) {
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerCancel(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "TimerCancel", command)
-    def TimerTrait = deviceInfo.deviceType.traits.Timer
-    deviceInfo.device."${TimerTrait.timerCancelCommand}"()
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerCancelCommand}"()
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerPause(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "TimerPause", command)
-    def TimerTrait = deviceInfo.deviceType.traits.Timer
-    deviceInfo.device."${TimerTrait.timerPauseCommand}"()
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerPauseCommand}"()
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerResume(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "TimerResume", command)
-    def TimerTrait = deviceInfo.deviceType.traits.Timer
-    deviceInfo.device."${TimerTrait.timerResumeCommand}"()
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerResumeCommand}"()
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerStart(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "TimerStart", command)
-    def TimerTrait = deviceInfo.deviceType.traits.Timer
-    deviceInfo.device."${TimerTrait.timerStartCommand}"()
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerStartCommand}"()
     def retVal = [:]
     if (!deviceTrait.commandOnlyTimer) {
         retVal= [
@@ -2651,15 +2650,15 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Timer(deviceTrait, device) {
     def deviceState = [:]
-    if (!deviceTrait.commandOnlyTimer) {
-        deviceState = [
-            timerRemainingSec: device.currentValue(deviceTrait.timerRemainingSecAttribute),
-            timerPaused: device.currentValue(deviceTrait.timerPausedAttribute) == deviceTrait.timerPausedValue
-        ]
-    } else {
+    if (deviceTrait.commandOnlyTimer) {
         // report no running timers
         deviceState = [
             timerRemainingSec: -1
+        ]	
+    } else {
+        deviceState = [
+            timerRemainingSec: device.currentValue(deviceTrait.timerRemainingSecAttribute),
+            timerPaused: device.currentValue(deviceTrait.timerPausedAttribute) == deviceTrait.timerPausedValue
         ]
     }
     return deviceState
@@ -3381,7 +3380,7 @@ private traitFromSettings_Timer(traitName) {
         maxTimerLimitSec:                 settings."${traitName}.maxTimerLimitSec",
         commandOnlyTimer:                 settings."${traitName}.commandOnlyTimer",
 
-        commands:                         ["Start","Adjust","Cancel","Pause","Resume"]
+        commands:                         ["Start", "Adjust", "Cancel", "Pause", "Resume"]
     ]
     if (!timerTrait.commandOnlyTimer) {
         timerTrait << [
