@@ -684,7 +684,8 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             defaultValue: "true",
             required: true
         )
-        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS") || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS") 
+		    || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
             input(
                 name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                 title: "Supported Distance Units",
@@ -2273,7 +2274,7 @@ private executeCommand_TimerAdjust(deviceInfo, command) {
     deviceInfo.device."${timerTrait.timerAdjustCommand}"()
     def retVal = [:]
     if (!deviceTrait.commandOnlyTimer) {
-        retVal= [
+        retVal = [
             timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
         ]
     }
@@ -2311,7 +2312,7 @@ private executeCommand_TimerStart(deviceInfo, command) {
     deviceInfo.device."${timerTrait.timerStartCommand}"()
     def retVal = [:]
     if (!deviceTrait.commandOnlyTimer) {
-        retVal= [
+        retVal = [
             timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
         ]
     }
@@ -2566,7 +2567,8 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_SoftwareUpdate(deviceTrait, device) {
     return [
-        lastSoftwareUpdateUnixTimestampSec: device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
+        lastSoftwareUpdateUnixTimestampSec: 
+		        device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
     ]
 }
 
@@ -2654,7 +2656,7 @@ private deviceStateForTrait_Timer(deviceTrait, device) {
         // report no running timers
         deviceState = [
             timerRemainingSec: -1
-        ]	
+        ]
     } else {
         deviceState = [
             timerRemainingSec: device.currentValue(deviceTrait.timerRemainingSecAttribute),
@@ -3220,7 +3222,8 @@ private traitFromSettings_Scene(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_SoftwareUpdate(traitName) {
     return [
-        lastSoftwareUpdateUnixTimestampSecAttribute:    settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
+        lastSoftwareUpdateUnixTimestampSecAttribute:
+		                          settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
         softwareUpdateCommand:                          settings."${traitName}.softwareUpdateCommand",
         commands:                                       ["Software Update"]
     ]
