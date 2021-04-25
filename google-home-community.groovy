@@ -684,8 +684,8 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             defaultValue: "true",
             required: true
         )
-        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS") 
-		    || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+            || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
             input(
                 name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                 title: "Supported Distance Units",
@@ -2567,8 +2567,8 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_SoftwareUpdate(deviceTrait, device) {
     return [
-        lastSoftwareUpdateUnixTimestampSec: 
-		        device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
+        lastSoftwareUpdateUnixTimestampSec:
+            device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
     ]
 }
 
@@ -3223,7 +3223,7 @@ private traitFromSettings_Scene(traitName) {
 private traitFromSettings_SoftwareUpdate(traitName) {
     return [
         lastSoftwareUpdateUnixTimestampSecAttribute:
-		                          settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
+                                  settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
         softwareUpdateCommand:                          settings."${traitName}.softwareUpdateCommand",
         commands:                                       ["Software Update"]
     ]
