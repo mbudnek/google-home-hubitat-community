@@ -47,7 +47,7 @@
 //   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
 //   * Feb 28 2021 - Add new device types supported by Google
 //   * Apr 18 2021 - Added Locator Trait
-//   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and 
+//   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and
 //                   Timer (commands untested) Traits.  Added missing camera trait protocol attributes.
 
 
@@ -426,10 +426,10 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
 def deviceTraitPreferences_CameraStream(deviceTrait) {
     googleCameraStreamSupportedProtocols = [
         "progressive_mp4":         "Progressive MP4",
-        "hls":                     "HLS",        
+        "hls":                     "HLS",
         "dash":                    "Dash",
-        "smooth_stream":           "Smooth Stream",      
-    ]          
+        "smooth_stream":           "Smooth Stream",
+    ]
     section("Stream Camera") {
         input(
             name: "${deviceTrait.name}.cameraStreamAttribute",
@@ -445,7 +445,7 @@ def deviceTraitPreferences_CameraStream(deviceTrait) {
             options: googleCameraStreamSupportedProtocols,
             multiple: true,
             required: true,
-        )                         
+        )
     }
 }
 
@@ -584,21 +584,21 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
     googleEnergyStorageDistanceUnitForUX = [
         "KILOMETERS":      "Kilometers",
         "MILES":           "Miles",
-    ]     
+    ]
     googleCapacityUnits = [
         "SECONDS":         "Seconds",
-        "MILES":           "Miles",        
+        "MILES":           "Miles",
         "KILOMETERS":      "Kilometers",
         "PERCENTAGE":      "Percentage",
-        "KILOWATT_HOURS":  "Kilowatt Hours",        
-    ]      
+        "KILOWATT_HOURS":  "Kilowatt Hours",
+    ]
     section("Energy Storage Settings") {
         input(
             name: "${deviceTrait.name}.isRechargeable",
             title: "Rechargeable",
             type: "bool",
             defaultValue: false,
-            required: true,            
+            required: true,
             submitOnChange: true
         )
         input(
@@ -617,21 +617,21 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 defaultValue: "charge",
                 required: true
             )
-        }        
+        }
         input(
             name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
             title: "Descriptive Capacity Remaining",
             type: "text",
             defaultValue: "descriptiveCapacityRemaining",
             required: true
-        )          
+        )
         input(
             name: "${deviceTrait.name}.capacityRemainingRawValue",
             title: "Capacity Remaining Value",
             type: "text",
             defaultValue: "capacityRemainingRawValue",
             required: true
-        )     
+        )
         input(
             name: "${deviceTrait.name}.capacityRemainingUnit",
             title: "Capacity Remaining Unit",
@@ -640,14 +640,14 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             multiple: false,
             required: true,
             submitOnChange: true
-        )            
+        )
         input(
             name: "${deviceTrait.name}.capacityUntilFullRawValue",
             title: "Capacity Until Full Value",
             type: "text",
             defaultValue: "capacityUntilFullRawValue",
             required: true
-        )     
+        )
         input(
             name: "${deviceTrait.name}.capacityUntilFullUnit",
             title: "Capacity Until Full Unit",
@@ -656,7 +656,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             multiple: false,
             required: true,
             submitOnChange: true
-        )              
+        )
         input(
             name: "${deviceTrait.name}.isChargingAttribute",
             title: "Charging Attribute",
@@ -670,22 +670,22 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             type: "text",
             defaultValue: "true",
             required: true
-        )        
+        )
         input(
             name: "${deviceTrait.name}.isPluggedInAttribute",
             title: "ve",
             type: "text",
             defaultValue: "isPluggedIn",
             required: true
-        )  
+        )
         input(
             name: "${deviceTrait.name}.pluggedInValue",
             title: "Plugged In Value",
             type: "text",
             defaultValue: "true",
             required: true
-        )    
-        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS") || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {        
+        )
+        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS") || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
             input(
                 name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                 title: "Supported Distance Units",
@@ -694,9 +694,9 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 multiple: false,
                 required: true,
                 submitOnChange: true
-            )     
-        }        
-    }    
+            )
+        }
+    }
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1057,7 +1057,7 @@ def deviceTraitPreferences_Reboot(deviceTrait) {
             name: "${deviceTrait.name}.rebootCommand",
             title: "Reboot Command",
             type: "text",
-            defaultValue: "reboot",        
+            defaultValue: "reboot",
             required: true
         )
     }
@@ -1126,12 +1126,12 @@ def deviceTraitPreferences_SoftwareUpdate(deviceTrait) {
             type: "text",
             defaultValue: "lastSoftwareUpdateUnixTimestamp",
             required: true
-        )        
+        )
         input(
             name: "${deviceTrait.name}.softwareUpdateCommand",
             title: "Software Update Command",
             type: "text",
-            defaultValue: "softwareUpdate", 
+            defaultValue: "softwareUpdate",
             required: true
         )
     }
@@ -1471,14 +1471,14 @@ private deviceTraitPreferences_Timer(deviceTrait) {
             required: true,
             defaultValue: false,
             submitOnChange: true,
-        )          
+        )
         input(
             name: "${deviceTrait.name}.maxTimerLimitSec",
             title: "Maximum Timer Duration (seconds)",
             type: "integer",
             required: true,
             defaultValue: "86400"
-        )    
+        )
         if (!deviceTrait.commandOnlyTimer) {
             input(
                 name: "${deviceTrait.name}.timerRemainingSecAttribute",
@@ -1486,57 +1486,57 @@ private deviceTraitPreferences_Timer(deviceTrait) {
                 type: "text",
                 required: true,
                 defaultValue: "timeRemaining"
-            )        
+            )
             input(
                 name: "${deviceTrait.name}.timerPausedAttribute",
                 title: "Timer Paused Attribute",
                 type: "text",
                 required: true,
                 defaultValue: "sessionStatus"
-            )      
+            )
             input(
                 name: "${deviceTrait.name}.timerPausedValue",
                 title: "Timer Paused Value",
                 type: "text",
                 required: true,
                 defaultValue: "paused"
-            )          
-        }       
+            )
+        }
         input(
             name: "${deviceTrait.name}.timerStartCommand",
             title: "Timer Start Command",
             type: "text",
             required: true,
             defaultValue: "startTimer"
-        )            
+        )
         input(
             name: "${deviceTrait.name}.timerAdjustCommand",
             title: "Timer Adjust Command",
             type: "text",
             required: true,
             defaultValue: "setTimeRemaining"
-        )     
+        )
         input(
             name: "${deviceTrait.name}.timerCancelCommand",
             title: "Timer Cancel Command",
             type: "text",
             required: true,
             defaultValue: "cancel"
-        )     
+        )
         input(
             name: "${deviceTrait.name}.timerPauseCommand",
             title: "Timer Pause Command",
             type: "text",
             required: true,
             defaultValue: "pause"
-        )     
+        )
         input(
             name: "${deviceTrait.name}.timerResumeCommand",
             title: "Timer Resume Command",
             type: "text",
             required: true,
             defaultValue: "start"
-        )                  
+        )
     }
 }
 
@@ -2085,7 +2085,7 @@ private executeCommand_Reboot(deviceInfo, command) {
     def rebootTrait = deviceInfo.deviceType.traits.Reboot
     deviceInfo.device."${rebootTrait.rebootCommand}"()
     return [:]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_RotateAbsolute(deviceInfo, command) {
@@ -2097,7 +2097,7 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
     return [
         (rotationTrait.rotationAttribute): position
     ]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetFanSpeed(deviceInfo, command) {
@@ -2180,7 +2180,7 @@ private executeCommand_SoftwareUpdate(deviceInfo, command) {
     def softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
     deviceInfo.device."${softwareUpdateTrait.softwareUpdateCommand}"()
     return [:]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_StartStop(deviceInfo, command) {
@@ -2279,7 +2279,7 @@ private executeCommand_TimerAdjust(deviceInfo, command) {
         ]
     }
     return retVal
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerCancel(deviceInfo, command) {
@@ -2287,7 +2287,7 @@ private executeCommand_TimerCancel(deviceInfo, command) {
     def TimerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${TimerTrait.timerCancelCommand}"()
     return [:]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerPause(deviceInfo, command) {
@@ -2295,7 +2295,7 @@ private executeCommand_TimerPause(deviceInfo, command) {
     def TimerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${TimerTrait.timerPauseCommand}"()
     return [:]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerResume(deviceInfo, command) {
@@ -2303,7 +2303,7 @@ private executeCommand_TimerResume(deviceInfo, command) {
     def TimerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${TimerTrait.timerResumeCommand}"()
     return [:]
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerStart(deviceInfo, command) {
@@ -2317,7 +2317,7 @@ private executeCommand_TimerStart(deviceInfo, command) {
         ]
     }
     return retVal
-} 
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_volumeRelative(deviceInfo, command) {
@@ -2461,17 +2461,17 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
             rawValue: device.currentValue(deviceTrait.capacityRemainingRawValue).toInteger(),
             unit:     deviceTrait.capacityRemainingUnit
         ]
-    ]    
+    ]
     deviceState.capacityUntilFull = [
         [
             rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
-            unit:     deviceTrait.capacityUntilFullUnit      
-        ]       
+            unit:     deviceTrait.capacityUntilFullUnit
+        ]
     ]
     deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
     deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
-       
-    return deviceState  
+
+    return deviceState
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2651,15 +2651,15 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Timer(deviceTrait, device) {
     def deviceState = [:]
-    if (!deviceTrait.commandOnlyTimer) {       
+    if (!deviceTrait.commandOnlyTimer) {
         deviceState = [
             timerRemainingSec: device.currentValue(deviceTrait.timerRemainingSecAttribute),
-            timerPaused: device.currentValue(deviceTrait.timerPausedAttribute) == deviceTrait.timerPausedValue     
+            timerPaused: device.currentValue(deviceTrait.timerPausedAttribute) == deviceTrait.timerPausedValue
         ]
     } else {
         // report no running timers
         deviceState = [
-            timerRemainingSec: -1   
+            timerRemainingSec: -1
         ]
     }
     return deviceState
@@ -2764,7 +2764,7 @@ private attributesForTrait_EnergyStorage(deviceTrait) {
         queryOnlyEnergyStorage:         deviceTrait.queryOnlyEnergyStorage,
         energyStorageDistanceUnitForUX: deviceTrait.energyStorageDistanceUnitForUX,
         isRechargeable:                 deviceTrait.isRechargeable
-    ]    
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2984,7 +2984,7 @@ private traitFromSettings_Brightness(traitName) {
 private traitFromSettings_CameraStream(traitName) {
     return [
         cameraStreamAttribute:          settings."${traitName}.cameraStreamAttribute",
-        cameraStreamSupportedProtocols: settings."${traitName}.cameraStreamSupportedProtocols",   
+        cameraStreamSupportedProtocols: settings."${traitName}.cameraStreamSupportedProtocols",
         commands:              []
     ]
 }
@@ -3038,25 +3038,25 @@ private traitFromSettings_Dock(traitName) {
 private traitFromSettings_EnergyStorage(traitName) {
     def energyStorageTrait = [
         energyStorageDistanceUnitForUX:           settings."${traitName}.energyStorageDistanceUnitForUX",
-        isRechargeable:                           settings."${traitName}.isRechargeable",        
+        isRechargeable:                           settings."${traitName}.isRechargeable",
         queryOnlyEnergyStorage:                   settings."${traitName}.queryOnlyEnergyStorage",
         descriptiveCapacityRemainingAttribute:    settings."${traitName}.descriptiveCapacityRemainingAttribute",
         capacityRemainingRawValue:                settings."${traitName}.capacityRemainingRawValue",
         capacityRemainingUnit:                    settings."${traitName}.capacityRemainingUnit",
         capacityUntilFullRawValue:                settings."${traitName}.capacityUntilFullRawValue",
         capacityUntilFullUnit:                    settings."${traitName}.capacityUntilFullUnit",
-        isChargingAttribute:                      settings."${traitName}.isChargingAttribute",      
-        chargingValue:                            settings."${traitName}.chargingValue",     
+        isChargingAttribute:                      settings."${traitName}.isChargingAttribute",
+        chargingValue:                            settings."${traitName}.chargingValue",
         isPluggedInAttribute:                     settings."${traitName}.isPluggedInAttribute",
         pluggedInValue:                           settings."${traitName}.pluggedInValue",
         chargeCommand:                            settings."${traitName}.chargeCommand",
-        commands:                                 []  
-    ]  
+        commands:                                 []
+    ]
     if (!energyStorageTrait.queryOnlyEnergyStorage) {
         energyStorageTrait.commands += ["Charge"]
     }
 
-    return energyStorageTrait     
+    return energyStorageTrait
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3221,7 +3221,7 @@ private traitFromSettings_Scene(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_SoftwareUpdate(traitName) {
     return [
-        lastSoftwareUpdateUnixTimestampSecAttribute:    settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",        
+        lastSoftwareUpdateUnixTimestampSecAttribute:    settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
         softwareUpdateCommand:                          settings."${traitName}.softwareUpdateCommand",
         commands:                                       ["Software Update"]
     ]
@@ -3382,15 +3382,15 @@ private traitFromSettings_Timer(traitName) {
         commandOnlyTimer:                 settings."${traitName}.commandOnlyTimer",
 
         commands:                         ["Start","Adjust","Cancel","Pause","Resume"]
-    ]    
+    ]
     if (!timerTrait.commandOnlyTimer) {
         timerTrait << [
             timerRemainingSecAttribute:   settings."${traitName}.timerRemainingSecAttribute",
             timerPausedAttribute:         settings."${traitName}.timerPausedAttribute",
-            timerPausedValue:             settings."${traitName}.timerPausedValue",            
-        ]        
+            timerPausedValue:             settings."${traitName}.timerPausedValue",
+        ]
     }
-    return timerTrait    
+    return timerTrait
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3502,7 +3502,7 @@ private deleteDeviceTrait_Brightness(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_CameraStream(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraStreamSupportedProtocols")    
+    app.removeSetting("${deviceTrait.name}.cameraStreamSupportedProtocols")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3540,10 +3540,10 @@ private deleteDeviceTrait_EnergyStorage(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.capacityRemainingUnit")
     app.removeSetting("${deviceTrait.name}.capacityUntilFullRawValue")
     app.removeSetting("${deviceTrait.name}.capacityUntilFullUnit")
-    app.removeSetting("${deviceTrait.name}.isChargingAttribute")  
-    app.removeSetting("${deviceTrait.name}.chargingValue")  
-    app.removeSetting("${deviceTrait.name}.isPluggedInAttribute")    
-    app.removeSetting("${deviceTrait.name}.pluggedInValue")    
+    app.removeSetting("${deviceTrait.name}.isChargingAttribute")
+    app.removeSetting("${deviceTrait.name}.chargingValue")
+    app.removeSetting("${deviceTrait.name}.isPluggedInAttribute")
+    app.removeSetting("${deviceTrait.name}.pluggedInValue")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3616,7 +3616,7 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_Reboot(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.rebootCommand")    
+    app.removeSetting("${deviceTrait.name}.rebootCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3635,8 +3635,8 @@ private deleteDeviceTrait_Scene(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_SoftwareUpdate(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute")      
-    app.removeSetting("${deviceTrait.name}.softwareUpdateCommand")          
+    app.removeSetting("${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute")
+    app.removeSetting("${deviceTrait.name}.softwareUpdateCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3703,7 +3703,7 @@ private deleteDeviceTrait_Timer(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.timerCancelCommand")
     app.removeSetting("${deviceTrait.name}.timerPauseCommand")
     app.removeSetting("${deviceTrait.name}.timerResumeCommand")
-    app.removeSetting("${deviceTrait.name}.timerPausedValue")    
+    app.removeSetting("${deviceTrait.name}.timerPausedValue")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
