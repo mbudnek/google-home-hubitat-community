@@ -159,6 +159,25 @@ The Dock trait is intended to be used for devices such as robot vacuum cleaners 
 - Docked Value: The value of the "Docked Attribute" that indicates that the device is currently docked.  Defaults to `docked`.
 - Dock Command: A device command used to tell the device to return to its dock.  Maps to `returnToDock` by default.
 
+### Energy Storage
+
+The Energy Storage trait is used for any device that can report energy capacity and optionally start charging.  It can be controlled by saying things like "Hey Google, charge {device}" and queried by saying things like "Hey Google, is {device} charging?", "Hey Google, What is {device} battery level?",
+"Hey Google, What is {device} battery percentage?", or "Hey Google, How long until {device} is fully charged?"  This trait has the following configuration parameters:
+
+- Rechargeable: Set to indicate that this device is rechargeable.  Defaults to 'false'.
+- Query Only Energy Storage: Set to indicate that this device can only be queried for energy storage and not controlled.
+- Supported Distance Units: Set to indicate that units the UI will use if the configured units are set to distance.
+- Descriptive Capacity Remaining Attribute: The device attribute used to query the current capacity of the device with descriptive text should no number capacity remaining value be reported.  Maps to the `descriptiveCapacityRemaining` attribute by default.
+- Capacity Remaining Value Attribute: The device attribute used to query the current capacity of the device.  Maps to the `capacityRemainingRawValue` attribute by default.
+- Capacity Remaining Unit Attribute: The device attribute used to indicate the units for Capacity Remaining Value Attribute.  Typical useful unit will be 'PERCENT'. 
+- Capacity Until Full Value Attribute: The device attribute used to query the capacity until full of the device.  Maps to the `capacityUntilFullRawValue` attribute by default.
+- Capacity Remaining Unit Attribute: The device attribute used to indicate the units for Capacity Until Full Value Value Attribute.  Typical useful unit will be 'SECONDS'.  
+- Charging Attribute: The device attribute used to query the current charging state of the device.  Maps to the `isCharging` attribute by default.
+- Charging Value: The value that the Charging attribute will report when the device is charging.  Defaults to 'true'.
+- Plugged In Attribute: The device attribute used to query the current plugged in state of the device.  Maps to the `isPluggedIn` attribute by default.
+- Plugged In Value: The value that the Plugged In attribute will report when the device is plugged in.  Defaults to 'true'.
+- Charge Command: A device command used to charge the device.  Maps to `charge` by default.
+
 ### Fan Speed
 
 The Fan Speed trait is primarily used for fan controllers with multiple speed settings.  It can be controlled by saying things like "Hey Google, set {device} to {speed}" and queried by saying things like "Hey Google, what's the {device} speed?".  It has the following configuration parameters:
@@ -189,7 +208,6 @@ The Locator trait is used for finding devices that have audible or visual indica
 
 - Locator Command: A device command used to locate the device.  Should not require any parameters.  Maps to `locate` by default.
 
-
 ### Lock/Unlock
 
 The Lock/Unlock trait is used for anything that can lock and unlock, such as doors and windows.  It can be controlled by saying things like "Hey Google, lock {device}" and queried by saying things like "Hey Google, is {device} locked?".  Since locks are often security-sensitive, it is recommended, though not required, that PIN code support be configured for device types implementing this trait.  The Lock/Unlock trait has the following configuration parameters:
@@ -198,6 +216,15 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 - Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
 - Lock Command: A device command used to lock the device.  Should not require any parameters.  Maps to `lock` by default.
 - Lock Command: A device command used to unlock the device.  Should not require any parameters.  Maps to `unlock` by default.
+
+### Media State
+
+The Media State trait is used for reporting the current playback and activity state of a media device.  Query command is unknown at the is time.  The trait has the following configuration parameters:
+
+- Support Activity State: Should be set if this device can report the current activity state.  Defaults to 'false'.
+- Support Playback State: Should be set if this device can report the current playback state.  Defaults to 'false'.
+- Activity State Attribute: The device attribute used to query the current activity state of the device.  Maps to the `activityState` attribute by default.
+- Playback State Attribute: The device attribute used to query the current playback state of the device.  Maps to the `playbackState` attribute by default.
 
 ### On/Off
 
@@ -231,6 +258,12 @@ The Open/Close trait is used for devices that can be opened and closed such as d
         - Open Command: Only available if Query Only Open/Close is unset.  A device command used to open the device.  Should not require any parameters.  Maps to `open` by default.
         - Close Command: Only available if Query Only Open/Close is unset.  A device command used to close the device.  Should not require any parameters.  Maps to `close` by default.
 
+### Reboot
+
+The Reboot trait is used for devices that can be rebooted.  It can be controlled by saying things like "Hey Google, reboot {device}".  It has the following configuration parameters:
+
+- Reboot Command: A device command to reboot the device.  Maps to `reboot` by default.
+
 ### Rotation
 
 The Rotation trait is used for devices that can be rotated to a specific position such as slat blinds or a pivoting fan.  It can be controlled by saying things like "Hey Google, rotate {device} to 30%" and queried by saying things like "Hey Google, how far is {device} rotated?".  It has the following configuration parameters:
@@ -247,9 +280,16 @@ This is used for controlling scenes, and should generally only be used with the 
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
 - Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
 
+### SoftwareUpdate
+
+The Software Update trait is used for devices that can have a software update.  It can be controlled by saying things like "Hey Google, Software update {device}." and queried by saying things like "Hey Google, When was {device} last updated?".  It has the following configuration parameters:
+
+- Last Software Update Unix Time Stamp Attribute: The device attribute used to indicate the last Unix time (in seconds) that the update occurred.  Maps to `lastSoftwareUpdateUnixTimestamp` by default.
+- Software Update Command: A device command used to start a software update on the device.  Maps to `softwareUpdate` by default.
+
 ### Start/Stop
 
-This trait is used for devices that support starting, stopping, and optionally pausing operation.  It has the following configuration paramters:
+This trait is used for devices that support starting, stopping, and optionally pausing operation.  It has the following configuration parameters:
 
 - Start/Stop Attribute: The device attribute used to determine if the is currently running.  Maps to `status` by default.
 - Start Value: The value of the "Start/Stop Attribute" that indicates that the device is running.  Defaults to "running".
@@ -292,6 +332,22 @@ The following settings are only available if "Query Only Temperature Setting" is
 - Temperature Buffer: The minimum offset between the heating and cooling setpoints when in Heat/Cool mode.  Not available unless Heat/Cool mode is supported.  Optional.
 - Minimum Setpoint: The minimum allowed value for the device's setpoint.  Optional, but must be specified if Maximum Setpoint is specified.
 - Maximum Setpoint: The maximum allowed value for the device's setpoint.  Optional, but must be specified if Minimum Setpoint is specified.
+
+### Timer
+
+The Timer trait can be used to control a built-in timer on devices, such as starting a new timer as well as pausing and canceling a running timer, and asking how much time is remaining.  It can be controlled by saying things like "Hey Google, Run {device} timer for five minutes.", "Hey Google, Add one minute to {device} timer.", "Hey Google, Pause the {device} timer.", "Hey Google, Resume the {device} timer.", or "Hey Google, Stop the {device} timer."  NOTE:  Control command phrases are unconfirmed.
+And queried by saying things like "Hey Google, How much time is left on {device} timer?".  This trait has the following configuration parameters:
+
+- Command Only (No Query): Set to indicate that this device can only accept commands and not be queried for status.  Defaults to 'false'.
+- Maximum Timer Duration (seconds): The maximum seconds a timer can be set for.  Defaults to '86400'. (24 hours)
+- Time Remaining Attribute: The device attribute used to query the current timer remaining of the device.  Will be -1 (timer stopped) to Maximum Timer Duration (seconds).  Maps to the `timeRemaining` attribute by default.
+- Timer Paused Attribute: The device attribute used to query if the device is paused.  Maps to the `sessionStatus` attribute by default.
+- Timer Paused Value: The value that the Timer Paused Attribute will report when the device is paused.  Defaults to `paused`.
+- Timer Start Command: A device command used to start the device timer.  A parameter of timerTimeSec with the number of seconds between 0 and Maximum Timer Duration (seconds) will be supplied.  Maps to `startTimer` by default.
+- Timer Adjust Command: A device command used to adjust the device timer.  A parameter of timerTimeSec with the number of +/- seconds to adjust the timer to will supplied.  Maps to `setTimeRemaining` by default.
+- Timer Cancel Command: A device command used to pause the device timer.  Maps to `cancel` by default.
+- Timer Pause Command: A device command used to pause the device timer.  Maps to `pause` by default.
+- Timer Resume Command: A device command used to pause the device timer.  Maps to `start` by default.
 
 ### Toggles
 
