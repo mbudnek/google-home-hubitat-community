@@ -578,7 +578,7 @@ private deviceTraitPreferences_Dock(deviceTrait) {
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
+@SuppressWarnings(['UnusedPrivateMethod', 'MethodSize'])
 private deviceTraitPreferences_EnergyStorage(deviceTrait) {
     googleEnergyStorageDistanceUnitForUX = [
         "KILOMETERS":      "Kilometers",
@@ -613,22 +613,14 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 name: "${deviceTrait.name}.chargeCommand",
                 title: "Charge Command",
                 type: "text",
-                defaultValue: "charge",
                 required: true
             )
         }
         input(
-            name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
-            title: "Descriptive Capacity Remaining",
-            type: "text",
-            defaultValue: "descriptiveCapacityRemaining",
-            required: true
-        )
-        input(
             name: "${deviceTrait.name}.capacityRemainingRawValue",
             title: "Capacity Remaining Value",
             type: "text",
-            defaultValue: "capacityRemainingRawValue",
+            defaultValue: "battery",
             required: true
         )
         input(
@@ -639,13 +631,11 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             multiple: false,
             required: true,
             submitOnChange: true
-        )
+        )        
         input(
             name: "${deviceTrait.name}.capacityUntilFullRawValue",
             title: "Capacity Until Full Value",
             type: "text",
-            defaultValue: "capacityUntilFullRawValue",
-            required: true
         )
         input(
             name: "${deviceTrait.name}.capacityUntilFullUnit",
@@ -653,36 +643,32 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             type: "enum",
             options: googleCapacityUnits,
             multiple: false,
-            required: true,
             submitOnChange: true
         )
+        input(
+            name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
+            title: "Descriptive Capacity Remaining",
+            type: "text",
+        )        
         input(
             name: "${deviceTrait.name}.isChargingAttribute",
             title: "Charging Attribute",
             type: "text",
-            defaultValue: "isCharging",
-            required: true
         )
         input(
             name: "${deviceTrait.name}.chargingValue",
             title: "Charging Value",
             type: "text",
-            defaultValue: "true",
-            required: true
         )
         input(
             name: "${deviceTrait.name}.isPluggedInAttribute",
-            title: "ve",
+            title: "Plugged in Attribute",
             type: "text",
-            defaultValue: "isPluggedIn",
-            required: true
         )
         input(
             name: "${deviceTrait.name}.pluggedInValue",
-            title: "Plugged In Value",
+            title: "Plugged in Value",
             type: "text",
-            defaultValue: "true",
-            required: true
         )
         if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
             || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
@@ -692,7 +678,6 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 type: "enum",
                 options: googleEnergyStorageDistanceUnitForUX,
                 multiple: false,
-                required: true,
                 submitOnChange: true
             )
         }
@@ -872,28 +857,33 @@ private deviceTraitPreferences_MediaState(deviceTrait) {
             type: "bool",
             defaultValue: false,
             required: true,
+            submitOnChange: true,
         )
+        if (deviceTrait.supportActivityState) {
+            input(
+                name: "${deviceTrait.name}.activityStateAttribute",
+                title: "Activity State Attribute",
+                type: "text",
+                required: true
+            )
+        }
         input(
             name: "${deviceTrait.name}.supportPlaybackState",
             title: "Support Playback State",
             type: "bool",
             defaultValue: false,
             required: true,
+            submitOnChange: true,
         )
-        input(
-            name: "${deviceTrait.name}.activityStateAttribute",
-            title: "Activity State Attribute",
-            type: "text",
-            defaultValue: "activityState",
-            required: true
-        )
-        input(
-            name: "${deviceTrait.name}.playbackStateAttribute",
-            title: "Playback State Attribute",
-            type: "text",
-            defaultValue: "playbackState",
-            required: true
-        )
+        if (deviceTrait.supportPlaybackState) {
+            input(
+                name: "${deviceTrait.name}.playbackStateAttribute",
+                title: "Playback State Attribute",
+                type: "text",
+                defaultValue: "status",
+                required: true
+            )
+        }
     }
 }
 
@@ -1057,7 +1047,6 @@ def deviceTraitPreferences_Reboot(deviceTrait) {
             name: "${deviceTrait.name}.rebootCommand",
             title: "Reboot Command",
             type: "text",
-            defaultValue: "reboot",
             required: true
         )
     }
@@ -1124,14 +1113,12 @@ def deviceTraitPreferences_SoftwareUpdate(deviceTrait) {
             name: "${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute",
             title: "Last Software Update Unix Timestamp in Seconds Attribute",
             type: "text",
-            defaultValue: "lastSoftwareUpdateUnixTimestamp",
             required: true
         )
         input(
             name: "${deviceTrait.name}.softwareUpdateCommand",
             title: "Software Update Command",
             type: "text",
-            defaultValue: "softwareUpdate",
             required: true
         )
     }
