@@ -172,7 +172,7 @@ The Energy Storage trait is used for any device that can report energy capacity 
 
 - Rechargeable: Set to indicate that this device is rechargeable.  Defaults to 'false'.
 - Query Only Energy Storage: Set to indicate that this device can only be queried for energy storage and not controlled.
-- Supported Distance Units: Set to indicate that units the UI will use if the configured units are set to distance.
+- Supported Distance Units: Set to indicate what units the UI will use if the configured units are set to distance.
 - Descriptive Capacity Remaining Attribute: The device attribute used to query the current capacity of the device with descriptive text should no number capacity remaining value be reported.  Maps to the `descriptiveCapacityRemaining` attribute by default.
 - Capacity Remaining Value Attribute: The device attribute used to query the current capacity of the device.  Maps to the `capacityRemainingRawValue` attribute by default.
 - Capacity Remaining Unit Attribute: The device attribute used to indicate the units for Capacity Remaining Value Attribute.  Typical useful unit will be 'PERCENT'. 
