@@ -177,7 +177,7 @@ The Energy Storage trait is used for any device that can report energy capacity 
 - Capacity Remaining Unit: The unit represented by the Capacity Remaining Value Attribute.  Defaults to 'PERCENT'.
 - Capacity Until Full Value Attribute: The device attribute used to query the capacity until full of the device.
 - Capacity Until Full Unit: The unit represented by the Capacity Until Full Value Value Attribute.
-- Descriptive Capacity Remaining Attribute: The device attribute used to query the current capacity of the device with descriptive text should no number capacity remaining value be reported.  Maps to the `descriptiveCapacityRemaining` attribute by default.
+- Descriptive Capacity Remaining Attribute: The device attribute used to query the current capacity of the device with descriptive text should no number capacity remaining value be reported.
 - Charging Attribute: The device attribute used to query the current charging state of the device.
 - Charging Value: The value that the Charging attribute will report when the device is charging.
 - Plugged In Attribute: The device attribute used to query the current plugged in state of the device.
