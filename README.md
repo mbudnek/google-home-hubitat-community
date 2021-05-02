@@ -174,7 +174,7 @@ The Energy Storage trait is used for any device that can report energy capacity 
 - Query Only Energy Storage: Set to indicate that this device can only be queried for energy storage and not controlled.  If 'true', the following command is available:
     - Charge Command: A device command used to charge the device.
 - Capacity Remaining Value Attribute: The device attribute used to query the current capacity of the device.  Maps to the `battery` attribute by default.
-- Capacity Remaining Unit: The unit represented by the Capacity Remaining Value Attribute.  Defaults to 'PERCENT'.
+- Capacity Remaining Unit: The unit represented by the Capacity Remaining Value Attribute.  Defaults to 'PERCENTAGE'.
 - Capacity Until Full Value Attribute: The device attribute used to query the capacity until full of the device.
 - Capacity Until Full Unit: The unit represented by the Capacity Until Full Value Value Attribute.
 - Descriptive Capacity Remaining Attribute: The device attribute used to query the current capacity of the device with descriptive text should no number capacity remaining value be reported.

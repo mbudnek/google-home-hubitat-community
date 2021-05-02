@@ -604,7 +604,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             name: "${deviceTrait.name}.queryOnlyEnergyStorage",
             title: "Query Only Energy Storage",
             type: "bool",
-            defaultValue: false,
+            defaultValue: true,
             required: true,
             submitOnChange: true
         )
@@ -628,10 +628,11 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             title: "Capacity Remaining Unit",
             type: "enum",
             options: googleCapacityUnits,
+            defaultValue: "PERCENTAGE",
             multiple: false,
             required: true,
             submitOnChange: true
-        )
+        )        
         input(
             name: "${deviceTrait.name}.capacityUntilFullRawValue",
             title: "Capacity Until Full Value",
@@ -649,7 +650,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
             title: "Descriptive Capacity Remaining",
             type: "text",
-        )
+        )        
         input(
             name: "${deviceTrait.name}.isChargingAttribute",
             title: "Charging Attribute",
@@ -670,8 +671,10 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             title: "Plugged in Value",
             type: "text",
         )
-        if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-            || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+    }
+    if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+        || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {    
+        section("Advanced Settings") {
             input(
                 name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                 title: "Supported Distance Units",
@@ -680,7 +683,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 multiple: false,
                 submitOnChange: true
             )
-        }
+        }    
     }
 }
 
@@ -2163,7 +2166,7 @@ private executeCommand_setVolume(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SoftwareUpdate(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "SoftwareUpdate", command)
+    checkMfa(deviceInfo.deviceType, "Software Update", command)
     def softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
     deviceInfo.device."${softwareUpdateTrait.softwareUpdateCommand}"()
     return [:]
@@ -2256,7 +2259,7 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerAdjust(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "TimerAdjust", command)
+    checkMfa(deviceInfo.deviceType, "Adjust", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerAdjustCommand}"()
     def retVal = [:]
@@ -2270,7 +2273,7 @@ private executeCommand_TimerAdjust(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerCancel(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "TimerCancel", command)
+    checkMfa(deviceInfo.deviceType, "Cancel", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerCancelCommand}"()
     return [:]
@@ -2278,7 +2281,7 @@ private executeCommand_TimerCancel(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerPause(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "TimerPause", command)
+    checkMfa(deviceInfo.deviceType, "Pause", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerPauseCommand}"()
     return [:]
@@ -2286,7 +2289,7 @@ private executeCommand_TimerPause(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerResume(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "TimerResume", command)
+    checkMfa(deviceInfo.deviceType, "Resume", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerResumeCommand}"()
     return [:]
@@ -2294,7 +2297,7 @@ private executeCommand_TimerResume(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerStart(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "TimerStart", command)
+    checkMfa(deviceInfo.deviceType, "Start", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerStartCommand}"()
     def retVal = [:]
@@ -2440,24 +2443,41 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
-    def deviceState = [
-        descriptiveCapacityRemaining: device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
-    ]
+    def deviceState = [:]    
+    descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
+    if (descriptiveCapacityRemaining == null) {
+        descriptiveCapacityRemaining = "HIGH"
+    }
+    deviceState.descriptiveCapacityRemaining =  descriptiveCapacityRemaining
     deviceState.capacityRemaining = [
         [
             rawValue: device.currentValue(deviceTrait.capacityRemainingRawValue).toInteger(),
-            unit:     deviceTrait.capacityRemainingUnit
+            unit:     deviceTrait.capacityRemainingUnit,
         ]
     ]
+    capacityUntilFullRawValue = device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger()
+    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit    
+    if ((capacityUntilFullRawValue == null) || (capacityUntilFullUnit == null)) {
+        capacityUntilFullRawValue = 0
+        capacityUntilFullUnit = "PERCENTAGE"
+    }
     deviceState.capacityUntilFull = [
         [
-            rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
-            unit:     deviceTrait.capacityUntilFullUnit
+            rawValue: capacityUntilFullRawValue,
+            unit:     capacityUntilFullUnit,
         ]
-    ]
-    deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
-    deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
-
+    ]    
+    if (deviceTrait.chargingValue != null) {
+        deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
+    } else {
+        deviceState.isCharging = false
+    }
+    if (deviceTrait.pluggedInValue != null) {
+        deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
+    } else {
+        deviceState.isPluggedIn = false
+    }
+    
     return deviceState
 }
 
