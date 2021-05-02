@@ -673,7 +673,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
         )
     }
     if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-        || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {    
+        || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
         section("Advanced Settings") {
             input(
                 name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
@@ -2443,7 +2443,7 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
-    def deviceState = [:]    
+    def deviceState = [:]
     descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
     if (descriptiveCapacityRemaining == null) {
         descriptiveCapacityRemaining = "HIGH"
@@ -2456,7 +2456,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
         ]
     ]
     capacityUntilFullRawValue = device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger()
-    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit    
+    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit
     if ((capacityUntilFullRawValue == null) || (capacityUntilFullUnit == null)) {
         capacityUntilFullRawValue = 0
         capacityUntilFullUnit = "PERCENTAGE"
@@ -2466,7 +2466,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
             rawValue: capacityUntilFullRawValue,
             unit:     capacityUntilFullUnit,
         ]
-    ]    
+    ]
     if (deviceTrait.chargingValue != null) {
         deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
     } else {
@@ -2477,7 +2477,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     } else {
         deviceState.isPluggedIn = false
     }
-    
+
     return deviceState
 }
 
