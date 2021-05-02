@@ -632,7 +632,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             multiple: false,
             required: true,
             submitOnChange: true
-        )        
+        )
         input(
             name: "${deviceTrait.name}.capacityUntilFullRawValue",
             title: "Capacity Until Full Value",
@@ -650,7 +650,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
             title: "Descriptive Capacity Remaining",
             type: "text",
-        )        
+        )
         input(
             name: "${deviceTrait.name}.isChargingAttribute",
             title: "Charging Attribute",
@@ -683,7 +683,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 multiple: false,
                 submitOnChange: true
             )
-        }    
+        }
     }
 }
 
