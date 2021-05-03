@@ -2443,7 +2443,7 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'MethodSize'])
+@SuppressWarnings(['UnusedPrivateMethod', 'LineLength'])
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     def deviceState = [:]
     if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
