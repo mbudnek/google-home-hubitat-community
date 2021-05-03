@@ -591,7 +591,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
         "PERCENTAGE":      "Percentage",
         "KILOWATT_HOURS":  "Kilowatt Hours",
     ]
-    section("Energy Storage Settings") {          
+    section("Energy Storage Settings") {
         input(
             name: "${deviceTrait.name}.isRechargeable",
             title: "Rechargeable",
@@ -616,17 +616,17 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             multiple: false,
             required: true,
             submitOnChange: true
-        )      
+        )
         input(
             name: "${deviceTrait.name}.advancedEnergySettings",
             title: "Enable Advanced Settings",
             type: "bool",
             defaultValue: false,
             submitOnChange: true
-        )          
+        )
     }
-    if (deviceTrait.advancedEnergySettings) {    
-        section("Advanced Settings") {      
+    if (deviceTrait.advancedEnergySettings) {
+        section("Advanced Settings") {
             input(
                 name: "${deviceTrait.name}.queryOnlyEnergyStorage",
                 title: "Query Only Energy Storage",
@@ -642,7 +642,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                     type: "text",
                     required: true
                 )
-            }        
+            }
             input(
                 name: "${deviceTrait.name}.capacityUntilFullRawValue",
                 title: "Capacity Until Full Value",
@@ -660,7 +660,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
                 title: "Descriptive Capacity Remaining",
                 type: "text",
-            )        
+            )
             input(
                 name: "${deviceTrait.name}.isChargingAttribute",
                 title: "Charging Attribute",
@@ -681,8 +681,10 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 title: "Plugged in Value",
                 type: "text",
             )
-            if ((deviceTrait.capacityRemainingUnit == "MILES") || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-                || (deviceTrait.capacityUntilFullUnit == "MILES") || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {               
+            if ((deviceTrait.capacityRemainingUnit == "MILES") 
+			    || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+                || (deviceTrait.capacityUntilFullUnit == "MILES") 
+				|| (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
                 input(
                     name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                     title: "Supported Distance Units",
@@ -692,7 +694,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                     submitOnChange: true
                 )
             }
-        }  
+        }
     }
 }
 
@@ -2452,7 +2454,7 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
-    def deviceState = [:]    
+    def deviceState = [:]
     descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
     if (descriptiveCapacityRemaining == null) {
         descriptiveCapacityRemaining = "HIGH"
@@ -2465,7 +2467,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
         ]
     ]
     capacityUntilFullRawValue = device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger()
-    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit    
+    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit
     if ((capacityUntilFullRawValue == null) || (capacityUntilFullUnit == null)) {
         capacityUntilFullRawValue = 0
         capacityUntilFullUnit = "PERCENTAGE"
@@ -2475,7 +2477,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
             rawValue: capacityUntilFullRawValue,
             unit:     capacityUntilFullUnit,
         ]
-    ]    
+    ]
     if (deviceTrait.chargingValue != null) {
         deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
     } else {
@@ -2486,7 +2488,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     } else {
         deviceState.isPluggedIn = false
     }
-    
+
     return deviceState
 }
 
