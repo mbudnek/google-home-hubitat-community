@@ -2447,7 +2447,8 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     def deviceState = [:]
     if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
-        deviceState.descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
+        deviceState.descriptiveCapacityRemaining =
+		    device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
     }
     deviceState.capacityRemaining = [
         [
