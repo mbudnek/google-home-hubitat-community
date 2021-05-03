@@ -617,83 +617,74 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             required: true,
             submitOnChange: true
         )
+    }
+    section(hidable: true, hidden: true, "Advanced Settings") {
         input(
-            name: "${deviceTrait.name}.advancedEnergySettings",
-            title: "Enable Advanced Settings",
+            name: "${deviceTrait.name}.queryOnlyEnergyStorage",
+            title: "Query Only Energy Storage",
             type: "bool",
-            defaultValue: false,
+            defaultValue: true,
+            required: true,
             submitOnChange: true
         )
-    }
-    if (deviceTrait.advancedEnergySettings) {
-        section("Advanced Settings") {
+        if (!deviceTrait.queryOnlyEnergyStorage) {
             input(
-                name: "${deviceTrait.name}.queryOnlyEnergyStorage",
-                title: "Query Only Energy Storage",
-                type: "bool",
-                defaultValue: true,
-                required: true,
-                submitOnChange: true
-            )
-            if (!deviceTrait.queryOnlyEnergyStorage) {
-                input(
-                    name: "${deviceTrait.name}.chargeCommand",
-                    title: "Charge Command",
-                    type: "text",
-                    required: true
-                )
-            }
-            input(
-                name: "${deviceTrait.name}.capacityUntilFullRawValue",
-                title: "Capacity Until Full Value",
+                name: "${deviceTrait.name}.chargeCommand",
+                title: "Charge Command",
                 type: "text",
+                required: true
             )
+        }
+        input(
+            name: "${deviceTrait.name}.capacityUntilFullRawValue",
+            title: "Capacity Until Full Value",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.capacityUntilFullUnit",
+            title: "Capacity Until Full Unit",
+            type: "enum",
+            options: googleCapacityUnits,
+            multiple: false,
+            submitOnChange: true
+        )
+        input(
+            name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
+            title: "Descriptive Capacity Remaining",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.isChargingAttribute",
+            title: "Charging Attribute",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.chargingValue",
+            title: "Charging Value",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.isPluggedInAttribute",
+            title: "Plugged in Attribute",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.pluggedInValue",
+            title: "Plugged in Value",
+            type: "text",
+        )
+        if ((deviceTrait.capacityRemainingUnit == "MILES")
+            || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+            || (deviceTrait.capacityUntilFullUnit == "MILES")
+            || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
             input(
-                name: "${deviceTrait.name}.capacityUntilFullUnit",
-                title: "Capacity Until Full Unit",
+                name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
+                title: "Supported Distance Units",
                 type: "enum",
-                options: googleCapacityUnits,
+                options: googleEnergyStorageDistanceUnitForUX,
                 multiple: false,
                 submitOnChange: true
             )
-            input(
-                name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
-                title: "Descriptive Capacity Remaining",
-                type: "text",
-            )
-            input(
-                name: "${deviceTrait.name}.isChargingAttribute",
-                title: "Charging Attribute",
-                type: "text",
-            )
-            input(
-                name: "${deviceTrait.name}.chargingValue",
-                title: "Charging Value",
-                type: "text",
-            )
-            input(
-                name: "${deviceTrait.name}.isPluggedInAttribute",
-                title: "Plugged in Attribute",
-                type: "text",
-            )
-            input(
-                name: "${deviceTrait.name}.pluggedInValue",
-                title: "Plugged in Value",
-                type: "text",
-            )
-            if ((deviceTrait.capacityRemainingUnit == "MILES")
-                || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-                || (deviceTrait.capacityUntilFullUnit == "MILES")
-                || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
-                input(
-                    name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
-                    title: "Supported Distance Units",
-                    type: "enum",
-                    options: googleEnergyStorageDistanceUnitForUX,
-                    multiple: false,
-                    submitOnChange: true
-                )
-            }
         }
     }
 }
@@ -3069,7 +3060,6 @@ private traitFromSettings_EnergyStorage(traitName) {
         isPluggedInAttribute:                     settings."${traitName}.isPluggedInAttribute",
         pluggedInValue:                           settings."${traitName}.pluggedInValue",
         chargeCommand:                            settings."${traitName}.chargeCommand",
-        advancedEnergySettings:                   settings."${traitName}.advancedEnergySettings",
         commands:                                 []
     ]
     if (!energyStorageTrait.queryOnlyEnergyStorage) {
@@ -3552,7 +3542,6 @@ private deleteDeviceTrait_Dock(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_EnergyStorage(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.advancedEnergySettings")
     app.removeSetting("${deviceTrait.name}.energyStorageDistanceUnitForUX")
     app.removeSetting("${deviceTrait.name}.isRechargeable")
     app.removeSetting("${deviceTrait.name}.queryOnlyEnergyStorage")
