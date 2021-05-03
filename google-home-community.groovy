@@ -627,7 +627,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             required: true,
             submitOnChange: true
         )
-        if (!deviceTrait.queryOnlyEnergyStorage) {
+        if (deviceTrait.queryOnlyEnergyStorage == false) {
             input(
                 name: "${deviceTrait.name}.chargeCommand",
                 title: "Charge Command",
@@ -1471,7 +1471,7 @@ private deviceTraitPreferences_Timer(deviceTrait) {
             required: true,
             defaultValue: "86400"
         )
-        if (!deviceTrait.commandOnlyTimer) {
+        if (deviceTrait.commandOnlyTimer == false) {
             input(
                 name: "${deviceTrait.name}.timerRemainingSecAttribute",
                 title: "Time Remaining Attribute",
@@ -2446,39 +2446,29 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     def deviceState = [:]
-    descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
-    if (descriptiveCapacityRemaining == null) {
-        descriptiveCapacityRemaining = "HIGH"
+    if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
+        deviceState.descriptiveCapacityRemaining =  device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
     }
-    deviceState.descriptiveCapacityRemaining =  descriptiveCapacityRemaining
     deviceState.capacityRemaining = [
         [
             rawValue: device.currentValue(deviceTrait.capacityRemainingRawValue).toInteger(),
             unit:     deviceTrait.capacityRemainingUnit,
         ]
     ]
-    capacityUntilFullRawValue = device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger()
-    capacityUntilFullUnit     = deviceTrait.capacityUntilFullUnit
-    if ((capacityUntilFullRawValue == null) || (capacityUntilFullUnit == null)) {
-        capacityUntilFullRawValue = 0
-        capacityUntilFullUnit = "PERCENTAGE"
-    }
-    deviceState.capacityUntilFull = [
-        [
-            rawValue: capacityUntilFullRawValue,
-            unit:     capacityUntilFullUnit,
-        ]
-    ]
-    if (deviceTrait.chargingValue != null) {
-        deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
-    } else {
-        deviceState.isCharging = false
-    }
-    if (deviceTrait.pluggedInValue != null) {
-        deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
-    } else {
-        deviceState.isPluggedIn = false
-    }
+    if (deviceTrait.isRechargeable) {
+        if (deviceTrait.capacityUntilFullRawValue != null) {    
+            deviceState.capacityUntilFull = [
+                rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
+                unit:     deviceTrait.capacityUntilFullUnit,
+            ]
+        }
+        if (deviceTrait.chargingValue != null) {
+           deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
+        } 
+        if (deviceTrait.pluggedInValue != null) {
+            deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
+        }
+    } 
 
     return deviceState
 }
