@@ -681,10 +681,10 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
                 title: "Plugged in Value",
                 type: "text",
             )
-            if ((deviceTrait.capacityRemainingUnit == "MILES") 
-			    || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-                || (deviceTrait.capacityUntilFullUnit == "MILES") 
-				|| (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+            if ((deviceTrait.capacityRemainingUnit == "MILES")
+                || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+                || (deviceTrait.capacityUntilFullUnit == "MILES")
+                || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
                 input(
                     name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
                     title: "Supported Distance Units",
