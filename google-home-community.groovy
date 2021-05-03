@@ -2447,8 +2447,7 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     def deviceState = [:]
     if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
-        deviceState.descriptiveCapacityRemaining
-            = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
+        deviceState.descriptiveCapacityRemaining = device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
     }
     deviceState.capacityRemaining = [
         [
@@ -2467,8 +2466,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
             deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
         }
         if (deviceTrait.pluggedInValue != null) {
-            deviceState.isPluggedIn
-                = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
+            deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
         }
     }
 
