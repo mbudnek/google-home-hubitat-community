@@ -618,7 +618,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
             submitOnChange: true
         )
     }
-    section(hidable: true, hidden: true, "Advanced Settings") {
+    section(hideable: true, hidden: true, "Advanced Settings") {
         input(
             name: "${deviceTrait.name}.queryOnlyEnergyStorage",
             title: "Query Only Energy Storage",
