@@ -2443,7 +2443,7 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'LineLength'])
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     def deviceState = [:]
     if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
@@ -2463,10 +2463,12 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
             ]
         }
         if (deviceTrait.chargingValue != null) {
-            deviceState.isCharging = device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
+            deviceState.isCharging =
+                device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
         }
         if (deviceTrait.pluggedInValue != null) {
-            deviceState.isPluggedIn = device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
+            deviceState.isPluggedIn =
+                device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
         }
     }
 
