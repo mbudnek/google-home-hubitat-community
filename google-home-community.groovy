@@ -49,6 +49,7 @@
 //   * Apr 18 2021 - Added Locator Trait
 //   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and
 //                   Timer (commands untested) Traits.  Added missing camera trait protocol attributes.
+//   * May 04 2021 - Fixed time remaining trait of Energy Storage
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2459,8 +2460,10 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     if (deviceTrait.isRechargeable) {
         if (deviceTrait.capacityUntilFullRawValue != null) {
             deviceState.capacityUntilFull = [
-                rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
-                unit:     deviceTrait.capacityUntilFullUnit,
+                [
+                    rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
+                    unit:     deviceTrait.capacityUntilFullUnit,
+                ]
             ]
         }
         if (deviceTrait.chargingValue != null) {
