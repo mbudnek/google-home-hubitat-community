@@ -1743,13 +1743,16 @@ private handleExecuteRequest(request) {
     commands.each { command ->
         def devices = command.devices.collect { device -> knownDevices."${device.id}" }
         def attrsToAwait = [:].withDefault { [:] }
+        def states = [:].withDefault { [:] }
         def results = [:]
         // Send appropriate commands to devices
         devices.each { device ->
             command.execution.each { execution ->
                 def commandName = execution.command.split("\\.").last()
                 try {
-                    attrsToAwait[device.device] += "executeCommand_${commandName}"(device, execution)
+                    def (resultAttrsToAwait, resultStates) = "executeCommand_${commandName}"(device, execution)
+                    attrsToAwait[device.device] += resultAttrsToAwait
+                    states[device.device] += resultStates
                     results[device.device] = [
                         status: "SUCCESS"
                     ]
@@ -1771,32 +1774,46 @@ private handleExecuteRequest(request) {
                 }
             }
         }
-        // Skip loop if immediateResponse desired
-        if (!settings.immediateResponse) {
-            // Wait up to 5 seconds for devices to report their new state
-            for (def i = 0; i < 50; ++i) {
-                def ready = attrsToAwait.every { device, attributes ->
-                    attributes.every { attrName, attrValue ->
-                        attributeHasExpectedValue(device, attrName, attrValue)
-                    }
-                }
-                if (ready) {
-                    break
-                } else {
-                    pauseExecution(100)
-                }
+        // Wait up to 1 second for immediate response, 5 seconds otherwise.
+        def pollTimeoutMs = settings.immediateResponse ? 1000 : 5000
+        def singlePollTimeMs = 100
+        def numLoops = pollTimeoutMs / singlePollTimeMs
+        LOGGER.debug("Polling device attributes for ${pollTimeoutMs} ms")
+        def deviceReadyStates = [:]
+        for (def i = 0; i < numLoops; ++i) {
+            deviceReadyStates = attrsToAwait.collectEntries { device, attributes ->
+                [device, attributes.every { attrName, attrValue ->
+                    attributeHasExpectedValue(device, attrName, attrValue)
+                }]
+            }
+            def ready = deviceReadyStates.every { device, deviceReady -> deviceReady }
+            if (ready) {
+                LOGGER.debug("All devices reached expected state and are ready.")
+                break
+            } else {
+                pauseExecution(singlePollTimeMs)
             }
         }
+
         // Now build our response message
         devices.each { device ->
             def result = results[device.device]
+            def deviceReady = deviceReadyStates[device.device]
             result.ids = [device.device.id]
             if (result.status == "SUCCESS") {
+                if (!deviceReady) {
+                    LOGGER.debug("Device ${device.device} not ready, moving to PENDING")
+                    result.status = "PENDING"
+                }
                 def deviceState = [
                     online: true
                 ]
-                device.deviceType.traits.each { traitType, deviceTrait ->
-                    deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
+                if (settings.immediateResponse) {
+                    deviceState += states[device.device]
+                } else {
+                    device.deviceType.traits.each { traitType, deviceTrait ->
+                        deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
+                    }
                 }
                 result.states = deviceState
             }
@@ -1878,7 +1895,7 @@ private executeCommand_ActivateScene(deviceInfo, command) {
             )
         }
     }
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1890,13 +1907,18 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
     return [
-        (brightnessTrait.brightnessAttribute): brightnessToSet
+        [
+            (brightnessTrait.brightnessAttribute): brightnessToSet,
+        ],
+        [
+            brightness: command.params.brightness,
+        ],
     ]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_GetCameraStream(deviceInfo, command) {
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1905,6 +1927,7 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
     def colorTrait = deviceInfo.deviceType.traits.ColorSetting
 
     def checkAttrs = [:]
+    def states = [color: command.params.color]
     if (command.params.color.temperature) {
         def temperature = command.params.color.temperature
         deviceInfo.device."${colorTrait.setColorTemperatureCommand}"(temperature)
@@ -1941,7 +1964,7 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
             ]
         }
     }
-    return checkAttrs
+    return [checkAttrs, states]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1952,7 +1975,12 @@ private executeCommand_Dock(deviceInfo, command) {
     checkValue = dockTrait.dockValue
     deviceInfo.device."${dockTrait.dockCommand}"()
     return [
-        (dockTrait.dockAttribute): checkValue
+        [
+            (dockTrait.dockAttribute): checkValue,
+        ],
+        [
+            isDocked: true,
+        ]
     ]
 }
 
@@ -1969,7 +1997,7 @@ private executeCommand_Reverse(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     deviceInfo.device."${fanSpeedTrait.reverseCommand}"()
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
@@ -1977,7 +2005,7 @@ private executeCommand_Locate(deviceInfo, command) {
     def locatorTrait = deviceInfo.deviceType.traits.Locator
     checkMfa(deviceInfo.deviceType, "Locate", command)
     deviceInfo.device."${locatorTrait.locatorCommand}"()
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1995,7 +2023,13 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     }
 
     return [
-        (lockUnlockTrait.lockedUnlockedAttribute): checkValue
+        [
+            (lockUnlockTrait.lockedUnlockedAttribute): checkValue,
+        ],
+        [
+            isJammed: false,
+            isLocked: command.params.lock,
+        ],
     ]
 }
 
@@ -2014,7 +2048,12 @@ private executeCommand_mute(deviceInfo, command) {
     }
 
     return [
-        (volumeTrait.muteAttribute): checkValue
+        [
+            (volumeTrait.muteAttribute): checkValue,
+        ],
+        [
+            isMuted: command.params.mute,
+        ],
     ]
 }
 
@@ -2051,7 +2090,12 @@ private executeCommand_OnOff(deviceInfo, command) {
         }
     }
     return [
-        (onOffTrait.onOffAttribute): checkValue
+        [
+            (onOffTrait.onOffAttribute): checkValue,
+        ],
+        [
+            on: command.params.on,
+        ],
     ]
 }
 
@@ -2076,7 +2120,12 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = openPercent
     }
     return [
-        (openCloseTrait.openCloseAttribute): checkValue
+        [
+            (openCloseTrait.openCloseAttribute): checkValue,
+        ],
+        [
+            openPercent: openPercent,
+        ],
     ]
 }
 
@@ -2096,7 +2145,12 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
 
     deviceInfo.device."${rotationTrait.setRotationCommand}"(position)
     return [
-        (rotationTrait.rotationAttribute): position
+        [
+            (rotationTrait.rotationAttribute): position,
+        ],
+        [
+            rotationPercent: command.params.rotationPercent,
+        ],
     ]
 }
 
@@ -2108,7 +2162,12 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 
     deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
     return [
-        (fanSpeedTrait.currentSpeedAttribute): fanSpeed
+        [
+            (fanSpeedTrait.currentSpeedAttribute): fanSpeed,
+        ],
+        [
+            currentFanSpeedSetting: fanSpeed,
+        ],
     ]
 }
 
@@ -2120,7 +2179,12 @@ private executeCommand_SetHumidity(deviceInfo, command) {
 
     deviceInfo.device."${humiditySettingTrait.setHumidityCommand}"(humiditySetpoint)
     return [
-        (humiditySettingTrait.humiditySetpointAttribute): humiditySetpoint
+        [
+            (humiditySettingTrait.humiditySetpointAttribute): humiditySetpoint
+        ],
+        [
+            humiditySetpointPercent: humiditySetpoint,
+        ],
     ]
 }
 
@@ -2135,7 +2199,12 @@ private executeCommand_SetTemperature(deviceInfo, command) {
     deviceInfo.device."${temperatureControlTrait.setTemperatureCommand}"(setpoint)
 
     return [
-        (temperatureControlTrait.setpointAttribute): setpoint
+        [
+            (temperatureControlTrait.setpointAttribute): setpoint,
+        ],
+        [
+            temperatureSetpointCelcius: setpoint,
+        ],
     ]
 }
 
@@ -2144,7 +2213,8 @@ private executeCommand_SetToggles(deviceInfo, command) {
     def togglesTrait = deviceInfo.deviceType.traits.Toggles
     def togglesToSet = command.params.updateToggleSettings
 
-    def statesToCheck = [:]
+    def attrsToCheck = [:]
+    def states = [currentToggleSettings: togglesToSet]
     togglesToSet.each { toggleName, toggleValue ->
         def toggle = togglesTrait.toggles.find { it.name == toggleName }
         def fakeDeviceInfo = [
@@ -2158,9 +2228,9 @@ private executeCommand_SetToggles(deviceInfo, command) {
             device: deviceInfo.device
         ]
         checkMfa(deviceInfo.deviceType, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
-        statesToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        attrsToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
     }
-    return statesToCheck
+    return [attrsToCheck, states]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2169,9 +2239,15 @@ private executeCommand_setVolume(deviceInfo, command) {
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeLevel = command.params.volumeLevel
     deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
-
+    states = [currentVolume: volumeLevel]
+    if (deviceInfo.deviceType.traits.canMuteUnmute) {
+        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+    }
     return [
-        (volumeTrait.volumeAttribute): volumeLevel
+        [
+            (volumeTrait.volumeAttribute): volumeLevel,
+        ],
+        states,
     ]
 }
 
@@ -2197,7 +2273,12 @@ private executeCommand_StartStop(deviceInfo, command) {
         deviceInfo.device."${startStopTrait.stopCommand}"()
     }
     return [
-        (startStopTrait.startStopAttribute): checkValue
+        [
+            (startStopTrait.startStopAttribute): checkValue,
+        ],
+        [
+            isRunning: command.params.start,
+        ],
     ]
 }
 
@@ -2211,7 +2292,12 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
         checkValue = startStopTrait.pauseValue
     }
     return [
-        (startStopTrait.pauseUnPauseAttribute): checkValue
+        [
+            (startStopTrait.pauseUnPauseAttribute): checkValue,
+        ],
+        [
+            isPaused: command.params.pause,
+        ],
     ]
 }
 
@@ -2230,7 +2316,12 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     deviceInfo.device."${setSetpointCommand}"(setpoint)
 
     return [
-        (temperatureSettingTrait.modeSetpointAttributes[googleMode]): setpoint
+        [
+            (temperatureSettingTrait.modeSetpointAttributes[googleMode]): setpoint,
+        ],
+        [
+            thermostatTemperatureSetpoint: setpoint,
+        ],
     ]
 }
 
@@ -2250,8 +2341,14 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
 
     def setRangeAttributes = temperatureSettingTrait.modeSetpointAttributes["heatcool"]
     return [
-        (setRangeAttributes.coolingSetpointAttribute): coolSetpoint,
-        (setRangeAttributes.heatingSetpointAttribute): heatSetpoint
+        [
+            (setRangeAttributes.coolingSetpointAttribute): coolSetpoint,
+            (setRangeAttributes.heatingSetpointAttribute): heatSetpoint,
+        ],
+        [
+            thermostatTemperatureSetpointHigh: coolSetpoint,
+            thermostatTemperatureSetpointLow: heatSetpoint,
+        ],
     ]
 }
 
@@ -2264,7 +2361,12 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
     deviceInfo.device."${temperatureSettingTrait.setModeCommand}"(hubitatMode)
 
     return [
-        (temperatureSettingTrait.currentModeAttribute): hubitatMode
+        [
+            (temperatureSettingTrait.currentModeAttribute): hubitatMode,
+        ],
+        [
+            thermostatMode: googleMode,
+        ],
     ]
 }
 
@@ -2349,8 +2451,16 @@ private executeCommand_volumeRelative(deviceInfo, command) {
         newVolume = device.currentValue(volumeTrait.volumeAttribute)
     }
 
+    states = [currentVolume: newVolume]
+    if (volumeTrait.canMuteUnmute) {
+        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+    }
+
     return [
-        (volumeTrait.volumeAttribute): newVolume
+        [
+            (volumeTrait.volumeAttribute): newVolume,
+        ],
+        states,
     ]
 }
 
