@@ -52,6 +52,7 @@
 //   * May 04 2021 - Fixed time remaining trait of Energy Storage
 //   * May 07 2021 - Immediate response mode: change poll from 5 seconds to 1 second and return
 //                   PENDING response for any devices which haven't yet reached the desired state
+//   * May 07 2021 - Add roomHint based on Hubitat room names
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2800,6 +2801,8 @@ private deviceStateForTrait_Volume(deviceTrait, device) {
 }
 
 private handleSyncRequest(request) {
+    def rooms = this.rooms?.collectEntries { [(it.id): it] } ?: [:]
+
     def resp = [
         requestId: request.JSON.requestId,
         payload: [
@@ -2816,6 +2819,8 @@ private handleSyncRequest(request) {
             attributes += "attributesForTrait_${traitType}"(deviceTrait)
         }
         deviceType.devices.each { device ->
+            def roomId = device.device?.roomId
+            def roomName = rooms[roomId]?.name
             resp.payload.devices << [
                 id: device.id,
                 type: "action.devices.types.${deviceType.googleDeviceType}",
@@ -2826,6 +2831,7 @@ private handleSyncRequest(request) {
                 ],
                 willReportState: false,
                 attributes: attributes,
+                roomHint: roomName,
             ]
         }
     }
