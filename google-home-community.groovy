@@ -1601,8 +1601,8 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Brightness", command)
     def brightnessTrait = deviceInfo.deviceType.traits.Brightness
-    // Google uses 0...100 for brightness but hubitat uses 0...99, so clamp
-    def brightnessToSet = Math.min(command.params.brightness, 99)
+    // Google uses 0...100 for brightness but hubitat uses 0...99, so map
+    def brightnessToSet = Math.round(command.params.brightness * 99 / 100)
 
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
     return [
@@ -1778,8 +1778,8 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
         checkMfa(deviceInfo.deviceType, "Set Position", command)
-        // Google uses 0...100 for position but hubitat uses 0...99, so clamp
-        openPercent = Math.min(openPercent, 99)
+        // Google uses 0...100 for position but hubitat uses 0...99, so map
+        openPercent = Math.round(openPercent * 99 / 100)
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
         checkValue = openPercent
     }
@@ -2022,8 +2022,10 @@ private handleQueryRequest(request) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Brightness(deviceTrait, device) {
+    // Google uses 0...100 for brightness but hubitat uses 0...99, so map
+    def brightness = Math.round(device.currentValue(deviceTrait.brightnessAttribute) * 100 / 99)
     return [
-        brightness: device.currentValue(deviceTrait.brightnessAttribute)
+        brightness: brightness,
     ]
 }
 
@@ -2061,7 +2063,7 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
         def value = device.currentValue(deviceTrait.levelAttribute)
 
         // Hubitat reports hue in the range 0...100, but Google wants it in degrees (0...360)
-        hue = hue * 360 / 100
+        hue = Math.round(hue * 360 / 100)
         // Hubitat reports saturation and value in the range 0...100 but
         // Google wants them as floats in the range 0...1
         saturation = saturation / 100
@@ -2149,7 +2151,8 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
             openPercent = 0
         }
     } else {
-        openPercent = device.currentValue(deviceTrait.openCloseAttribute)
+        // Google uses 0...100 for position but hubitat uses 0...99, so map
+        openPercent = Math.round(device.currentValue(deviceTrait.openCloseAttribute) * 100 / 99)
     }
     return [
         openPercent: openPercent
