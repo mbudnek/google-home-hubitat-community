@@ -53,6 +53,7 @@
 //   * May 07 2021 - Immediate response mode: change poll from 5 seconds to 1 second and return
 //                   PENDING response for any devices which haven't yet reached the desired state
 //   * May 07 2021 - Add roomHint based on Hubitat room names
+//   * May 07 2021 - Log requests and responses in JSON to make debugging easier
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1697,17 +1698,20 @@ private deviceTraitPreferences_Volume(deviceTrait) {
 }
 
 def handleAction() {
-    LOGGER.debug(request.JSON)
+    LOGGER.debug(request.body)
     def requestType = request.JSON.inputs[0].intent
+    def response
     if (requestType == "action.devices.SYNC") {
-        return handleSyncRequest(request)
+        response = handleSyncRequest(request)
     } else if (requestType == "action.devices.QUERY") {
-        return handleQueryRequest(request)
+        response = handleQueryRequest(request)
     } else if (requestType == "action.devices.EXECUTE") {
-        return handleExecuteRequest(request)
+        response = handleExecuteRequest(request)
     } else if (requestType == "action.devices.DISCONNECT") {
-        return [:]
+        response = [:]
     }
+    LOGGER.debug(JsonOutput.toJson(response))
+    return response
 }
 
 private attributeHasExpectedValue(device, attrName, attrValue) {
@@ -1811,7 +1815,6 @@ private handleExecuteRequest(request) {
             resp.payload.commands << result
         }
     }
-    LOGGER.debug(resp)
     return resp
 }
 
@@ -2477,7 +2480,6 @@ private handleQueryRequest(request) {
         }
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
-    LOGGER.debug(resp)
     return resp
 }
 
@@ -2836,7 +2838,6 @@ private handleSyncRequest(request) {
         }
     }
 
-    LOGGER.debug(resp)
     return resp
 }
 
