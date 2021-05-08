@@ -46,7 +46,14 @@
 //   * Jan 19 2021 - Added Dock and StartStop Traits
 //   * Jan 31 2021 - Don't break the whole app if someone creates an invalid toggle
 //   * Feb 28 2021 - Add new device types supported by Google
-//   * Apr 18 2021 - Added Locator Traits
+//   * Apr 18 2021 - Added Locator Trait
+//   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and
+//                   Timer (commands untested) Traits.  Added missing camera trait protocol attributes.
+//   * May 04 2021 - Fixed time remaining trait of Energy Storage
+//   * May 07 2021 - Immediate response mode: change poll from 5 seconds to 1 second and return
+//                   PENDING response for any devices which haven't yet reached the desired state
+//   * May 07 2021 - Add roomHint based on Hubitat room names
+//   * May 07 2021 - Log requests and responses in JSON to make debugging easier
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -421,6 +428,12 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_CameraStream(deviceTrait) {
+    googleCameraStreamSupportedProtocols = [
+        "progressive_mp4":         "Progressive MP4",
+        "hls":                     "HLS",
+        "dash":                    "Dash",
+        "smooth_stream":           "Smooth Stream",
+    ]
     section("Stream Camera") {
         input(
             name: "${deviceTrait.name}.cameraStreamAttribute",
@@ -428,6 +441,14 @@ def deviceTraitPreferences_CameraStream(deviceTrait) {
             type: "text",
             defaultValue: "settings",
             required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cameraStreamSupportedProtocols",
+            title: "Camera Stream Supported Protocols",
+            type: "enum",
+            options: googleCameraStreamSupportedProtocols,
+            multiple: true,
+            required: true,
         )
     }
 }
@@ -559,6 +580,117 @@ private deviceTraitPreferences_Dock(deviceTrait) {
             defaultValue: "returnToDock",
             required: true
         )
+    }
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'MethodSize'])
+private deviceTraitPreferences_EnergyStorage(deviceTrait) {
+    googleEnergyStorageDistanceUnitForUX = [
+        "KILOMETERS":      "Kilometers",
+        "MILES":           "Miles",
+    ]
+    googleCapacityUnits = [
+        "SECONDS":         "Seconds",
+        "MILES":           "Miles",
+        "KILOMETERS":      "Kilometers",
+        "PERCENTAGE":      "Percentage",
+        "KILOWATT_HOURS":  "Kilowatt Hours",
+    ]
+    section("Energy Storage Settings") {
+        input(
+            name: "${deviceTrait.name}.isRechargeable",
+            title: "Rechargeable",
+            type: "bool",
+            defaultValue: false,
+            required: true,
+            submitOnChange: true
+        )
+        input(
+            name: "${deviceTrait.name}.capacityRemainingRawValue",
+            title: "Capacity Remaining Value",
+            type: "text",
+            defaultValue: "battery",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.capacityRemainingUnit",
+            title: "Capacity Remaining Unit",
+            type: "enum",
+            options: googleCapacityUnits,
+            defaultValue: "PERCENTAGE",
+            multiple: false,
+            required: true,
+            submitOnChange: true
+        )
+    }
+    section(hideable: true, hidden: true, "Advanced Settings") {
+        input(
+            name: "${deviceTrait.name}.queryOnlyEnergyStorage",
+            title: "Query Only Energy Storage",
+            type: "bool",
+            defaultValue: true,
+            required: true,
+            submitOnChange: true
+        )
+        if (deviceTrait.queryOnlyEnergyStorage == false) {
+            input(
+                name: "${deviceTrait.name}.chargeCommand",
+                title: "Charge Command",
+                type: "text",
+                required: true
+            )
+        }
+        input(
+            name: "${deviceTrait.name}.capacityUntilFullRawValue",
+            title: "Capacity Until Full Value",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.capacityUntilFullUnit",
+            title: "Capacity Until Full Unit",
+            type: "enum",
+            options: googleCapacityUnits,
+            multiple: false,
+            submitOnChange: true
+        )
+        input(
+            name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
+            title: "Descriptive Capacity Remaining",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.isChargingAttribute",
+            title: "Charging Attribute",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.chargingValue",
+            title: "Charging Value",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.isPluggedInAttribute",
+            title: "Plugged in Attribute",
+            type: "text",
+        )
+        input(
+            name: "${deviceTrait.name}.pluggedInValue",
+            title: "Plugged in Value",
+            type: "text",
+        )
+        if ((deviceTrait.capacityRemainingUnit == "MILES")
+            || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
+            || (deviceTrait.capacityUntilFullUnit == "MILES")
+            || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+            input(
+                name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
+                title: "Supported Distance Units",
+                type: "enum",
+                options: googleEnergyStorageDistanceUnitForUX,
+                multiple: false,
+                submitOnChange: true
+            )
+        }
     }
 }
 
@@ -727,6 +859,45 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_MediaState(deviceTrait) {
+    section("Media State Settings") {
+        input(
+            name: "${deviceTrait.name}.supportActivityState",
+            title: "Support Activity State",
+            type: "bool",
+            defaultValue: false,
+            required: true,
+            submitOnChange: true,
+        )
+        if (deviceTrait.supportActivityState) {
+            input(
+                name: "${deviceTrait.name}.activityStateAttribute",
+                title: "Activity State Attribute",
+                type: "text",
+                required: true
+            )
+        }
+        input(
+            name: "${deviceTrait.name}.supportPlaybackState",
+            title: "Support Playback State",
+            type: "bool",
+            defaultValue: false,
+            required: true,
+            submitOnChange: true,
+        )
+        if (deviceTrait.supportPlaybackState) {
+            input(
+                name: "${deviceTrait.name}.playbackStateAttribute",
+                title: "Playback State Attribute",
+                type: "text",
+                defaultValue: "status",
+                required: true
+            )
+        }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_OnOff(deviceTrait) {
     section("On/Off Settings") {
         input(
@@ -880,6 +1051,18 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+def deviceTraitPreferences_Reboot(deviceTrait) {
+    section("Reboot Preferences") {
+        input(
+            name: "${deviceTrait.name}.rebootCommand",
+            title: "Reboot Command",
+            type: "text",
+            required: true
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_Rotation(deviceTrait) {
     section("Rotation Preferences") {
         input(
@@ -930,6 +1113,24 @@ def deviceTraitPreferences_Scene(deviceTrait) {
                 required: true
             )
         }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+def deviceTraitPreferences_SoftwareUpdate(deviceTrait) {
+    section("Software Update Settings") {
+        input(
+            name: "${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute",
+            title: "Last Software Update Unix Timestamp in Seconds Attribute",
+            type: "text",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.softwareUpdateCommand",
+            title: "Software Update Command",
+            type: "text",
+            required: true
+        )
     }
 }
 
@@ -1258,6 +1459,85 @@ private temperatureSettingControlPreferences(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_Timer(deviceTrait) {
+    section("Timer Settings") {
+        input(
+            name: "${deviceTrait.name}.commandOnlyTimer",
+            title: "Command Only (No Query)",
+            type: "bool",
+            required: true,
+            defaultValue: false,
+            submitOnChange: true,
+        )
+        input(
+            name: "${deviceTrait.name}.maxTimerLimitSec",
+            title: "Maximum Timer Duration (seconds)",
+            type: "integer",
+            required: true,
+            defaultValue: "86400"
+        )
+        if (deviceTrait.commandOnlyTimer == false) {
+            input(
+                name: "${deviceTrait.name}.timerRemainingSecAttribute",
+                title: "Time Remaining Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "timeRemaining"
+            )
+            input(
+                name: "${deviceTrait.name}.timerPausedAttribute",
+                title: "Timer Paused Attribute",
+                type: "text",
+                required: true,
+                defaultValue: "sessionStatus"
+            )
+            input(
+                name: "${deviceTrait.name}.timerPausedValue",
+                title: "Timer Paused Value",
+                type: "text",
+                required: true,
+                defaultValue: "paused"
+            )
+        }
+        input(
+            name: "${deviceTrait.name}.timerStartCommand",
+            title: "Timer Start Command",
+            type: "text",
+            required: true,
+            defaultValue: "startTimer"
+        )
+        input(
+            name: "${deviceTrait.name}.timerAdjustCommand",
+            title: "Timer Adjust Command",
+            type: "text",
+            required: true,
+            defaultValue: "setTimeRemaining"
+        )
+        input(
+            name: "${deviceTrait.name}.timerCancelCommand",
+            title: "Timer Cancel Command",
+            type: "text",
+            required: true,
+            defaultValue: "cancel"
+        )
+        input(
+            name: "${deviceTrait.name}.timerPauseCommand",
+            title: "Timer Pause Command",
+            type: "text",
+            required: true,
+            defaultValue: "pause"
+        )
+        input(
+            name: "${deviceTrait.name}.timerResumeCommand",
+            title: "Timer Resume Command",
+            type: "text",
+            required: true,
+            defaultValue: "start"
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_Toggles(deviceTrait) {
     section("Toggles") {
         deviceTrait.toggles.each { toggle ->
@@ -1418,17 +1698,20 @@ private deviceTraitPreferences_Volume(deviceTrait) {
 }
 
 def handleAction() {
-    LOGGER.debug(request.JSON)
+    LOGGER.debug(request.body)
     def requestType = request.JSON.inputs[0].intent
+    def response
     if (requestType == "action.devices.SYNC") {
-        return handleSyncRequest(request)
+        response = handleSyncRequest(request)
     } else if (requestType == "action.devices.QUERY") {
-        return handleQueryRequest(request)
+        response = handleQueryRequest(request)
     } else if (requestType == "action.devices.EXECUTE") {
-        return handleExecuteRequest(request)
+        response = handleExecuteRequest(request)
     } else if (requestType == "action.devices.DISCONNECT") {
-        return [:]
+        response = [:]
     }
+    LOGGER.debug(JsonOutput.toJson(response))
+    return response
 }
 
 private attributeHasExpectedValue(device, attrName, attrValue) {
@@ -1461,13 +1744,16 @@ private handleExecuteRequest(request) {
     commands.each { command ->
         def devices = command.devices.collect { device -> knownDevices."${device.id}" }
         def attrsToAwait = [:].withDefault { [:] }
+        def states = [:].withDefault { [:] }
         def results = [:]
         // Send appropriate commands to devices
         devices.each { device ->
             command.execution.each { execution ->
                 def commandName = execution.command.split("\\.").last()
                 try {
-                    attrsToAwait[device.device] += "executeCommand_${commandName}"(device, execution)
+                    def (resultAttrsToAwait, resultStates) = "executeCommand_${commandName}"(device, execution)
+                    attrsToAwait[device.device] += resultAttrsToAwait
+                    states[device.device] += resultStates
                     results[device.device] = [
                         status: "SUCCESS"
                     ]
@@ -1489,37 +1775,46 @@ private handleExecuteRequest(request) {
                 }
             }
         }
-        // Wait up to 5 seconds for devices to report their new state
-        for (def i = 0; i < 50; ++i) {
-            def ready = attrsToAwait.every { device, attributes ->
-                attributes.every { attrName, attrValue ->
+        // Wait up to 1 second for all devices to settle to the desired states.
+        def pollTimeoutMs = 1000
+        def singlePollTimeMs = 100
+        def numLoops = pollTimeoutMs / singlePollTimeMs
+        LOGGER.debug("Polling device attributes for ${pollTimeoutMs} ms")
+        def deviceReadyStates = [:]
+        for (def i = 0; i < numLoops; ++i) {
+            deviceReadyStates = attrsToAwait.collectEntries { device, attributes ->
+                [device, attributes.every { attrName, attrValue ->
                     attributeHasExpectedValue(device, attrName, attrValue)
-                }
+                }]
             }
+            def ready = deviceReadyStates.every { device, deviceReady -> deviceReady }
             if (ready) {
+                LOGGER.debug("All devices reached expected state and are ready.")
                 break
             } else {
-                pauseExecution(100)
+                pauseExecution(singlePollTimeMs)
             }
         }
+
         // Now build our response message
         devices.each { device ->
             def result = results[device.device]
+            def deviceReady = deviceReadyStates[device.device]
             result.ids = [device.device.id]
             if (result.status == "SUCCESS") {
+                if (!deviceReady) {
+                    LOGGER.debug("Device ${device.device} not ready, moving to PENDING")
+                    result.status = "PENDING"
+                }
                 def deviceState = [
                     online: true
                 ]
-                device.deviceType.traits.each { traitType, deviceTrait ->
-                    deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
-                }
+                deviceState += states[device.device]
                 result.states = deviceState
             }
             resp.payload.commands << result
         }
     }
-
-    LOGGER.debug(resp)
     return resp
 }
 
@@ -1594,7 +1889,7 @@ private executeCommand_ActivateScene(deviceInfo, command) {
             )
         }
     }
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1606,13 +1901,18 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
     return [
-        (brightnessTrait.brightnessAttribute): brightnessToSet
+        [
+            (brightnessTrait.brightnessAttribute): brightnessToSet,
+        ],
+        [
+            brightness: command.params.brightness,
+        ],
     ]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_GetCameraStream(deviceInfo, command) {
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1621,6 +1921,7 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
     def colorTrait = deviceInfo.deviceType.traits.ColorSetting
 
     def checkAttrs = [:]
+    def states = [color: command.params.color]
     if (command.params.color.temperature) {
         def temperature = command.params.color.temperature
         deviceInfo.device."${colorTrait.setColorTemperatureCommand}"(temperature)
@@ -1657,7 +1958,7 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
             ]
         }
     }
-    return checkAttrs
+    return [checkAttrs, states]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1668,8 +1969,21 @@ private executeCommand_Dock(deviceInfo, command) {
     checkValue = dockTrait.dockValue
     deviceInfo.device."${dockTrait.dockCommand}"()
     return [
-        (dockTrait.dockAttribute): checkValue
+        [
+            (dockTrait.dockAttribute): checkValue,
+        ],
+        [
+            isDocked: true,
+        ]
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_Charge(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Charge", command)
+    def energyStorageTrait = deviceInfo.deviceType.traits.EnergyStorage
+    deviceInfo.device."${energyStorageTrait.chargeCommand}"()
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1677,7 +1991,7 @@ private executeCommand_Reverse(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     deviceInfo.device."${fanSpeedTrait.reverseCommand}"()
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
@@ -1685,7 +1999,7 @@ private executeCommand_Locate(deviceInfo, command) {
     def locatorTrait = deviceInfo.deviceType.traits.Locator
     checkMfa(deviceInfo.deviceType, "Locate", command)
     deviceInfo.device."${locatorTrait.locatorCommand}"()
-    return [:]
+    return [[:], [:]]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1703,7 +2017,13 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     }
 
     return [
-        (lockUnlockTrait.lockedUnlockedAttribute): checkValue
+        [
+            (lockUnlockTrait.lockedUnlockedAttribute): checkValue,
+        ],
+        [
+            isJammed: false,
+            isLocked: command.params.lock,
+        ],
     ]
 }
 
@@ -1722,7 +2042,12 @@ private executeCommand_mute(deviceInfo, command) {
     }
 
     return [
-        (volumeTrait.muteAttribute): checkValue
+        [
+            (volumeTrait.muteAttribute): checkValue,
+        ],
+        [
+            isMuted: command.params.mute,
+        ],
     ]
 }
 
@@ -1759,7 +2084,12 @@ private executeCommand_OnOff(deviceInfo, command) {
         }
     }
     return [
-        (onOffTrait.onOffAttribute): checkValue
+        [
+            (onOffTrait.onOffAttribute): checkValue,
+        ],
+        [
+            on: command.params.on,
+        ],
     ]
 }
 
@@ -1784,8 +2114,21 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = openPercent
     }
     return [
-        (openCloseTrait.openCloseAttribute): checkValue
+        [
+            (openCloseTrait.openCloseAttribute): checkValue,
+        ],
+        [
+            openPercent: openPercent,
+        ],
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_Reboot(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Reboot", command)
+    def rebootTrait = deviceInfo.deviceType.traits.Reboot
+    deviceInfo.device."${rebootTrait.rebootCommand}"()
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1796,7 +2139,12 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
 
     deviceInfo.device."${rotationTrait.setRotationCommand}"(position)
     return [
-        (rotationTrait.rotationAttribute): position
+        [
+            (rotationTrait.rotationAttribute): position,
+        ],
+        [
+            rotationPercent: command.params.rotationPercent,
+        ],
     ]
 }
 
@@ -1808,7 +2156,12 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 
     deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
     return [
-        (fanSpeedTrait.currentSpeedAttribute): fanSpeed
+        [
+            (fanSpeedTrait.currentSpeedAttribute): fanSpeed,
+        ],
+        [
+            currentFanSpeedSetting: fanSpeed,
+        ],
     ]
 }
 
@@ -1820,7 +2173,12 @@ private executeCommand_SetHumidity(deviceInfo, command) {
 
     deviceInfo.device."${humiditySettingTrait.setHumidityCommand}"(humiditySetpoint)
     return [
-        (humiditySettingTrait.humiditySetpointAttribute): humiditySetpoint
+        [
+            (humiditySettingTrait.humiditySetpointAttribute): humiditySetpoint
+        ],
+        [
+            humiditySetpointPercent: humiditySetpoint,
+        ],
     ]
 }
 
@@ -1835,7 +2193,12 @@ private executeCommand_SetTemperature(deviceInfo, command) {
     deviceInfo.device."${temperatureControlTrait.setTemperatureCommand}"(setpoint)
 
     return [
-        (temperatureControlTrait.setpointAttribute): setpoint
+        [
+            (temperatureControlTrait.setpointAttribute): setpoint,
+        ],
+        [
+            temperatureSetpointCelcius: setpoint,
+        ],
     ]
 }
 
@@ -1844,7 +2207,8 @@ private executeCommand_SetToggles(deviceInfo, command) {
     def togglesTrait = deviceInfo.deviceType.traits.Toggles
     def togglesToSet = command.params.updateToggleSettings
 
-    def statesToCheck = [:]
+    def attrsToCheck = [:]
+    def states = [currentToggleSettings: togglesToSet]
     togglesToSet.each { toggleName, toggleValue ->
         def toggle = togglesTrait.toggles.find { it.name == toggleName }
         def fakeDeviceInfo = [
@@ -1858,9 +2222,11 @@ private executeCommand_SetToggles(deviceInfo, command) {
             device: deviceInfo.device
         ]
         checkMfa(deviceInfo.deviceType, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
-        statesToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        def onOffResponse = executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        attrsToCheck << onOffResponse[0]
+        states << onOffResponse[1]
     }
-    return statesToCheck
+    return [attrsToCheck, states]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1869,10 +2235,24 @@ private executeCommand_setVolume(deviceInfo, command) {
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeLevel = command.params.volumeLevel
     deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
-
+    states = [currentVolume: volumeLevel]
+    if (deviceInfo.deviceType.traits.canMuteUnmute) {
+        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+    }
     return [
-        (volumeTrait.volumeAttribute): volumeLevel
+        [
+            (volumeTrait.volumeAttribute): volumeLevel,
+        ],
+        states,
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_SoftwareUpdate(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Software Update", command)
+    def softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
+    deviceInfo.device."${softwareUpdateTrait.softwareUpdateCommand}"()
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1889,7 +2269,12 @@ private executeCommand_StartStop(deviceInfo, command) {
         deviceInfo.device."${startStopTrait.stopCommand}"()
     }
     return [
-        (startStopTrait.startStopAttribute): checkValue
+        [
+            (startStopTrait.startStopAttribute): checkValue,
+        ],
+        [
+            isRunning: command.params.start,
+        ],
     ]
 }
 
@@ -1903,7 +2288,12 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
         checkValue = startStopTrait.pauseValue
     }
     return [
-        (startStopTrait.pauseUnPauseAttribute): checkValue
+        [
+            (startStopTrait.pauseUnPauseAttribute): checkValue,
+        ],
+        [
+            isPaused: command.params.pause,
+        ],
     ]
 }
 
@@ -1922,7 +2312,12 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     deviceInfo.device."${setSetpointCommand}"(setpoint)
 
     return [
-        (temperatureSettingTrait.modeSetpointAttributes[googleMode]): setpoint
+        [
+            (temperatureSettingTrait.modeSetpointAttributes[googleMode]): setpoint,
+        ],
+        [
+            thermostatTemperatureSetpoint: setpoint,
+        ],
     ]
 }
 
@@ -1942,8 +2337,14 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
 
     def setRangeAttributes = temperatureSettingTrait.modeSetpointAttributes["heatcool"]
     return [
-        (setRangeAttributes.coolingSetpointAttribute): coolSetpoint,
-        (setRangeAttributes.heatingSetpointAttribute): heatSetpoint
+        [
+            (setRangeAttributes.coolingSetpointAttribute): coolSetpoint,
+            (setRangeAttributes.heatingSetpointAttribute): heatSetpoint,
+        ],
+        [
+            thermostatTemperatureSetpointHigh: coolSetpoint,
+            thermostatTemperatureSetpointLow: heatSetpoint,
+        ],
     ]
 }
 
@@ -1956,8 +2357,65 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
     deviceInfo.device."${temperatureSettingTrait.setModeCommand}"(hubitatMode)
 
     return [
-        (temperatureSettingTrait.currentModeAttribute): hubitatMode
+        [
+            (temperatureSettingTrait.currentModeAttribute): hubitatMode,
+        ],
+        [
+            thermostatMode: googleMode,
+        ],
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_TimerAdjust(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Adjust", command)
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerAdjustCommand}"()
+    def retVal = [:]
+    if (!deviceTrait.commandOnlyTimer) {
+        retVal = [
+            timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
+        ]
+    }
+    return retVal
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_TimerCancel(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Cancel", command)
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerCancelCommand}"()
+    return [:]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_TimerPause(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Pause", command)
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerPauseCommand}"()
+    return [:]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_TimerResume(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Resume", command)
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerResumeCommand}"()
+    return [:]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_TimerStart(deviceInfo, command) {
+    checkMfa(deviceInfo.deviceType, "Start", command)
+    def timerTrait = deviceInfo.deviceType.traits.Timer
+    deviceInfo.device."${timerTrait.timerStartCommand}"()
+    def retVal = [:]
+    if (!deviceTrait.commandOnlyTimer) {
+        retVal = [
+            timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
+        ]
+    }
+    return retVal
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1989,8 +2447,16 @@ private executeCommand_volumeRelative(deviceInfo, command) {
         newVolume = device.currentValue(volumeTrait.volumeAttribute)
     }
 
+    states = [currentVolume: newVolume]
+    if (volumeTrait.canMuteUnmute) {
+        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+    }
+
     return [
-        (volumeTrait.volumeAttribute): newVolume
+        [
+            (volumeTrait.volumeAttribute): newVolume,
+        ],
+        states,
     ]
 }
 
@@ -2016,7 +2482,6 @@ private handleQueryRequest(request) {
         }
         resp.payload.devices."${requestedDevice.id}" = deviceState
     }
-    LOGGER.debug(resp)
     return resp
 }
 
@@ -2032,9 +2497,10 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_CameraStream(deviceTrait, device) {
     return [
-        cameraStreamAccessUrl: device.currentValue(deviceTrait.cameraStreamAttribute),
-        cameraStreamReceiverAppId: null,
-        cameraStreamAuthToken: null
+        cameraStreamAccessUrl:        device.currentValue(deviceTrait.cameraStreamAttribute),
+        cameraStreamReceiverAppId:    null,
+        cameraStreamAuthToken:        null,
+        cameraStreamProtocol:         deviceTrait.cameraStreamSupportedProtocols
     ]
 }
 
@@ -2094,6 +2560,41 @@ private deviceStateForTrait_Dock(deviceTrait, device) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
+    def deviceState = [:]
+    if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
+        deviceState.descriptiveCapacityRemaining =
+            device.currentValue(deviceTrait.descriptiveCapacityRemainingAttribute)
+    }
+    deviceState.capacityRemaining = [
+        [
+            rawValue: device.currentValue(deviceTrait.capacityRemainingRawValue).toInteger(),
+            unit:     deviceTrait.capacityRemainingUnit,
+        ]
+    ]
+    if (deviceTrait.isRechargeable) {
+        if (deviceTrait.capacityUntilFullRawValue != null) {
+            deviceState.capacityUntilFull = [
+                [
+                    rawValue: device.currentValue(deviceTrait.capacityUntilFullRawValue).toInteger(),
+                    unit:     deviceTrait.capacityUntilFullUnit,
+                ]
+            ]
+        }
+        if (deviceTrait.chargingValue != null) {
+            deviceState.isCharging =
+                device.currentValue(deviceTrait.isChargingAttribute) == deviceTrait.chargingValue
+        }
+        if (deviceTrait.pluggedInValue != null) {
+            deviceState.isPluggedIn =
+                device.currentValue(deviceTrait.isPluggedInAttribute) == deviceTrait.pluggedInValue
+        }
+    }
+
+    return deviceState
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
@@ -2124,6 +2625,14 @@ private deviceStateForTrait_LockUnlock(deviceTrait, device) {
     return [
         isLocked: isLocked,
         isJammed: false
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_MediaState(deviceTrait, device) {
+    return [
+        activityState: device.currentValue(deviceTrait.activityStateAttribute),
+        playbackState: device.currentValue(deviceTrait.playbackStateAttribute)
     ]
 }
 
@@ -2159,6 +2668,11 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
     ]
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_Reboot(deviceTrait, device) {
+    return [:]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Rotation(deviceTrait, device) {
     return [
@@ -2169,6 +2683,14 @@ private deviceStateForTrait_Rotation(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_SoftwareUpdate(deviceTrait, device) {
+    return [
+        lastSoftwareUpdateUnixTimestampSec:
+            device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2249,6 +2771,23 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_Timer(deviceTrait, device) {
+    def deviceState = [:]
+    if (deviceTrait.commandOnlyTimer) {
+        // report no running timers
+        deviceState = [
+            timerRemainingSec: -1
+        ]
+    } else {
+        deviceState = [
+            timerRemainingSec: device.currentValue(deviceTrait.timerRemainingSecAttribute),
+            timerPaused: device.currentValue(deviceTrait.timerPausedAttribute) == deviceTrait.timerPausedValue
+        ]
+    }
+    return deviceState
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Toggles(deviceTrait, device) {
     return [
         currentToggleSettings: deviceTrait.toggles.collectEntries { toggle ->
@@ -2269,6 +2808,8 @@ private deviceStateForTrait_Volume(deviceTrait, device) {
 }
 
 private handleSyncRequest(request) {
+    def rooms = this.rooms?.collectEntries { [(it.id): it] } ?: [:]
+
     def resp = [
         requestId: request.JSON.requestId,
         payload: [
@@ -2285,6 +2826,8 @@ private handleSyncRequest(request) {
             attributes += "attributesForTrait_${traitType}"(deviceTrait)
         }
         deviceType.devices.each { device ->
+            def roomId = device.device?.roomId
+            def roomName = rooms[roomId]?.name
             resp.payload.devices << [
                 id: device.id,
                 type: "action.devices.types.${deviceType.googleDeviceType}",
@@ -2295,11 +2838,11 @@ private handleSyncRequest(request) {
                 ],
                 willReportState: false,
                 attributes: attributes,
+                roomHint: roomName,
             ]
         }
     }
 
-    LOGGER.debug(resp)
     return resp
 }
 
@@ -2311,7 +2854,7 @@ private attributesForTrait_Brightness(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_CameraStream(deviceTrait) {
     return [
-        cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
+        cameraStreamSupportedProtocols: deviceTrait.cameraStreamSupportedProtocols,
         cameraStreamNeedAuthToken:      false,
         cameraStreamNeedDrmEncryption:  false
     ]
@@ -2339,6 +2882,15 @@ private attributesForTrait_ColorSetting(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_Dock(deviceTrait) {
     return [:]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private attributesForTrait_EnergyStorage(deviceTrait) {
+    return [
+        queryOnlyEnergyStorage:         deviceTrait.queryOnlyEnergyStorage,
+        energyStorageDistanceUnitForUX: deviceTrait.energyStorageDistanceUnitForUX,
+        isRechargeable:                 deviceTrait.isRechargeable
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2390,6 +2942,14 @@ private attributesForTrait_LockUnlock(deviceTrait) {
     return [:]
 }
 
+@SuppressWarnings('UnusedPrivateMethod')
+private attributesForTrait_MediaState(deviceTrait) {
+    return [
+        supportActivityState: deviceTrait.supportActivityState,
+        supportPlaybackState: deviceTrait.supportPlaybackState
+    ]
+}
+
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_OnOff(deviceTrait) {
     return [:]
@@ -2401,6 +2961,11 @@ private attributesForTrait_OpenClose(deviceTrait) {
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
     ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_Reboot(deviceTrait) {
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2417,6 +2982,11 @@ private attributesForTrait_Scene(deviceTrait) {
     return [
         sceneReversible: deviceTrait.sceneReversible
     ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_SoftwareUpdate(deviceTrait) {
+    return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
@@ -2494,6 +3064,14 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private attributesForTrait_Timer(deviceTrait) {
+    return [
+        maxTimerLimitSec:    deviceTrait.maxTimerLimitSec,
+        commandOnlyTimer:    deviceTrait.commandOnlyTimer,
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private attributesForTrait_Toggles(deviceTrait) {
     return [
         availableToggles: deviceTrait.toggles.collect { toggle ->
@@ -2531,7 +3109,8 @@ private traitFromSettings_Brightness(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_CameraStream(traitName) {
     return [
-        cameraStreamAttribute: settings."${traitName}.cameraStreamAttribute",
+        cameraStreamAttribute:          settings."${traitName}.cameraStreamAttribute",
+        cameraStreamSupportedProtocols: settings."${traitName}.cameraStreamSupportedProtocols",
         commands:              []
     ]
 }
@@ -2579,6 +3158,31 @@ private traitFromSettings_Dock(traitName) {
         dockCommand:   settings."${traitName}.dockCommand",
         commands:      ["Dock"]
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_EnergyStorage(traitName) {
+    def energyStorageTrait = [
+        energyStorageDistanceUnitForUX:           settings."${traitName}.energyStorageDistanceUnitForUX",
+        isRechargeable:                           settings."${traitName}.isRechargeable",
+        queryOnlyEnergyStorage:                   settings."${traitName}.queryOnlyEnergyStorage",
+        descriptiveCapacityRemainingAttribute:    settings."${traitName}.descriptiveCapacityRemainingAttribute",
+        capacityRemainingRawValue:                settings."${traitName}.capacityRemainingRawValue",
+        capacityRemainingUnit:                    settings."${traitName}.capacityRemainingUnit",
+        capacityUntilFullRawValue:                settings."${traitName}.capacityUntilFullRawValue",
+        capacityUntilFullUnit:                    settings."${traitName}.capacityUntilFullUnit",
+        isChargingAttribute:                      settings."${traitName}.isChargingAttribute",
+        chargingValue:                            settings."${traitName}.chargingValue",
+        isPluggedInAttribute:                     settings."${traitName}.isPluggedInAttribute",
+        pluggedInValue:                           settings."${traitName}.pluggedInValue",
+        chargeCommand:                            settings."${traitName}.chargeCommand",
+        commands:                                 []
+    ]
+    if (!energyStorageTrait.queryOnlyEnergyStorage) {
+        energyStorageTrait.commands += ["Charge"]
+    }
+
+    return energyStorageTrait
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2648,6 +3252,17 @@ private traitFromSettings_LockUnlock(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_MediaState(traitName) {
+    return [
+        supportActivityState:     settings."${traitName}.supportActivityState",
+        supportPlaybackState:     settings."${traitName}.supportPlaybackState",
+        activityStateAttribute:   settings."${traitName}.activityStateAttribute",
+        playbackStateAttribute:   settings."${traitName}.playbackStateAttribute",
+        commands:                 []
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_OnOff(traitName) {
     def deviceTrait = [
         onOffAttribute: settings."${traitName}.onOffAttribute",
@@ -2698,6 +3313,14 @@ private traitFromSettings_OpenClose(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_Reboot(traitName) {
+    return [
+        rebootCommand:      settings."${traitName}.rebootCommand",
+        commands:           ["Reboot"]
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Rotation(traitName) {
     return [
         rotationAttribute:  settings."${traitName}.rotationAttribute",
@@ -2719,6 +3342,16 @@ private traitFromSettings_Scene(traitName) {
         sceneTrait.commands << "Deactivate Scene"
     }
     return sceneTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_SoftwareUpdate(traitName) {
+    return [
+        lastSoftwareUpdateUnixTimestampSecAttribute:
+                                  settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
+        softwareUpdateCommand:                          settings."${traitName}.softwareUpdateCommand",
+        commands:                                       ["Software Update"]
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2870,6 +3503,24 @@ private traitFromSettings_TemperatureSetting(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_Timer(traitName) {
+    def timerTrait = [
+        maxTimerLimitSec:                 settings."${traitName}.maxTimerLimitSec",
+        commandOnlyTimer:                 settings."${traitName}.commandOnlyTimer",
+
+        commands:                         ["Start", "Adjust", "Cancel", "Pause", "Resume"]
+    ]
+    if (!timerTrait.commandOnlyTimer) {
+        timerTrait << [
+            timerRemainingSecAttribute:   settings."${traitName}.timerRemainingSecAttribute",
+            timerPausedAttribute:         settings."${traitName}.timerPausedAttribute",
+            timerPausedValue:             settings."${traitName}.timerPausedValue",
+        ]
+    }
+    return timerTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Toggles(traitName) {
     def togglesTrait = [
         toggles:  [],
@@ -2978,6 +3629,7 @@ private deleteDeviceTrait_Brightness(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_CameraStream(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraStreamSupportedProtocols")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3002,6 +3654,23 @@ private deleteDeviceTrait_Dock(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.dockAttribute")
     app.removeSetting("${deviceTrait.name}.dockValue")
     app.removeSetting("${deviceTrait.name}.dockCommand")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_EnergyStorage(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.energyStorageDistanceUnitForUX")
+    app.removeSetting("${deviceTrait.name}.isRechargeable")
+    app.removeSetting("${deviceTrait.name}.queryOnlyEnergyStorage")
+    app.removeSetting("${deviceTrait.name}.chargeCommand")
+    app.removeSetting("${deviceTrait.name}.descriptiveCapacityRemaining")
+    app.removeSetting("${deviceTrait.name}.capacityRemainingRawValue")
+    app.removeSetting("${deviceTrait.name}.capacityRemainingUnit")
+    app.removeSetting("${deviceTrait.name}.capacityUntilFullRawValue")
+    app.removeSetting("${deviceTrait.name}.capacityUntilFullUnit")
+    app.removeSetting("${deviceTrait.name}.isChargingAttribute")
+    app.removeSetting("${deviceTrait.name}.chargingValue")
+    app.removeSetting("${deviceTrait.name}.isPluggedInAttribute")
+    app.removeSetting("${deviceTrait.name}.pluggedInValue")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3040,6 +3709,14 @@ private deleteDeviceTrait_LockUnlock(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_MediaState(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.supportActivityState")
+    app.removeSetting("${deviceTrait.name}.supportPlaybackState")
+    app.removeSetting("${deviceTrait.name}.activityStateAttribute")
+    app.removeSetting("${deviceTrait.name}.playbackStateAttribute")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_OnOff(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.onOffAttribute")
     app.removeSetting("${deviceTrait.name}.onValue")
@@ -3065,6 +3742,11 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_Reboot(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.rebootCommand")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_Rotation(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.rotationAttribute")
     app.removeSetting("${deviceTrait.name}.setRotationCommand")
@@ -3076,6 +3758,12 @@ private deleteDeviceTrait_Scene(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.activateCommand")
     app.removeSetting("${deviceTrait.name}.deactivateCommand")
     app.removeSetting("${deviceTrait.name}.sceneReversible")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_SoftwareUpdate(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute")
+    app.removeSetting("${deviceTrait.name}.softwareUpdateCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3129,6 +3817,20 @@ private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     // for device types created with older versions of the app
     app.removeSetting("${deviceTrait.name}.setpointAttribute")
     app.removeSetting("${deviceTrait.name}.setSetpointCommand")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_Timer(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.maxTimerLimitSec")
+    app.removeSetting("${deviceTrait.name}.commandOnlyTimer")
+    app.removeSetting("${deviceTrait.name}.timerRemainingSecAttribute")
+    app.removeSetting("${deviceTrait.name}.timerPausedAttribute")
+    app.removeSetting("${deviceTrait.name}.timerStartCommand")
+    app.removeSetting("${deviceTrait.name}.timerAdjustCommand")
+    app.removeSetting("${deviceTrait.name}.timerCancelCommand")
+    app.removeSetting("${deviceTrait.name}.timerPauseCommand")
+    app.removeSetting("${deviceTrait.name}.timerResumeCommand")
+    app.removeSetting("${deviceTrait.name}.timerPausedValue")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3495,12 +4197,10 @@ private static final GOOGLE_DEVICE_TRAITS = [
     CameraStream: "Camera Stream",
     //Channel: "Channel",
     ColorSetting: "Color Setting",
-    //ColorSpectrum: "Color Spectrum",
-    //ColorTemperature: "Color Temperature",
     //Cook: "Cook",
     //Dispense: "Dispense",
     Dock: "Dock",
-    //EnergyStorage: "Energy Storage",
+    EnergyStorage: "Energy Storage",
     FanSpeed: "Fan Speed",
     //Fill: "Fill",
     HumiditySetting: "Humidity Setting",
@@ -3508,23 +4208,23 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //LightEffects: "Light Effects",
     Locator: "Locator",
     LockUnlock: "Lock/Unlock",
-    //MediaState: "Media State",
+    MediaState: "Media State",
     //Modes: "Modes",
     //NetworkControl: "Network Control",
     //ObjectDetection: "Object Detection",
     OnOff: "On/Off",
     OpenClose: "Open/Close",
-    //Reboot: "Reboot",
+    Reboot: "Reboot",
     Rotation: "Rotation",
     //RunCycle: "Run Cycle",
     //SensorState: "Sensor State",
     Scene: "Scene",
-    //SoftwareUpdate: "Software Update",
+    SoftwareUpdate: "Software Update",
     StartStop: "Start/Stop",
     //StatusReport: "Status Report",
     TemperatureControl: "Temperature Control",
     TemperatureSetting: "Temperature Setting",
-    //Timer: "Timer",
+    Timer: "Timer",
     Toggles: "Toggles",
     //TransportControl: "Transport Control",
     Volume: "Volume",
