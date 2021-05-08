@@ -50,6 +50,8 @@
 //   * Apr 23 2021 - Added Energy Storage, Software Update, Reboot, Media State (query untested) and
 //                   Timer (commands untested) Traits.  Added missing camera trait protocol attributes.
 //   * May 04 2021 - Fixed time remaining trait of Energy Storage
+//   * May 07 2021 - Immediate response mode: change poll from 5 seconds to 1 second and return
+//                   PENDING response for any devices which haven't yet reached the desired state
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -175,12 +177,6 @@ def mainPreferences() {
             input(
                 name: "debugLogging",
                 title: "Enable Debug Logging",
-                type: "bool",
-                defaultValue: false
-            )
-            input(
-                name: "immediateResponse",
-                title: "Respond to Google before device is at new state",
                 type: "bool",
                 defaultValue: false
             )
@@ -1774,8 +1770,8 @@ private handleExecuteRequest(request) {
                 }
             }
         }
-        // Wait up to 1 second for immediate response, 5 seconds otherwise.
-        def pollTimeoutMs = settings.immediateResponse ? 1000 : 5000
+        // Wait up to 1 second for all devices to settle to the desired states.
+        def pollTimeoutMs = 1000
         def singlePollTimeMs = 100
         def numLoops = pollTimeoutMs / singlePollTimeMs
         LOGGER.debug("Polling device attributes for ${pollTimeoutMs} ms")
@@ -1808,13 +1804,7 @@ private handleExecuteRequest(request) {
                 def deviceState = [
                     online: true
                 ]
-                if (settings.immediateResponse) {
-                    deviceState += states[device.device]
-                } else {
-                    device.deviceType.traits.each { traitType, deviceTrait ->
-                        deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, device.device)
-                    }
-                }
+                deviceState += states[device.device]
                 result.states = deviceState
             }
             resp.payload.commands << result
