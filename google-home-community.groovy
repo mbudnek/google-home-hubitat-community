@@ -2222,7 +2222,9 @@ private executeCommand_SetToggles(deviceInfo, command) {
             device: deviceInfo.device
         ]
         checkMfa(deviceInfo.deviceType, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
-        attrsToCheck << executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        def onOffResponse = executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        attrsToCheck << onOffResponse[0]
+        states << onOffResponse[1]
     }
     return [attrsToCheck, states]
 }
