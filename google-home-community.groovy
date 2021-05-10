@@ -55,6 +55,7 @@
 //   * May 07 2021 - Add roomHint based on Hubitat room names
 //   * May 07 2021 - Log requests and responses in JSON to make debugging easier
 //   * May 09 2021 - Handle missing rooms API gracefully for compatibility with Hubitat < 2.2.7
+//   * May 10 2021 - Treat level/position of 99 as 100 instead of trying to scale
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1897,13 +1898,18 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Brightness", command)
     def brightnessTrait = deviceInfo.deviceType.traits.Brightness
-    // Google uses 0...100 for brightness but hubitat uses 0...99, so map
-    def brightnessToSet = Math.round(command.params.brightness * 99 / 100)
-
+    def brightnessToSet = googlePercentageToHubitat(command.params.brightness)
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
+    def checkValue = { value ->
+        if (brightnessToSet == 100) {
+            // Handle Z-Wave dimmers which only go to 99.
+            return value >= 99
+        }
+        return value == brightnessToSet
+    }
     return [
         [
-            (brightnessTrait.brightnessAttribute): brightnessToSet,
+            (brightnessTrait.brightnessAttribute): checkValue,
         ],
         [
             brightness: command.params.brightness,
@@ -2097,7 +2103,7 @@ private executeCommand_OnOff(deviceInfo, command) {
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_OpenClose(deviceInfo, command) {
     def openCloseTrait = deviceInfo.deviceType.traits.OpenClose
-    def openPercent = command.params.openPercent as int
+    def openPercent = googlePercentageToHubitat(command.params.openPercent)
     def checkValue
     if (openCloseTrait.discreteOnlyOpenClose && openPercent == 100) {
         checkMfa(deviceInfo.deviceType, "Open", command)
@@ -2109,10 +2115,14 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
         checkMfa(deviceInfo.deviceType, "Set Position", command)
-        // Google uses 0...100 for position but hubitat uses 0...99, so map
-        openPercent = Math.round(openPercent * 99 / 100)
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
-        checkValue = openPercent
+        checkValue = { value ->
+            if (openPercent == 100) {
+                // Handle Z-Wave shades which only go to 99.
+                return value >= 99
+            }
+            return value == openPercent
+        }
     }
     return [
         [
@@ -2488,8 +2498,7 @@ private handleQueryRequest(request) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Brightness(deviceTrait, device) {
-    // Google uses 0...100 for brightness but hubitat uses 0...99, so map
-    def brightness = Math.round(device.currentValue(deviceTrait.brightnessAttribute) * 100 / 99)
+    def brightness = hubitatPercentageToGoogle(device.currentValue(deviceTrait.brightnessAttribute))
     return [
         brightness: brightness,
     ]
@@ -2661,8 +2670,7 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
             openPercent = 0
         }
     } else {
-        // Google uses 0...100 for position but hubitat uses 0...99, so map
-        openPercent = Math.round(device.currentValue(deviceTrait.openCloseAttribute) * 100 / 99)
+        openPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.openCloseAttribute))
     }
     return [
         openPercent: openPercent
@@ -4002,6 +4010,28 @@ private celsiusToFahrenheitRounded(temperature) {
     def tempFahrenheit = celsiusToFahrenheit(temperature)
     // Round to one decimal place
     return Math.round(tempFahrenheit * 10) / 10
+}
+
+private googlePercentageToHubitat(percentage) {
+    // Google is documented to provide percentages in the range [0..100], as
+    // is Hubitat's SwitchLevel (setLevel), WindowBlind (setPosition).
+    //
+    // Just to be safe, clamp incoming values from Google to the range [0..100].
+    return Math.max(0, Math.min(100, percentage as int))
+}
+
+private hubitatPercentageToGoogle(percentage) {
+    // Hubitat's driver capabilities for SwitchLevel (setLevel) and WindowBlind
+    // (setPosition) are documented to use the range [0..100], but several
+    // Z-Wave dimmer devices return values in the range [0..99].
+    //
+    // Rather than try to guess which is which, assume nobody will set a
+    // device to 99% and map that specific value to 100.
+    //
+    // Clamp the value to ensure it's in the range [0..100], then map 99
+    // to 100.
+    def clamped = Math.max(0, Math.min(100, percentage as int))
+    return clamped == 99 ? 100 : clamped
 }
 
 @Field
