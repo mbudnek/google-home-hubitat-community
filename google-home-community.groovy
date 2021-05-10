@@ -54,6 +54,7 @@
 //                   PENDING response for any devices which haven't yet reached the desired state
 //   * May 07 2021 - Add roomHint based on Hubitat room names
 //   * May 07 2021 - Log requests and responses in JSON to make debugging easier
+//   * May 09 2021 - Handle missing rooms API gracefully for compatibility with Hubitat < 2.2.7
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2826,8 +2827,15 @@ private handleSyncRequest(request) {
             attributes += "attributesForTrait_${traitType}"(deviceTrait)
         }
         deviceType.devices.each { device ->
-            def roomId = device.device?.roomId
-            def roomName = rooms[roomId]?.name
+            def roomName = null
+            try {
+                def roomId = device.device?.roomId
+                roomName = rooms[roomId]?.name
+            } catch (MissingPropertyException) {
+                // The roomId property isn't defined prior to Hubitat 2.2.7,
+                // so ignore the error; we just can't report a room on this
+                // version
+            }
             resp.payload.devices << [
                 id: device.id,
                 type: "action.devices.types.${deviceType.googleDeviceType}",
