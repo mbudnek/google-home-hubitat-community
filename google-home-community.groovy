@@ -56,6 +56,8 @@
 //   * May 07 2021 - Log requests and responses in JSON to make debugging easier
 //   * May 09 2021 - Handle missing rooms API gracefully for compatibility with Hubitat < 2.2.7
 //   * May 10 2021 - Treat level/position of 99 as 100 instead of trying to scale
+//   * May 20 2021 - Add a reverseDirection setting to the Open/Close trait to support devices that consider position
+//                   0 to be fully open
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1013,6 +1015,13 @@ private deviceTraitPreferences_OpenClose(deviceTrait) {
                 type: "text",
                 defaultValue: "closed",
                 required: true
+            )
+        } else {
+            paragraph("Set this if your device considers position 0 to be fully open")
+            input(
+                name: "${deviceTrait.name}.reverseDirection",
+                title: "Reverse Direction",
+                type: "bool"
             )
         }
         input(
@@ -2115,13 +2124,17 @@ private executeCommand_OpenClose(deviceInfo, command) {
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
         checkMfa(deviceInfo.deviceType, "Set Position", command)
-        deviceInfo.device."${openCloseTrait.openPositionCommand}"(openPercent)
+        def hubitatOpenPercent = openPercent
+        if (openCloseTrait.reverseDirection) {
+            hubitatOpenPercent = 100 - openPercent
+        }
+        deviceInfo.device."${openCloseTrait.openPositionCommand}"(hubitatOpenPercent)
         checkValue = { value ->
-            if (openPercent == 100) {
+            if (hubitatOpenPercent == 100) {
                 // Handle Z-Wave shades which only go to 99.
                 return value >= 99
             }
-            return value == openPercent
+            return value == hubitatOpenPercent
         }
     }
     return [
@@ -2671,6 +2684,9 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
         }
     } else {
         openPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.openCloseAttribute))
+        if (deviceTrait.reverseDirection) {
+            openPercent = 100 - openPercent
+        }
     }
     return [
         openPercent: openPercent
@@ -3312,6 +3328,8 @@ private traitFromSettings_OpenClose(traitName) {
     if (openCloseTrait.discreteOnlyOpenClose) {
         openCloseTrait.openValue = settings."${traitName}.openValue"
         openCloseTrait.closedValue = settings."${traitName}.closedValue"
+    } else {
+        openCloseTrait.reverseDirection = settings."${traitName}.reverseDirection" as boolean
     }
 
     if (!openCloseTrait.queryOnly) {
@@ -3751,6 +3769,7 @@ private deleteDeviceTrait_OpenClose(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.openCloseAttribute")
     app.removeSetting("${deviceTrait.name}.openValue")
     app.removeSetting("${deviceTrait.name}.closedValue")
+    app.removeSetting("${deviceTrait.name}.reverseDirection")
     app.removeSetting("${deviceTrait.name}.openCommand")
     app.removeSetting("${deviceTrait.name}.closeCommand")
     app.removeSetting("${deviceTrait.name}.openPositionCommand")
