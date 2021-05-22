@@ -131,6 +131,7 @@ It requires a driver that maps the stream URL to the Camera Stream URL Attribute
 - This can be accomplished using one or both of the supplied drivers:
     -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URL in the `Camera stream HTTP URL` input field.
     -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`.
+    -  For both of the above drivers, select the protocol for the stream.
 
 NOTE: These drivers offer no other functionality other than a placeholder for the stream URL.  The buttons are non-functional.
 
