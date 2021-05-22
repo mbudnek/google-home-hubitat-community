@@ -1936,8 +1936,10 @@ private executeCommand_GetCameraStream(deviceInfo, command) {
     return [
         [:],
         [
-            cameraStreamAccessUrl:        deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
-            cameraStreamProtocol:         deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
+            cameraStreamAccessUrl:        
+                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
+            cameraStreamProtocol:         
+                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
         ],
     ]
 }
@@ -2895,7 +2897,7 @@ private attributesForTrait_Brightness(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_CameraStream(deviceTrait) {
     return [
-        cameraStreamSupportedProtocols: ["progressive_mp4","hls","dash","smooth_stream"],
+        cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
         cameraStreamNeedAuthToken:      false,
     ]
 }
