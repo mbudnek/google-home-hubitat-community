@@ -58,6 +58,8 @@
 //   * May 10 2021 - Treat level/position of 99 as 100 instead of trying to scale
 //   * May 20 2021 - Add a reverseDirection setting to the Open/Close trait to support devices that consider position
 //                   0 to be fully open
+//   * May 22 2021 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
+//                   driver level to accomodate different camera stream sources
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -432,27 +434,27 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_CameraStream(deviceTrait) {
-    googleCameraStreamSupportedProtocols = [
-        "progressive_mp4":         "Progressive MP4",
-        "hls":                     "HLS",
-        "dash":                    "Dash",
-        "smooth_stream":           "Smooth Stream",
-    ]
     section("Stream Camera") {
         input(
-            name: "${deviceTrait.name}.cameraStreamAttribute",
+            name: "${deviceTrait.name}.cameraStreamURLAttribute",
             title: "Camera Stream URL Attribute",
             type: "text",
-            defaultValue: "settings",
+            defaultValue: "streamURL",
             required: true
         )
         input(
-            name: "${deviceTrait.name}.cameraStreamSupportedProtocols",
-            title: "Camera Stream Supported Protocols",
-            type: "enum",
-            options: googleCameraStreamSupportedProtocols,
-            multiple: true,
-            required: true,
+            name: "${deviceTrait.name}.cameraStreamProtocolAttribute",
+            title: "Camera Stream Protocol Attribute",
+            type: "text",
+            defaultValue: "streamProtocol",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cameraStreamCommand",
+            title: "Start Camera Stream Command",
+            type: "text",
+            defaultValue: "on",
+            required: true
         )
     }
 }
@@ -1928,7 +1930,16 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_GetCameraStream(deviceInfo, command) {
-    return [[:], [:]]
+    checkMfa(deviceInfo.deviceType, "Display", command)
+    def cameraStreamTrait = deviceInfo.deviceType.traits.CameraStream
+    deviceInfo.device."${cameraStreamTrait.cameraStreamCommand}"()
+    return [
+        [:],
+        [
+            cameraStreamAccessUrl:        deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
+            cameraStreamProtocol:         deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
+        ],
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2520,10 +2531,8 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_CameraStream(deviceTrait, device) {
     return [
-        cameraStreamAccessUrl:        device.currentValue(deviceTrait.cameraStreamAttribute),
-        cameraStreamReceiverAppId:    null,
-        cameraStreamAuthToken:        null,
-        cameraStreamProtocol:         deviceTrait.cameraStreamSupportedProtocols
+        cameraStreamAccessUrl:        device.currentValue(deviceTrait.cameraStreamURLAttribute),
+        cameraStreamProtocol:         device.currentValue(deviceTrait.cameraStreamProtocolAttribute),
     ]
 }
 
@@ -2886,9 +2895,8 @@ private attributesForTrait_Brightness(deviceTrait) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_CameraStream(deviceTrait) {
     return [
-        cameraStreamSupportedProtocols: deviceTrait.cameraStreamSupportedProtocols,
+        cameraStreamSupportedProtocols: ["progressive_mp4","hls","dash","smooth_stream"],
         cameraStreamNeedAuthToken:      false,
-        cameraStreamNeedDrmEncryption:  false
     ]
 }
 
@@ -3141,9 +3149,10 @@ private traitFromSettings_Brightness(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_CameraStream(traitName) {
     return [
-        cameraStreamAttribute:          settings."${traitName}.cameraStreamAttribute",
-        cameraStreamSupportedProtocols: settings."${traitName}.cameraStreamSupportedProtocols",
-        commands:              []
+        cameraStreamURLAttribute:       settings."${traitName}.cameraStreamURLAttribute",
+        cameraStreamProtocolAttribute:  settings."${traitName}.cameraStreamProtocolAttribute",
+        cameraStreamCommand:            settings."${traitName}.cameraStreamCommand",
+        commands:                       ["Display"]
     ]
 }
 
@@ -3662,8 +3671,9 @@ private deleteDeviceTrait_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_CameraStream(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraStreamSupportedProtocols")
+    app.removeSetting("${deviceTrait.name}.cameraStreamURLAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraStreamProtocolAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraStreamCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')

@@ -24,10 +24,18 @@
  */
 
 preferences {
+    googleCameraStreamSupportedProtocols = [
+        "progressive_mp4":         "Progressive MP4",
+        "hls":                     "HLS",
+        "dash":                    "Dash",
+        "smooth_stream":           "Smooth Stream",
+//      "webrtc":                  "WebRTC",    // requires extra development
+    ]
     input "deviceIP", "text", title: "Webserver HTTP URL:Port", required: true
     input "deviceName", "text", title: "Camera Short Name", required: true
     input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
     input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
+    input "sourceProtocol", "enum", title: "Camera Stream Protocol", options: googleCameraStreamSupportedProtocols, multiple: false, required: true
 }
 
 metadata {
@@ -36,7 +44,8 @@ metadata {
 
         attribute   "camera", "enum"
         attribute   "mute", "enum"
-        attribute   "settings", "JSON_OBJECT"
+        attribute   "streamURL", "JSON_OBJECT"
+        attribute   "streamProtocol", "enum"
         attribute   "statusMessage", "string"
     }
 }
@@ -51,11 +60,12 @@ def updated() {
     sendEvent(name: "mute", value: "off")
     // check if a user and password was entered, and add it to the URL, otherwise just create the URL
     if (deviceUser && devicePWD) {
-        sendEvent(name: "settings",
-            value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
+        sendEvent(name: "streamURL", 
+		    value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
     } else {
-        sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
+        sendEvent(name: "streamURL", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
     }
+    sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
     sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 

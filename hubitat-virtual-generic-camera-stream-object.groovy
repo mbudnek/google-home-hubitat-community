@@ -24,7 +24,15 @@
  */
 
 preferences {
-    input "deviceURL", "text", title: "Camera stream HTTP URL", required: true
+    googleCameraStreamSupportedProtocols = [
+        "progressive_mp4":         "Progressive MP4",
+        "hls":                     "HLS",
+        "dash":                    "Dash",
+        "smooth_stream":           "Smooth Stream",
+//      "webrtc":                  "WebRTC",    // requires extra development
+    ]
+    input "sourceURL", "text", title: "Camera stream HTTP URL", required: true
+    input "sourceProtocol", "enum", title: "Camera Stream Protocol", options: googleCameraStreamSupportedProtocols, multiple: false, required: true
 }
 
 metadata {
@@ -33,9 +41,10 @@ metadata {
 
         attribute   "camera", "enum"
         attribute   "mute", "enum"
-        attribute   "settings", "JSON_OBJECT"
+        attribute   "streamURL", "JSON_OBJECT"
+        attribute   "streamProtocol", "enum"
         attribute   "statusMessage", "string"
-     }
+    }
 }
 
 def installed() {
@@ -46,7 +55,8 @@ def updated() {
     log.info "${device.label}: Updated"
     sendEvent(name: "camera", value: "on")
     sendEvent(name: "mute", value: "off")
-    sendEvent(name: "settings", value: "${deviceURL}")
+    sendEvent(name: "streamURL", value: "${sourceURL}")
+    sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
     sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
