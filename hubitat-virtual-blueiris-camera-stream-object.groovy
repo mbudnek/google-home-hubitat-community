@@ -35,7 +35,7 @@ preferences {
     input "deviceName", "text", title: "Camera Short Name", required: true
     input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
     input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
-    input "sourceProtocol", "enum", title: "Camera Stream Protocol", 
+    input "sourceProtocol", "enum", title: "Camera Stream Protocol",
         options: googleCameraStreamSupportedProtocols, multiple: false, required: true
 }
 
@@ -61,7 +61,7 @@ def updated() {
     sendEvent(name: "mute", value: "off")
     // check if a user and password was entered, and add it to the URL, otherwise just create the URL
     if (deviceUser && devicePWD) {
-        sendEvent(name: "streamURL", 
+        sendEvent(name: "streamURL",
         value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
     } else {
         sendEvent(name: "streamURL", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")

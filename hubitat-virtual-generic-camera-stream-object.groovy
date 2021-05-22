@@ -32,7 +32,7 @@ preferences {
 //      "webrtc":                  "WebRTC",    // requires extra development
     ]
     input "sourceURL", "text", title: "Camera stream HTTP URL", required: true
-    input "sourceProtocol", "enum", title: "Camera Stream Protocol", 
+    input "sourceProtocol", "enum", title: "Camera Stream Protocol",
         options: googleCameraStreamSupportedProtocols, multiple: false, required: true
 }
 

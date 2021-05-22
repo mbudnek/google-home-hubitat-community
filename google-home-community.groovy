@@ -1936,9 +1936,9 @@ private executeCommand_GetCameraStream(deviceInfo, command) {
     return [
         [:],
         [
-            cameraStreamAccessUrl:        
+            cameraStreamAccessUrl:
                 deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
-            cameraStreamProtocol:         
+            cameraStreamProtocol:
                 deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
         ],
     ]
