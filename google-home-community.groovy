@@ -58,6 +58,7 @@
 //   * May 10 2021 - Treat level/position of 99 as 100 instead of trying to scale
 //   * May 20 2021 - Add a reverseDirection setting to the Open/Close trait to support devices that consider position
 //                   0 to be fully open
+//   * Jun 27 2021 - Log a warning on SYNC if a device is selected as multiple device types
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2842,6 +2843,8 @@ private handleSyncRequest(request) {
         ]
     ]
 
+    def deviceIdsEncountered = [] as Set
+
     (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
         def traits = deviceType.traits.collect { traitType, deviceTrait ->
             "action.devices.traits.${traitType}"
@@ -2851,27 +2854,36 @@ private handleSyncRequest(request) {
             attributes += "attributesForTrait_${traitType}"(deviceTrait)
         }
         deviceType.devices.each { device ->
-            def roomName = null
-            try {
-                def roomId = device.device?.roomId
-                roomName = rooms[roomId]?.name
-            } catch (MissingPropertyException) {
-                // The roomId property isn't defined prior to Hubitat 2.2.7,
-                // so ignore the error; we just can't report a room on this
-                // version
+            def deviceName = device.label ?: device.name
+            if (deviceIdsEncountered.contains(device.id)) {
+                LOGGER.warn(
+                    "The device ${deviceName} with ID ${device.id} is selected as multiple device types. " +
+                    "Ignoring configuration from the device type ${deviceType.display}!"
+                )
+            } else {
+                def roomName = null
+                try {
+                    def roomId = device.device?.roomId
+                    roomName = rooms[roomId]?.name
+                } catch (MissingPropertyException) {
+                    // The roomId property isn't defined prior to Hubitat 2.2.7,
+                    // so ignore the error; we just can't report a room on this
+                    // version
+                }
+                deviceIdsEncountered.add(device.id)
+                resp.payload.devices << [
+                    id: device.id,
+                    type: "action.devices.types.${deviceType.googleDeviceType}",
+                    traits: traits,
+                    name: [
+                        defaultNames: [device.name],
+                        name: device.label ?: device.name
+                    ],
+                    willReportState: false,
+                    attributes: attributes,
+                    roomHint: roomName,
+                ]
             }
-            resp.payload.devices << [
-                id: device.id,
-                type: "action.devices.types.${deviceType.googleDeviceType}",
-                traits: traits,
-                name: [
-                    defaultNames: [device.name],
-                    name: device.label ?: device.name
-                ],
-                willReportState: false,
-                attributes: attributes,
-                roomHint: roomName,
-            ]
         }
     }
 
