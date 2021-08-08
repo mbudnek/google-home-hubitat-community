@@ -70,7 +70,7 @@ To create your Google smart home Action:
 19. Open the Google Home app on your phone or tablet
 20. Tap the "+" in the top-left corner
 21. Tap "Set up device"
-22. Tap "Have something already set up?"
+22. Tap "Works with Google"
 23. In the list, find the entry `[test] {your action name}`
 24. Enter your Hubitat account credentials and click "Sign In"
 25. Select your hub and tap "Select"
