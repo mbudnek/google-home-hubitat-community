@@ -2532,10 +2532,7 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_CameraStream(deviceTrait, device) {
-    return [
-        cameraStreamAccessUrl:        device.currentValue(deviceTrait.cameraStreamURLAttribute),
-        cameraStreamProtocol:         device.currentValue(deviceTrait.cameraStreamProtocolAttribute),
-    ]
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
