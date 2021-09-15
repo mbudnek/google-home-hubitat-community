@@ -54,7 +54,7 @@ def updated() {
     sendEvent(name: "statusMessage", value: "SUCCESS")
     if ((sourceHLSURL == null) || (sourceMP4URL == null) || (sourceDashURL == null) || (sourceSmoothStreamURL == null)
 //        || (sourceWebRTCURL == "")
-        ) { 
+        ) {
         log.error "${device.label}: At least one URL needs to be configured."
     }
 }

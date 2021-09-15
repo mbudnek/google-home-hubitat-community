@@ -2870,30 +2870,30 @@ private handleSyncRequest(request) {
                     "Ignoring configuration from the device type ${deviceType.display}!"
                 )
             } else {
-            def roomName = null
-            try {
-                def roomId = device.device?.roomId
-                roomName = rooms[roomId]?.name
-            } catch (MissingPropertyException) {
-                // The roomId property isn't defined prior to Hubitat 2.2.7,
-                // so ignore the error; we just can't report a room on this
-                // version
+                def roomName = null
+                try {
+                    def roomId = device.device?.roomId
+                    roomName = rooms[roomId]?.name
+                } catch (MissingPropertyException) {
+                    // The roomId property isn't defined prior to Hubitat 2.2.7,
+                    // so ignore the error; we just can't report a room on this
+                    // version
+                }
+                deviceIdsEncountered.add(device.id)
+                resp.payload.devices << [
+                    id: device.id,
+                    type: "action.devices.types.${deviceType.googleDeviceType}",
+                    traits: traits,
+                    name: [
+                        defaultNames: [device.name],
+                        name: device.label ?: device.name
+                    ],
+                    willReportState: false,
+                    attributes: attributes,
+                    roomHint: roomName,
+                ]
             }
-            deviceIdsEncountered.add(device.id)
-            resp.payload.devices << [
-                id: device.id,
-                type: "action.devices.types.${deviceType.googleDeviceType}",
-                traits: traits,
-                name: [
-                    defaultNames: [device.name],
-                    name: device.label ?: device.name
-                ],
-                willReportState: false,
-                attributes: attributes,
-                roomHint: roomName,
-            ]
         }
-    }
     }
 
     return resp
