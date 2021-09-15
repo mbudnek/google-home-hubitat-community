@@ -20,7 +20,7 @@
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
- *  Date: 2020-08-02
+ *  Date: 2021-09-14
  */
 
 preferences {
@@ -70,8 +70,8 @@ def updated() {
     sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
-def on() {
-    log.debug "${device.label}: on()"
+def on(supportedStreamProtocols) {
+    log.debug "${device.label}: on() ${supportedStreamProtocols}"
 }
 
 def off() {

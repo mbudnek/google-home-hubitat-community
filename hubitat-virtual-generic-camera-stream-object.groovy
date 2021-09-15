@@ -20,20 +20,15 @@
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
- *  Date: 2020-08-02
+ *  Date: 2021-09-14
  */
 
 preferences {
-    googleCameraStreamSupportedProtocols = [
-        "progressive_mp4":         "Progressive MP4",
-        "hls":                     "HLS",
-        "dash":                    "Dash",
-        "smooth_stream":           "Smooth Stream",
-//      "webrtc":                  "WebRTC",    // requires extra development
-    ]
-    input "sourceURL", "text", title: "Camera stream HTTP URL", required: true
-    input "sourceProtocol", "enum", title: "Camera Stream Protocol",
-        options: googleCameraStreamSupportedProtocols, multiple: false, required: true
+    input "sourceHLSURL", "text", title: "Camera HLS stream HTTP URL", required: false    
+    input "sourceMP4URL", "text", title: "Camera MP4 stream HTTP URL", required: false
+    input "sourceDashURL", "text", title: "Camera dash stream HTTP URL", required: false
+    input "sourceSmoothStreamURL", "text", title: "Camera smooth stream HTTP URL", required: false
+//    input "sourceWebRTCURL", "text", title: "Camera WebRTC HTTP URL", required: false    // requires extra development
 }
 
 metadata {
@@ -56,13 +51,50 @@ def updated() {
     log.info "${device.label}: Updated"
     sendEvent(name: "camera", value: "on")
     sendEvent(name: "mute", value: "off")
-    sendEvent(name: "streamURL", value: "${sourceURL}")
-    sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
     sendEvent(name: "statusMessage", value: "SUCCESS")
+    if ((sourceHLSURL == null) || (sourceMP4URL == null) || (sourceDashURL == null) || (sourceSmoothStreamURL == null) 
+//        || (sourceWebRTCURL == "")
+        ) { 
+        log.error "${device.label}: At least one URL needs to be configured."
+    }
 }
 
-def on() {
-    log.debug "${device.label}: on()"
+def on(supportedStreamProtocols) {    
+    if (sourceHLSURL != null) {
+        if (supportedStreamProtocols.find { it == "hls" }) {
+            sourceURL = sourceHLSURL
+            sourceProtocol = "hls"
+        }
+    } else if (sourceMP4URL != null) {
+        if (supportedStreamProtocols.find { it == "progressive_mp4" }) {
+            sourceURL = sourceMP4URL
+            sourceProtocol = "progressive_mp4"
+        }
+    } else if (sourceDashURL != null) {
+        if (supportedStreamProtocols.find { it == "dash" }) {
+            sourceURL = sourceDashURL
+            sourceProtocol = "dash"
+        }
+    } else if (sourceSmoothStreamURL != null) {
+        if (supportedStreamProtocols.find { it == "smooth_stream" }) {
+            sourceURL = sourceSmoothStreamURL
+            sourceProtocol = "smooth_stream"
+        }
+    } else if (sourceWebRTCURL != null) {
+        if (supportedStreamProtocols.find { it == "webrtc" }) {
+            sourceURL = sourceWebRTCURL
+            sourceProtocol = "webrtc"
+        }
+    } else {
+        sourceURL = ""
+        sourceProtocol = ""
+        log.error "${device.label}: At least one URL needs to be configured."
+    }
+    
+    sendEvent(name: "streamURL", value: "${sourceURL}")
+    sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
+    
+    log.debug "${device.label}: on() ${sourceURL}, Protocol: ${sourceProtocol}"    
 }
 
 def off() {
