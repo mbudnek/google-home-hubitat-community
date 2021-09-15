@@ -24,7 +24,7 @@
  */
 
 preferences {
-    input "sourceHLSURL", "text", title: "Camera HLS stream HTTP URL", required: false    
+    input "sourceHLSURL", "text", title: "Camera HLS stream HTTP URL", required: false
     input "sourceMP4URL", "text", title: "Camera MP4 stream HTTP URL", required: false
     input "sourceDashURL", "text", title: "Camera dash stream HTTP URL", required: false
     input "sourceSmoothStreamURL", "text", title: "Camera smooth stream HTTP URL", required: false
@@ -52,14 +52,14 @@ def updated() {
     sendEvent(name: "camera", value: "on")
     sendEvent(name: "mute", value: "off")
     sendEvent(name: "statusMessage", value: "SUCCESS")
-    if ((sourceHLSURL == null) || (sourceMP4URL == null) || (sourceDashURL == null) || (sourceSmoothStreamURL == null) 
+    if ((sourceHLSURL == null) || (sourceMP4URL == null) || (sourceDashURL == null) || (sourceSmoothStreamURL == null)
 //        || (sourceWebRTCURL == "")
         ) { 
         log.error "${device.label}: At least one URL needs to be configured."
     }
 }
 
-def on(supportedStreamProtocols) {    
+def on(supportedStreamProtocols) {
     if (sourceHLSURL != null) {
         if (supportedStreamProtocols.find { it == "hls" }) {
             sourceURL = sourceHLSURL
@@ -90,11 +90,11 @@ def on(supportedStreamProtocols) {
         sourceProtocol = ""
         log.error "${device.label}: At least one URL needs to be configured."
     }
-    
+
     sendEvent(name: "streamURL", value: "${sourceURL}")
     sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
-    
-    log.debug "${device.label}: on() ${sourceURL}, Protocol: ${sourceProtocol}"    
+
+    log.debug "${device.label}: on() ${sourceURL}, Protocol: ${sourceProtocol}"
 }
 
 def off() {

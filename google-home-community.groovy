@@ -1933,9 +1933,9 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 private executeCommand_GetCameraStream(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Display", command)
     def cameraStreamTrait = deviceInfo.deviceType.traits.CameraStream
-    def SupportedStreamProtocols = command.params.SupportedStreamProtocols
+    def supportedStreamProtocols = command.params.SupportedStreamProtocols
 
-    deviceInfo.device."${cameraStreamTrait.cameraStreamCommand}"(SupportedStreamProtocols)
+    deviceInfo.device."${cameraStreamTrait.cameraStreamCommand}"(supportedStreamProtocols)
     return [
         [:],
         [
@@ -2879,7 +2879,7 @@ private handleSyncRequest(request) {
                 // so ignore the error; we just can't report a room on this
                 // version
             }
-                deviceIdsEncountered.add(device.id)
+            deviceIdsEncountered.add(device.id)
             resp.payload.devices << [
                 id: device.id,
                 type: "action.devices.types.${deviceType.googleDeviceType}",
