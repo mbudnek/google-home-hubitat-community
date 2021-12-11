@@ -114,20 +114,6 @@ Each device type has the following settings:
 
 The Arm/Disarm trait is user to control security systems.  It can be controlled by saying things like "Hey Google, arm {device} to {level}" or "Hey Google, disarm {device}}" and queried by saying things like "Hey Google, is the {device} armed?".  It has the following configuration parameters:
 
-- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
-- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
-
-## Device Traits
-
-Google Home defines a number of device traits that you can mix-and-match to define the functionality of any particular type of device.  Not all traits are currently supported by Google Home Community.  The following are the currently supported device traits and their configuration parameters:
-
-### Brightness
-
-The Brightness trait is primarily used for devices like dimmer switches and light bulbs, but can be used for any device that can be set to a level between 0% and 100%.  It can be controlled by saying things like "Hey Google, set {device} to {level}" and queried by saying things like "Hey Google, what's the level of {device}?".  It has the following configuration parameters:
-
-- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
-- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
-
 - Armed/Disarmed Attribute: The device attribute used to query the current alarm status of the device.  Maps to the `securityKeypad` attribute by default.
 - Current Arm Level Attribute: The device attribute used to query the current alarm level of the device.  Maps to the `securityKeypad` attribute by default.
 - Exit Delay Value Attribute: The device attribute used to indicate how long the user has until the alarm is set.  Maps to the `exitAllowance` attribute by default.
@@ -147,6 +133,17 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
 	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
 	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.	
+	
+## Device Traits
+
+Google Home defines a number of device traits that you can mix-and-match to define the functionality of any particular type of device.  Not all traits are currently supported by Google Home Community.  The following are the currently supported device traits and their configuration parameters:
+
+### Brightness
+
+The Brightness trait is primarily used for devices like dimmer switches and light bulbs, but can be used for any device that can be set to a level between 0% and 100%.  It can be controlled by saying things like "Hey Google, set {device} to {level}" and queried by saying things like "Hey Google, what's the level of {device}?".  It has the following configuration parameters:
+
+- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
+- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 	
 ### CameraStream
 
