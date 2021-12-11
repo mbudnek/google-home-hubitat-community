@@ -110,6 +110,12 @@ Each device type has the following settings:
 - Actions requiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
 - PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
 
+### Arm/Disarm
+
+The Arm/Disarm trait is user to control security systems.  It can be controlled by saying things like "Hey Google, arm {device} to {level}" or "Hey Google, disarm {device}}" and queried by saying things like "Hey Google, is the {device} armed?".  It has the following configuration parameters:
+
+- Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
+- Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 
 ## Device Traits
 
@@ -122,6 +128,26 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 - Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
 - Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
 
+- Armed/Disarmed Attribute: The device attribute used to query the current alarm status of the device.  Maps to the `securityKeypad` attribute by default.
+- Current Arm Level Attribute: The device attribute used to query the current alarm level of the device.  Maps to the `securityKeypad` attribute by default.
+- Exit Delay Value Attribute: The device attribute used to indicate how long the user has until the alarm is set.  Maps to the `exitAllowance` attribute by default.
+- Supported Alarm Levels: The device attribute used to indicate which alarm levels are available.  Available selections are "Disarm, Home, Night, Away".  For each setting the following settings are available:
+	- Google Home Level Names for Disarm: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Disarm` attribute by default.
+	- Hubitat Command for Disarm: The device command used to set this level.  Maps to the `disarm` attribute by default.
+	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `disarmed` attribute by default.
+	
+	- Google Home Level Names for Night: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Night` attribute by default.
+	- Hubitat Command for Night: The device command used to set this level.  Maps to the `armNight` attribute by default.
+	- Hubitat Value for Night: The device value returned when the device is set to this level.  Maps to the `armed night` attribute by default.	
+	
+	- Google Home Level Names for Home: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Home` attribute by default.
+	- Hubitat Command for Home: The device command used to set this level.  Maps to the `armHome` attribute by default.
+	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `armed home` attribute by default.	
+	
+	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
+	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
+	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.	
+	
 ### CameraStream
 
 The CameraStream trait is used to map compatible video streams for viewing on ChromeCast enabled devices (Nest Hubs, ChromeCast, etc).
