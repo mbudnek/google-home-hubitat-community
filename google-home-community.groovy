@@ -61,6 +61,7 @@
 //   * Jun 27 2021 - Log a warning on SYNC if a device is selected as multiple device types
 //   * Sep 14 2021 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
 //                   driver level to accomodate different camera stream sources
+//   * Dec 10 2021 - Added Arm/Disarm Trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -413,6 +414,98 @@ def deviceTraitDelete(deviceTrait) {
     }
 }
 
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_ArmDisarm(deviceTrait) {
+    hubitatAlarmLevels = [
+        "disarmed":              "Disarm",
+        "armed home":            "Home",
+        "armed night":           "Night",
+        "armed away":            "Away",
+    ]
+    hubitatAlarmCommands = [
+        "disarmed":              "disarm",
+        "armed home":            "armHome",
+        "armed night":           "armNight",
+        "armed away":            "armAway",
+    ]
+    hubitatAlarmValues = [
+        "disarmed":              "disarmed",
+        "armed home":            "armed home",
+        "armed night":           "armed night",
+        "armed away":            "armed away",
+    ]
+    section("Arm/Disarm Settings") {
+        input(
+            name: "${deviceTrait.name}.armedAttribute",
+            title: "Armed/Disarmed Attribute",
+            type: "text",
+            defaultValue: "securityKeypad",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.armLevelAttribute",
+            title: "Current Arm Level Attribute",
+            type: "text",
+            defaultValue: "securityKeypad",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.exitAllowanceAttribute",
+            title: "Exit Delay Value Attribute",
+            type: "text",
+            defaultValue: "exitAllowance",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.disarmedValue",
+            title: "Disarmed Value",
+            type: "text",
+            defaultValue: "disarmed",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cancelCommand",
+            title: "Cancel Arming Command",
+            type: "text",
+            defaultValue: "disarm",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.armLevels",
+            title: "Supported Alarm Levels",
+            type: "enum",
+            options: hubitatAlarmLevels,
+            multiple: true,
+            required: true,
+            submitOnChange: true
+        )
+        deviceTrait.armLevels.each { armLevel ->
+            input(
+                name: "${deviceTrait.name}.armLevels.${armLevel.key}.googleNames",
+                title: "Google Home Level Names for ${hubitatAlarmLevels[armLevel.key]}",
+                description: "A comma-separated list of names that the Google Assistant will " +
+                             "accept for this alarm setting",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmLevels[armLevel.key]
+            )
+            input(
+                name: "${deviceTrait.name}.armCommands.${armLevel.key}.commandName",
+                title: "Hubitat Command for ${hubitatAlarmLevels[armLevel.key]}",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmCommands[armLevel.key]
+            )
+            input(
+                name: "${deviceTrait.name}.armValues.${armLevel.key}.value",
+                title: "Hubitat Value for ${hubitatAlarmLevels[armLevel.key]}",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmValues[armLevel.key]
+            )
+        }
+    }
+}
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_Brightness(deviceTrait) {
     section ("Brightness Settings") {
@@ -1907,6 +2000,38 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_ArmDisarm(deviceInfo, command) {
+    def armDisarmTrait = deviceInfo.deviceType.traits.ArmDisarm
+    def checkValue = "${armDisarmTrait.armValues["disarmed"]}"
+    // if the user canceled arming, issue the cancel command
+    if (command.params.cancel == true) {
+        checkMfa(deviceInfo.deviceType, "Cancel", command)
+        deviceInfo.device."${armDisarmTrait.cancelCommand}"()
+    } else {
+        // if Google returns arm=false, that indicates disarm, otherwise execute the matching alarm level command
+        if (command.params.arm == false) {
+            // Google sent back disarm
+            checkMfa(deviceInfo.deviceType, "Disarm", command)
+            deviceInfo.device."${armDisarmTrait.armCommands["disarmed"]}"()
+        } else {
+            // Google sent back an alarm level
+            checkMfa(deviceInfo.deviceType, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
+            checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
+            deviceInfo.device."${armDisarmTrait.armCommands[command.params.armLevel]}"()
+        }
+    }
+    return [
+        [
+            (armDisarmTrait.armedAttribute): checkValue,
+        ],
+        [
+            isArmed: command.params.arm,
+            armLevel: command.params.armLevel,
+            exitAllowance: armDisarmTrait.exitAllowanceAttribute,
+        ],
+    ]
+}
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     checkMfa(deviceInfo.deviceType, "Set Brightness", command)
     def brightnessTrait = deviceInfo.deviceType.traits.Brightness
@@ -2526,6 +2651,15 @@ private handleQueryRequest(request) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_ArmDisarm(deviceTrait, device) {
+    def isArmed = device.currentValue(deviceTrait.armedAttribute) != deviceTrait.disarmedValue
+    return [
+        isArmed: isArmed,
+        currentArmLevel: device.currentValue(deviceTrait.armLevelAttribute),
+        exitAllowance: device.currentValue(deviceTrait.exitAllowanceAttribute),
+    ]
+}
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Brightness(deviceTrait, device) {
     def brightness = hubitatPercentageToGoogle(device.currentValue(deviceTrait.brightnessAttribute))
     return [
@@ -2900,6 +3034,27 @@ private handleSyncRequest(request) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_ArmDisarm(deviceTrait) {
+    def armDisarmAttrs = [
+        availableArmLevels: [
+            levels: deviceTrait.armLevels.collect { hubitatLevelName, googleLevelNames ->
+                def levels = googleLevelNames.split(",")
+                [
+                    level_name: hubitatLevelName,
+                    level_values: [
+                        [
+                            level_synonym: levels,
+                            lang: "en"
+                        ]
+                    ]
+                ]
+            },
+            ordered: true
+        ],
+    ]
+    return armDisarmAttrs
+}
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_Brightness(deviceTrait) {
     return [:]
 }
@@ -3149,6 +3304,26 @@ private attributesForTrait_Volume(deviceTrait) {
     ]
 }
 
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_ArmDisarm(traitName) {
+    def armDisarmMapping = [
+        armedAttribute:                 settings."${traitName}.armedAttribute",
+        armLevelAttribute:              settings."${traitName}.armLevelAttribute",
+        exitAllowanceAttribute:         settings."${traitName}.exitAllowanceAttribute",
+        disarmedValue:                  settings."${traitName}.disarmedValue",
+        cancelCommand:                  settings."${traitName}.cancelCommand",
+        armLevels:                      [:],
+        armCommands:                    [:],
+        armValues:                      [:],
+        commands:                       ["Cancel", "Disarm", "Arm Home", "Arm Night", "Arm Away"]
+    ]
+    settings."${traitName}.armLevels"?.each { armLevel ->
+        armDisarmMapping.armLevels[armLevel] = settings."${traitName}.armLevels.${armLevel}.googleNames"
+        armDisarmMapping.armCommands[armLevel] = settings."${traitName}.armCommands.${armLevel}.commandName"
+        armDisarmMapping.armValues[armLevel] = settings."${traitName}.armValues.${armLevel}.value"
+    }
+    return armDisarmMapping
+}
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Brightness(traitName) {
     return [
@@ -3675,6 +3850,23 @@ private deleteDeviceTrait(deviceTrait) {
     deviceTraitsFromState(deviceType).remove(traitType as String)
 }
 
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_ArmDisarm(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.armedAttribute")
+    app.removeSetting("${deviceTrait.name}.armLevelAttribute")
+    app.removeSetting("${deviceTrait.name}.exitAllowanceAttribute")
+    app.removeSetting("${deviceTrait.name}.cancelCommand")
+    deviceTrait.armLevels.each { armLevel, googleNames ->
+        app.removeSetting("${deviceTrait.name}.armLevels.${armLevels}.googleNames")
+    }
+    deviceTrait.armLevels.each { armLevel, commandName ->
+        app.removeSetting("${deviceTrait.name}.armCommands.${armLevels}.commandName")
+    }
+    deviceTrait.armLevels.each { armLevel, value ->
+        app.removeSetting("${deviceTrait.name}.armValues.${armLevels}.value")
+    }
+    app.removeSetting("${deviceTrait.name}.armLevels")
+}
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_Brightness(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.brightnessAttribute")
@@ -4271,7 +4463,7 @@ private static final GOOGLE_DEVICE_TYPES = [
 @Field
 private static final GOOGLE_DEVICE_TRAITS = [
     //AppSelector: "App Selector",
-    //ArmDisarm: "Arm/Disarm",
+    ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
     CameraStream: "Camera Stream",
     //Channel: "Channel",
