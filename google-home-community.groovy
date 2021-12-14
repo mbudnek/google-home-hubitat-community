@@ -2016,7 +2016,7 @@ private handleExecuteRequest(request) {
     return resp
 }
 
-@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
+@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth', 'Complex Method'])
 private checkMfa(deviceInfo, commandType, command, noMatchValue) {
     def matchPosition = noMatchValue
     commandType = commandType as String
