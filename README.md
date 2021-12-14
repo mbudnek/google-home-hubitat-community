@@ -133,6 +133,14 @@ The Arm/Disarm trait is user to control security systems.  It can be controlled 
 	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
 	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
 	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.	
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
+	- Return user index: If selected, during a successful pincode challenge, the user index is returned with the Arm/Disarm commands. Defaults to 'false'.
+	  NOTE: Device must support parameters in the arm / disarm commands.
+	  - Device pin code no match value:  The value returned from CheckMFA when a pin code challenge fails.  Maps to the `-1` value by default.
+	  
 	
 ## Device Traits
 
