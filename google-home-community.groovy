@@ -364,7 +364,9 @@ def deviceTypePreferences(deviceType) {
                     }
                 } else {
                     // device attribute is set to use device pincodes
-                    section("<b>Device trait has use device pincodes selected.  Configure JSON non-encypted pincodes in the device driver.</b>") {}
+                    section("<b>Device trait has use device pincodes selected.  " +
+                            "Configure JSON non-encypted pincodes in the device driver.</b>") {
+                    }
                 }
             }
         }
@@ -429,7 +431,7 @@ def deviceTraitDelete(deviceTrait) {
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
 private deviceTraitPreferences_ArmDisarm(deviceTrait) {
     hubitatAlarmLevels = [
         "disarmed":              "Disarm",
@@ -520,7 +522,8 @@ private deviceTraitPreferences_ArmDisarm(deviceTrait) {
     section("Arm/Disarm Security") {
         input(
             name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  NOTE: Driver pincodes MUST be stored in non-encrypted in JSON",
+            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  " +
+                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON",
             type: "bool",
             defaultValue: false,
             required: true,
@@ -1018,7 +1021,8 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
     section("Lock/Unlock Security") {
         input(
             name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  NOTE: Driver pincodes MUST be stored in non-encrypted in JSON.",
+            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  " +
+                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON.",
             type: "bool",
             defaultValue: false,
             required: true,
@@ -2035,14 +2039,17 @@ private checkMfa(deviceInfo, commandType, command, noMatchValue) {
             ]))
         } else {
             // check for a match in the global and device level pincodes and return the position if found, 0 otherwise
-            def positionMatchGlobal = (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-            def positionMatchDevice = (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
+            def positionMatchGlobal =
+                (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
+            def positionMatchDevice =
+                (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
 
             // check all traits for the device for a matching pin
             def positionMatchTrait = noMatchValue
             deviceInfo.deviceType?.traits.each {
                 if (it.value?.useDevicePinCodes == true) {
-                    def lockCodeMap = new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
+                    def lockCodeMap =
+                        new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
                     // check all users for a pin code match
                     lockCodeMap.each { position, user ->
                         if (user.(it.value?.pinCodeValue) == command.challenge.pin) {
@@ -2057,9 +2064,9 @@ private checkMfa(deviceInfo, commandType, command, noMatchValue) {
             if (positionMatchTrait != noMatchValue) {
                 matchPosition = positionMatchTrait
             } else if (positionMatchDevice != 0) {
-                    matchPosition = positionMatchDevice
+                matchPosition = positionMatchDevice
             } else if (positionMatchGlobal != 0) {
-                    matchPosition = positionMatchGlobal
+                matchPosition = positionMatchGlobal
             } else {
                 // no matching pins
                 throw new Exception(JsonOutput.toJson([
@@ -2143,7 +2150,8 @@ private executeCommand_ArmDisarm(deviceInfo, command) {
             }
         } else {
             // Google sent back an alarm level
-            codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command, armDisarmTrait.pinCodeNoMatchValue)
+            codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}",
+                                    command, armDisarmTrait.pinCodeNoMatchValue)
             checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
             if (armDisarmTrait.returnUserIndexToDevice) {
                 deviceInfo.device."${armDisarmTrait.armCommands[command.params.armLevel]}"(codePosition)
