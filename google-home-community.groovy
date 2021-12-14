@@ -2016,7 +2016,26 @@ private handleExecuteRequest(request) {
     return resp
 }
 
-@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth', 'Complex Method'])
+private checkTraitPinMatch(deviceInfo, command, noMatchValue) {
+    def matchPosition = noMatchValue
+    // check all traits for the device for a matching pin
+    deviceInfo.deviceType?.traits.each {
+        if (it.value?.useDevicePinCodes == true) {
+            def lockCodeMap =
+                new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
+            // check all users for a pin code match
+            lockCodeMap.each { position, user ->
+                if (user.(it.value?.pinCodeValue) == command.challenge.pin) {
+                    // grab the code position in the JSON map
+                    matchPosition = position
+                }
+            }
+        }
+    }
+    return(matchPosition)
+}
+
+@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
 private checkMfa(deviceInfo, commandType, command, noMatchValue) {
     def matchPosition = noMatchValue
     commandType = commandType as String
@@ -2044,22 +2063,7 @@ private checkMfa(deviceInfo, commandType, command, noMatchValue) {
                 (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
             def positionMatchDevice =
                 (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-
-            // check all traits for the device for a matching pin
-            def positionMatchTrait = noMatchValue
-            deviceInfo.deviceType?.traits.each {
-                if (it.value?.useDevicePinCodes == true) {
-                    def lockCodeMap =
-                        new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
-                    // check all users for a pin code match
-                    lockCodeMap.each { position, user ->
-                        if (user.(it.value?.pinCodeValue) == command.challenge.pin) {
-                            // grab the code position in the JSON map
-                            positionMatchTrait = position
-                        }
-                    }
-                }
-            }
+            def positionMatchTrait = checkTraitPinMatch(deviceInfo, command, noMatchValue)
 
             // return pincode matches in the order of trait -> device -> global -> noMatchValue
             if (positionMatchTrait != noMatchValue) {
