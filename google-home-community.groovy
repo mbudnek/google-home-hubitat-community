@@ -1022,7 +1022,7 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
         input(
             name: "${deviceTrait.name}.useDevicePinCodes",
             title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  " +
-                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON.",        
+                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON.",
             type: "bool",
             defaultValue: false,
             required: true,
@@ -2016,6 +2016,7 @@ private handleExecuteRequest(request) {
     return resp
 }
 
+@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
 private checkMfa(deviceInfo, commandType, command, noMatchValue) {
     def matchPosition = noMatchValue
     commandType = commandType as String
@@ -2039,16 +2040,16 @@ private checkMfa(deviceInfo, commandType, command, noMatchValue) {
             ]))
         } else {
             // check for a match in the global and device level pincodes and return the position if found, 0 otherwise
-            def positionMatchGlobal = 
+            def positionMatchGlobal =
                 (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-            def positionMatchDevice = 
+            def positionMatchDevice =
                 (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
 
             // check all traits for the device for a matching pin
             def positionMatchTrait = noMatchValue
             deviceInfo.deviceType?.traits.each {
                 if (it.value?.useDevicePinCodes == true) {
-                    def lockCodeMap = 
+                    def lockCodeMap =
                         new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
                     // check all users for a pin code match
                     lockCodeMap.each { position, user ->
@@ -2150,7 +2151,7 @@ private executeCommand_ArmDisarm(deviceInfo, command) {
             }
         } else {
             // Google sent back an alarm level
-            codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", 
+            codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}",
                                     command, armDisarmTrait.pinCodeNoMatchValue)
             checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
             if (armDisarmTrait.returnUserIndexToDevice) {
