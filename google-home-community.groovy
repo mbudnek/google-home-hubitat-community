@@ -70,7 +70,6 @@
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
 import groovy.transform.Field
 
 definition(
