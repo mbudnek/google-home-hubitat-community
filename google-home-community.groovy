@@ -522,8 +522,7 @@ private deviceTraitPreferences_ArmDisarm(deviceTrait) {
     section("Arm/Disarm Security") {
         input(
             name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  " +
-                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON",
+            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.",
             type: "bool",
             defaultValue: false,
             required: true,
@@ -1021,8 +1020,7 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
     section("Lock/Unlock Security") {
         input(
             name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.  " +
-                   "NOTE: Driver pincodes MUST be stored in non-encrypted in JSON.",
+            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.",
             type: "bool",
             defaultValue: false,
             required: true,
@@ -2021,8 +2019,13 @@ private checkTraitPinMatch(deviceInfo, command, noMatchValue) {
     // check all traits for the device for a matching pin
     deviceInfo.deviceType?.traits.each {
         if (it.value?.useDevicePinCodes == true) {
-            def lockCodeMap =
-                new JsonSlurper().parseText(deviceInfo.device.currentValue(it.value.pinCodeAttribute))
+            // grab the lock code map and decrypt if necessary
+            def jsonLockCodeMap = deviceInfo.device.currentValue(it.value.pinCodeAttribute)
+            if (jsonLockCodeMap[0] == "{") {
+                lockCodeMap = parseJson(jsonLockCodeMap)
+            } else {
+                lockCodeMap = parseJson(decrypt(jsonLockCodeMap))
+            }
             // check all users for a pin code match
             lockCodeMap.each { position, user ->
                 if (user.(it.value?.pinCodeValue) == command.challenge.pin) {

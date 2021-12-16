@@ -254,7 +254,11 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 - Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
 - Lock Command: A device command used to lock the device.  Should not require any parameters.  Maps to `lock` by default.
 - Lock Command: A device command used to unlock the device.  Should not require any parameters.  Maps to `unlock` by default.
-
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
+	  
 ### Media State
 
 The Media State trait is used for reporting the current playback and activity state of a media device.  Query command is unknown at the is time.  The trait has the following configuration parameters:
