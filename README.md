@@ -75,7 +75,7 @@ To create your Google smart home Action:
 24. Enter your Hubitat account credentials and click "Sign In"
 25. Select your hub and tap "Select"
 26. Make sure at least one device is selected to expose to Google Home
-    - Note: If you do not select any devices linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
+    - Note: If you do not select any devices or your selected devices have no traits defined, the linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
 27. Tap "Authorize"
 
 
@@ -89,7 +89,7 @@ The first step to configuring a device to link to Google Home is to define a dev
 2. Click on the "Google Home Community" app you created
 3. Click "Define new device type"
 4. Fill in the settings on the "Device Type Definition" page.  See [Device Type Settings](#device-type-settings) below.
-5. Select one or more device traits to add to this device type.  Device traits determine what commands are available for a device type and how those commands translate to Hubitat commands.  See below for more information about individual device traits.
+5. Select one or more device traits to add to this device type.  Device traits determine what commands are available for a device type and how those commands translate to Hubitat commands.  All device types must have at least one trait defined or Google Home will fail to sync your devices.  See below for more information about individual device traits.
 6. Click "Next"
 7. Back on the main preferences page, click "{device type} devices" and select which devices you would like to link to Google Home using this device type
 8. Click "Done"
