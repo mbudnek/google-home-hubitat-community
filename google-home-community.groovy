@@ -764,6 +764,35 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
             )
         }
     }
+    
+       section("Supports Percentage Settings") {
+        input(
+            name: "${deviceTrait.name}.supportsFanSpeedPercent",
+            title: "Supports Fan Speed Percent",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
+        )
+
+        if (settings."${deviceTrait.name}.supportsFanSpeedPercent") {
+            
+         input(
+            name: "${deviceTrait.name}.fanSpeedPercentAttribute",
+            title: "Current Fan Speed Percentage Attribute",
+            type: "text",
+            defaultValue: "level",
+            required: true
+            )           
+            
+            input(
+                name: "${deviceTrait.name}.supportsFanSpeedPercentCommand",
+                title: "Fan Speed Percent Command",
+                type: "text",
+                defaultValue: "setLevel",
+                required: true
+            )
+        }
+    }
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
