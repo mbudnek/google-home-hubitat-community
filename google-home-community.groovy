@@ -2665,8 +2665,7 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
-	if (deviceTrait.supportsFanSpeedPercent)
-	{
+	if (deviceTrait.supportsFanSpeedPercent) {
 		def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
 		return [
 			currentFanSpeedSetting: currentSpeed,
