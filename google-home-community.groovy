@@ -766,7 +766,7 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
         }
     }
 
-       section("Supports Percentage Settings") {
+    section("Supports Percentage Settings") {
         input(
             name: "${deviceTrait.name}.supportsFanSpeedPercent",
             title: "Supports Fan Speed Percent",
@@ -782,7 +782,7 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
                 type: "text",
                 defaultValue: "level",
                 required: true
-                )
+            )
 
             input(
                 name: "${deviceTrait.name}.setFanSpeedPercentCommand",
