@@ -776,13 +776,13 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
         )
 
         if (settings."${deviceTrait.name}.supportsFanSpeedPercent") {
-			input(
-				name: "${deviceTrait.name}.currentFanSpeedPercent",
-				title: "Current Fan Speed Percentage Attribute",
-				type: "text",
-				defaultValue: "level",
-				required: true
-				)
+            input(
+                name: "${deviceTrait.name}.currentFanSpeedPercent",
+                title: "Current Fan Speed Percentage Attribute",
+                type: "text",
+                defaultValue: "level",
+                required: true
+                )
 
             input(
                 name: "${deviceTrait.name}.setFanSpeedPercentCommand",
@@ -2204,34 +2204,34 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetFanSpeed(deviceInfo, command) {
-	checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
-	def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
+    checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
+    def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
 
-	if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
-		def fanSpeedPercent = command.params.fanSpeedPercent
+    if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
+        def fanSpeedPercent = command.params.fanSpeedPercent
 
-		deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedPercent)
-		return [
-			[
-				(fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
-			],
-			[
-				currentFanSpeedPercent: fanSpeedPercent,
-			],
-		]
-	} else {
-		def fanSpeed = command.params.fanSpeed
-		deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
-		return [
-			[
-				(fanSpeedTrait.currentSpeedAttribute): fanSpeed,
-			],
-			[
-				currentFanSpeedSetting: fanSpeed,
-			],
-		]
-	}
-	}
+        deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedPercent)
+        return [
+            [
+                (fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
+            ],
+            [
+                currentFanSpeedPercent: fanSpeedPercent,
+            ],
+        ]
+    } else {
+        def fanSpeed = command.params.fanSpeed
+        deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
+        return [
+            [
+                (fanSpeedTrait.currentSpeedAttribute): fanSpeed,
+            ],
+            [
+                currentFanSpeedSetting: fanSpeed,
+            ],
+        ]
+    }
+    }
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetHumidity(deviceInfo, command) {
@@ -2665,17 +2665,17 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
-	if (deviceTrait.supportsFanSpeedPercent) {
-		def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
-		return [
-			currentFanSpeedSetting: currentSpeed,
-			currentFanSpeedPercent: currentSpeedPercent
-		]
-	} else {
-		return [
-			currentFanSpeedSetting: currentSpeed
-		]
-	}
+    if (deviceTrait.supportsFanSpeedPercent) {
+        def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
+        return [
+            currentFanSpeedSetting: currentSpeed,
+            currentFanSpeedPercent: currentSpeedPercent
+        ]
+    } else {
+        return [
+            currentFanSpeedSetting: currentSpeed
+        ]
+    }
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3288,15 +3288,15 @@ private traitFromSettings_FanSpeed(traitName) {
         fanSpeeds:             [:],
         reversible:            settings."${traitName}.reversible",
         commands:              ["Set Fan Speed"],
-		supportsFanSpeedPercent: settings."${traitName}.supportsFanSpeedPercent"
+        supportsFanSpeedPercent: settings."${traitName}.supportsFanSpeedPercent"
     ]
     if (fanSpeedMapping.reversible) {
         fanSpeedMapping.reverseCommand = settings."${traitName}.reverseCommand"
         fanSpeedMapping.commands << "Reverse"
     }
-	if (fanSpeedMapping.supportsFanSpeedPercent) {
+    if (fanSpeedMapping.supportsFanSpeedPercent) {
         fanSpeedMapping.setFanSpeedPercentCommand = settings."${traitName}.setFanSpeedPercentCommand"
-		fanSpeedMapping.currentFanSpeedPercent = settings."${traitName}.currentFanSpeedPercent"
+        fanSpeedMapping.currentFanSpeedPercent = settings."${traitName}.currentFanSpeedPercent"
         fanSpeedMapping.commands << "Set Percentage"
     }
     settings."${traitName}.fanSpeeds"?.each { fanSpeed ->
