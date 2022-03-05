@@ -2208,15 +2208,15 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 	def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
 
 	if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
-		def fanSpeedpercent = command.params.fanSpeedPercent
+		def fanSpeedPercent = command.params.fanSpeedPercent
 
-		deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedpercent)
+		deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedPercent)
 		return [
 			[
 				(fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
 			],
 			[
-				currentFanSpeedPercent: fanSpeedpercent,
+				currentFanSpeedPercent: fanSpeedPercent,
 			],
 		]
 	} else {
@@ -2669,7 +2669,7 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 		def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
 		return [
 			currentFanSpeedSetting: currentSpeed,
-			currentFanspeedPercent: currentSpeedPercent
+			currentFanSpeedPercent: currentSpeedPercent
 		]
 	} else {
 		return [
