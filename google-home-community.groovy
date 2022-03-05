@@ -2213,7 +2213,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
         deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedPercent)
         return [
             [
-                (fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
+                (fanSpeedTrait.currentFanSpeedPercent): fanSpeedPercent,
             ],
             [
                 currentFanSpeedPercent: fanSpeedPercent,
@@ -2231,7 +2231,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
             ],
         ]
     }
-    }
+}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetHumidity(deviceInfo, command) {
