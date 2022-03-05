@@ -765,7 +765,7 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
             )
         }
     }
-    
+
        section("Supports Percentage Settings") {
         input(
             name: "${deviceTrait.name}.supportsFanSpeedPercent",
@@ -776,15 +776,14 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
         )
 
         if (settings."${deviceTrait.name}.supportsFanSpeedPercent") {
-            
-         input(
-            name: "${deviceTrait.name}.currentFanSpeedPercent",
-            title: "Current Fan Speed Percentage Attribute",
-            type: "text",
-            defaultValue: "level",
-            required: true
-            )           
-            
+			input(
+				name: "${deviceTrait.name}.currentFanSpeedPercent",
+				title: "Current Fan Speed Percentage Attribute",
+				type: "text",
+				defaultValue: "level",
+				required: true
+				)
+
             input(
                 name: "${deviceTrait.name}.setFanSpeedPercentCommand",
                 title: "Fan Speed Percent Command",
@@ -2219,8 +2218,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 			[
 				currentFanSpeedSetting: fanSpeedpercent,
 			],
-		]	
-	
+		]
 	} else {
 		def fanSpeed = command.params.fanSpeed
 		deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
@@ -3788,10 +3786,9 @@ private deleteDeviceTrait_FanSpeed(deviceTrait) {
     deviceTrait.fanSpeeds.each { fanSpeed, googleNames ->
         app.removeSetting("${deviceTrait.name}.speed.${fanSpeed}.googleNames")
     }
-    app.removeSetting("${deviceTrait.name}.supportsFanSpeedPercent")	
-    app.removeSetting("${deviceTrait.name}.setFanSpeedPercentCommand")	
-    app.removeSetting("${deviceTrait.name}.currentFanSpeedPercent")	
-	
+    app.removeSetting("${deviceTrait.name}.supportsFanSpeedPercent")
+    app.removeSetting("${deviceTrait.name}.setFanSpeedPercentCommand")
+    app.removeSetting("${deviceTrait.name}.currentFanSpeedPercent")
     app.removeSetting("${deviceTrait.name}.fanSpeeds")
 }
 
