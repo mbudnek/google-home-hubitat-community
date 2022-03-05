@@ -2663,19 +2663,18 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
-    def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
+    def currentSpeedSetting = device.currentValue(deviceTrait.currentSpeedAttribute)
+
+    def fanSpeedState = [
+        currentFanSpeedSetting: currentSpeedSetting
+    ]
 
     if (deviceTrait.supportsFanSpeedPercent) {
         def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
-        return [
-            currentFanSpeedSetting: currentSpeed,
-            currentFanSpeedPercent: currentSpeedPercent
-        ]
-    } else {
-        return [
-            currentFanSpeedSetting: currentSpeed
-        ]
+        fanSpeedState.currentFanSpeedPercent = currentSpeedPercent
     }
+
+    return fanSpeedState
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
