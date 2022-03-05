@@ -3296,7 +3296,6 @@ private traitFromSettings_FanSpeed(traitName) {
     if (fanSpeedMapping.supportsFanSpeedPercent) {
         fanSpeedMapping.setFanSpeedPercentCommand = settings."${traitName}.setFanSpeedPercentCommand"
         fanSpeedMapping.currentFanSpeedPercent = settings."${traitName}.currentFanSpeedPercent"
-        fanSpeedMapping.commands << "Set Percentage"
     }
     settings."${traitName}.fanSpeeds"?.each { fanSpeed ->
         fanSpeedMapping.fanSpeeds[fanSpeed] = settings."${traitName}.speed.${fanSpeed}.googleNames"
