@@ -2216,7 +2216,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 				(fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
 			],
 			[
-				currentFanSpeedSetting: fanSpeedpercent,
+				currentFanSpeedPercent: fanSpeedpercent,
 			],
 		]
 	} else {
