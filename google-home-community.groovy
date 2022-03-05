@@ -59,6 +59,7 @@
 //   * May 20 2021 - Add a reverseDirection setting to the Open/Close trait to support devices that consider position
 //                   0 to be fully open
 //   * Jun 27 2021 - Log a warning on SYNC if a device is selected as multiple device types
+//   * Mar 5  2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -777,7 +778,7 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
         if (settings."${deviceTrait.name}.supportsFanSpeedPercent") {
             
          input(
-            name: "${deviceTrait.name}.fanSpeedPercentAttribute",
+            name: "${deviceTrait.name}.currentFanSpeedPercent",
             title: "Current Fan Speed Percentage Attribute",
             type: "text",
             defaultValue: "level",
@@ -785,7 +786,7 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
             )           
             
             input(
-                name: "${deviceTrait.name}.supportsFanSpeedPercentCommand",
+                name: "${deviceTrait.name}.setFanSpeedPercentCommand",
                 title: "Fan Speed Percent Command",
                 type: "text",
                 defaultValue: "setLevel",
@@ -2204,20 +2205,35 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetFanSpeed(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
-    def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
-    def fanSpeed = command.params.fanSpeed
+	checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
+	def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
 
-    deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
-    return [
-        [
-            (fanSpeedTrait.currentSpeedAttribute): fanSpeed,
-        ],
-        [
-            currentFanSpeedSetting: fanSpeed,
-        ],
-    ]
-}
+	if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
+		def fanSpeedpercent = command.params.fanSpeedPercent
+
+		deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedpercent)
+		return [
+			[
+				(fanSpeedTrait.currentSpeedAttribute): fanSpeedpercent,
+			],
+			[
+				currentFanSpeedSetting: fanSpeedpercent,
+			],
+		]	
+	
+	} else {
+		def fanSpeed = command.params.fanSpeed
+		deviceInfo.device."${fanSpeedTrait.setFanSpeedCommand}"(fanSpeed)
+		return [
+			[
+				(fanSpeedTrait.currentSpeedAttribute): fanSpeed,
+			],
+			[
+				currentFanSpeedSetting: fanSpeed,
+			],
+		]
+	}
+	}
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetHumidity(deviceInfo, command) {
@@ -2651,9 +2667,18 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
 private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     def currentSpeed = device.currentValue(deviceTrait.currentSpeedAttribute)
 
-    return [
-        currentFanSpeedSetting: currentSpeed
-    ]
+	if (deviceTrait.supportsFanSpeedPercent)
+	{
+		def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
+		return [
+			currentFanSpeedSetting: currentSpeed,
+			currentFanspeedPercent: currentSpeedPercent
+		]
+	} else {
+		return [
+			currentFanSpeedSetting: currentSpeed
+		]
+	}
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2985,7 +3010,7 @@ private attributesForTrait_FanSpeed(deviceTrait) {
             ordered: true
         ],
         reversible: deviceTrait.reversible,
-        supportsFanSpeedPercent: false,
+        supportsFanSpeedPercent: deviceTrait.supportsFanSpeedPercent,
         commandOnlyFanSpeed: false
     ]
     return fanSpeedAttrs
@@ -3265,11 +3290,17 @@ private traitFromSettings_FanSpeed(traitName) {
         setFanSpeedCommand:    settings."${traitName}.setFanSpeedCommand",
         fanSpeeds:             [:],
         reversible:            settings."${traitName}.reversible",
-        commands:              ["Set Fan Speed"]
+        commands:              ["Set Fan Speed"],
+		supportsFanSpeedPercent: settings."${traitName}.supportsFanSpeedPercent"
     ]
     if (fanSpeedMapping.reversible) {
         fanSpeedMapping.reverseCommand = settings."${traitName}.reverseCommand"
         fanSpeedMapping.commands << "Reverse"
+    }
+	if (fanSpeedMapping.supportsFanSpeedPercent) {
+        fanSpeedMapping.setFanSpeedPercentCommand = settings."${traitName}.setFanSpeedPercentCommand"
+		fanSpeedMapping.currentFanSpeedPercent = settings."${traitName}.currentFanSpeedPercent"
+        fanSpeedMapping.commands << "Set Percentage"
     }
     settings."${traitName}.fanSpeeds"?.each { fanSpeed ->
         fanSpeedMapping.fanSpeeds[fanSpeed] = settings."${traitName}.speed.${fanSpeed}.googleNames"
@@ -3757,6 +3788,10 @@ private deleteDeviceTrait_FanSpeed(deviceTrait) {
     deviceTrait.fanSpeeds.each { fanSpeed, googleNames ->
         app.removeSetting("${deviceTrait.name}.speed.${fanSpeed}.googleNames")
     }
+    app.removeSetting("${deviceTrait.name}.supportsFanSpeedPercent")	
+    app.removeSetting("${deviceTrait.name}.setFanSpeedPercentCommand")	
+    app.removeSetting("${deviceTrait.name}.currentFanSpeedPercent")	
+	
     app.removeSetting("${deviceTrait.name}.fanSpeeds")
 }
 
