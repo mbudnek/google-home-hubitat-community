@@ -2213,7 +2213,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 		deviceInfo.device."${fanSpeedTrait.setFanSpeedPercentCommand}"(fanSpeedpercent)
 		return [
 			[
-				(fanSpeedTrait.currentSpeedAttribute): fanSpeedpercent,
+				(fanSpeedTrait.currentFanSpeedPercent): fanSpeedpercent,
 			],
 			[
 				currentFanSpeedSetting: fanSpeedpercent,
