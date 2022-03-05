@@ -193,6 +193,9 @@ The Fan Speed trait is primarily used for fan controllers with multiple speed se
 - Google Home Level Names for {speed} - A comma-separated list of names that you will use to reference this fan speed when interacting with the Google Assistant.  By default, the name of the speed in Hubitat is used.
 - Reversible: Select this if the fan direction can be reversed
 - Reverse Command: Only available if "Reversible" is selected.  A device command that can be used to reverse the device's fan direction.
+- Supports Percentage Settings: Select this if you want to command the fan using percentages
+- Current Fan Speed Percentage Attribute: The device attribute used to query the current fan speed percentage of the device.  Maps to the `level` attribute by default.
+- Fan Speed Percent Command: A device command used to set the fan speed of the device i percentage. Maps to the `setLevel` command by default.
 
 ### Humidity Setting
 
