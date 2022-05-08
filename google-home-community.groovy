@@ -59,7 +59,8 @@
 //   * May 20 2021 - Add a reverseDirection setting to the Open/Close trait to support devices that consider position
 //                   0 to be fully open
 //   * Jun 27 2021 - Log a warning on SYNC if a device is selected as multiple device types
-//   * Mar 5  2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
+//   * Mar 05 2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
+//   * May 07 2022 - Add error handling so one bad device doesn't prevent reporting state of other devices
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2542,8 +2543,14 @@ private handleQueryRequest(request) {
         def deviceInfo = knownDevices."${requestedDevice.id}"
         def deviceState = [:]
         if (deviceInfo != null) {
-            deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
-                deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
+            try {
+                deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
+                    deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
+                }
+                deviceState.status = "SUCCESS"
+            } catch (Exception ex) {
+                LOGGER.exception("Error retreiving state for device ${deviceInfo.device.name}", ex)
+                deviceState.status = "ERROR"
             }
         } else {
             LOGGER.warn("Requested device ${requestedDevice.name} not found.")
