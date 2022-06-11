@@ -70,12 +70,12 @@ To create your Google smart home Action:
 19. Open the Google Home app on your phone or tablet
 20. Tap the "+" in the top-left corner
 21. Tap "Set up device"
-22. Tap "Have something already set up?"
+22. Tap "Works with Google"
 23. In the list, find the entry `[test] {your action name}`
 24. Enter your Hubitat account credentials and click "Sign In"
 25. Select your hub and tap "Select"
 26. Make sure at least one device is selected to expose to Google Home
-    - Note: If you do not select any devices linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
+    - Note: If you do not select any devices or your selected devices have no traits defined, the linking process will fail.  If that happens, go back to the Google Home Community app in Hubitat and select at least one device and then try again starting from step 18 above.
 27. Tap "Authorize"
 
 
@@ -89,7 +89,7 @@ The first step to configuring a device to link to Google Home is to define a dev
 2. Click on the "Google Home Community" app you created
 3. Click "Define new device type"
 4. Fill in the settings on the "Device Type Definition" page.  See [Device Type Settings](#device-type-settings) below.
-5. Select one or more device traits to add to this device type.  Device traits determine what commands are available for a device type and how those commands translate to Hubitat commands.  See below for more information about individual device traits.
+5. Select one or more device traits to add to this device type.  Device traits determine what commands are available for a device type and how those commands translate to Hubitat commands.  All device types must have at least one trait defined or Google Home will fail to sync your devices.  See below for more information about individual device traits.
 6. Click "Next"
 7. Back on the main preferences page, click "{device type} devices" and select which devices you would like to link to Google Home using this device type
 8. Click "Done"
@@ -226,6 +226,9 @@ The Fan Speed trait is primarily used for fan controllers with multiple speed se
 - Google Home Level Names for {speed} - A comma-separated list of names that you will use to reference this fan speed when interacting with the Google Assistant.  By default, the name of the speed in Hubitat is used.
 - Reversible: Select this if the fan direction can be reversed
 - Reverse Command: Only available if "Reversible" is selected.  A device command that can be used to reverse the device's fan direction.
+- Supports Percentage Settings: Select this if you want to command the fan using percentages
+- Current Fan Speed Percentage Attribute: The device attribute used to query the current fan speed percentage of the device.  Maps to the `level` attribute by default.
+- Fan Speed Percent Command: A device command used to set the fan speed of the device i percentage. Maps to the `setLevel` command by default.
 
 ### Humidity Setting
 
