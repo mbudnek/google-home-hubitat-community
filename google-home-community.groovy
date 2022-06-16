@@ -388,9 +388,7 @@ def deviceTraitPreferences(deviceTrait) {
         title: "Preferences For ${GOOGLE_DEVICE_TRAITS[deviceTrait.type]} Trait",
         nextPage: "deviceTypePreferences"
     ) {
-        section {
-            "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
-        }
+        "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
 
         section {
             href(
