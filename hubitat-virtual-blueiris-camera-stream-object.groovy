@@ -1,5 +1,5 @@
 /**
- *  Copyright 2020 Lyle Pakula
+ *  Copyright 2022 Lyle Pakula
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -20,7 +20,7 @@
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
- *  Date: 2021-09-14
+ *  Date: 2022-06-14
  */
 
 preferences {
@@ -48,6 +48,7 @@ metadata {
         attribute   "streamURL", "JSON_OBJECT"
         attribute   "streamProtocol", "enum"
         attribute   "statusMessage", "string"
+        attribute   "supportedProtocols", "string"
     }
 }
 
@@ -67,6 +68,7 @@ def updated() {
         sendEvent(name: "streamURL", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
     }
     sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
+    sendEvent(name: "supportedProtocols", value: "${sourceProtocol}")
     sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 

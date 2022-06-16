@@ -121,7 +121,6 @@ The Arm/Disarm trait is user to control security systems.  It can be controlled 
 	- Google Home Level Names for Disarm: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Disarm` attribute by default.
 	- Hubitat Command for Disarm: The device command used to set this level.  Maps to the `disarm` attribute by default.
 	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `disarmed` attribute by default.
-	
 	- Google Home Level Names for Night: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Night` attribute by default.
 	- Hubitat Command for Night: The device command used to set this level.  Maps to the `armNight` attribute by default.
 	- Hubitat Value for Night: The device value returned when the device is set to this level.  Maps to the `armed night` attribute by default.	

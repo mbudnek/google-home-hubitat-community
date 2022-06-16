@@ -407,9 +407,7 @@ def deviceTraitPreferences(deviceTrait) {
         title: "Preferences For ${GOOGLE_DEVICE_TRAITS[deviceTrait.type]} Trait",
         nextPage: "deviceTypePreferences"
     ) {
-        section {
-            "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
-        }
+        "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
 
         section {
             href(
@@ -596,6 +594,13 @@ def deviceTraitPreferences_CameraStream(deviceTrait) {
             title: "Camera Stream URL Attribute",
             type: "text",
             defaultValue: "streamURL",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cameraSupportedProtocolsAttribute",
+            title: "Camera Stream Supported Protocols Attribute",
+            type: "text",
+            defaultValue: "supportedProtocols",
             required: true
         )
         input(
@@ -2974,7 +2979,6 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
         def currentSpeedPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.currentFanSpeedPercent))
         fanSpeedState.currentFanSpeedPercent = currentSpeedPercent
     }
-
     return fanSpeedState
 }
 
@@ -3195,16 +3199,15 @@ private handleSyncRequest(request) {
     ]
 
     def deviceIdsEncountered = [] as Set
-
     (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
         def traits = deviceType.traits.collect { traitType, deviceTrait ->
             "action.devices.traits.${traitType}"
         }
-        def attributes = [:]
-        deviceType.traits.each { traitType, deviceTrait ->
-            attributes += "attributesForTrait_${traitType}"(deviceTrait)
-        }
         deviceType.devices.each { device ->
+            def attributes = [:]
+            deviceType.traits.each { traitType, deviceTrait ->
+                attributes += "attributesForTrait_${traitType}"(deviceTrait, device)
+            }
             def deviceName = device.label ?: device.name
             if (deviceIdsEncountered.contains(device.id)) {
                 LOGGER.warn(
@@ -3242,7 +3245,7 @@ private handleSyncRequest(request) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_ArmDisarm(deviceTrait) {
+private attributesForTrait_ArmDisarm(deviceTrait, device) {
     def armDisarmAttrs = [
         availableArmLevels: [
             levels: deviceTrait.armLevels.collect { hubitatLevelName, googleLevelNames ->
@@ -3264,20 +3267,20 @@ private attributesForTrait_ArmDisarm(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Brightness(deviceTrait) {
+private attributesForTrait_Brightness(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_CameraStream(deviceTrait) {
+private attributesForTrait_CameraStream(deviceTrait, device) {
     return [
-        cameraStreamSupportedProtocols: ["progressive_mp4", "hls", "dash", "smooth_stream"],
+        cameraStreamSupportedProtocols: device.currentValue(deviceTrait.cameraSupportedProtocolsAttribute).tokenize(','),
         cameraStreamNeedAuthToken:      false,
     ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_ColorSetting(deviceTrait) {
+private attributesForTrait_ColorSetting(deviceTrait, device) {
     def colorAttrs = [:]
     if (deviceTrait.fullSpectrum) {
         colorAttrs << [
@@ -3296,12 +3299,12 @@ private attributesForTrait_ColorSetting(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Dock(deviceTrait) {
+private attributesForTrait_Dock(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_EnergyStorage(deviceTrait) {
+private attributesForTrait_EnergyStorage(deviceTrait, device) {
     return [
         queryOnlyEnergyStorage:         deviceTrait.queryOnlyEnergyStorage,
         energyStorageDistanceUnitForUX: deviceTrait.energyStorageDistanceUnitForUX,
@@ -3310,7 +3313,7 @@ private attributesForTrait_EnergyStorage(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_FanSpeed(deviceTrait) {
+private attributesForTrait_FanSpeed(deviceTrait, device) {
     def fanSpeedAttrs = [
         availableFanSpeeds: [
             speeds: deviceTrait.fanSpeeds.collect { hubitatLevelName, googleLevelNames ->
@@ -3335,7 +3338,7 @@ private attributesForTrait_FanSpeed(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_HumiditySetting(deviceTrait) {
+private attributesForTrait_HumiditySetting(deviceTrait, device) {
     def attrs = [
         queryOnlyHumiditySetting: deviceTrait.queryOnly
     ]
@@ -3349,17 +3352,17 @@ private attributesForTrait_HumiditySetting(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Locator(deviceTrait) {
+private attributesForTrait_Locator(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_LockUnlock(deviceTrait) {
+private attributesForTrait_LockUnlock(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_MediaState(deviceTrait) {
+private attributesForTrait_MediaState(deviceTrait, device) {
     return [
         supportActivityState: deviceTrait.supportActivityState,
         supportPlaybackState: deviceTrait.supportPlaybackState
@@ -3367,12 +3370,12 @@ private attributesForTrait_MediaState(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_OnOff(deviceTrait) {
+private attributesForTrait_OnOff(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_OpenClose(deviceTrait) {
+private attributesForTrait_OpenClose(deviceTrait, device) {
     return [
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
@@ -3380,12 +3383,12 @@ private attributesForTrait_OpenClose(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Reboot(deviceTrait) {
+private attributesForTrait_Reboot(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Rotation(deviceTrait) {
+private attributesForTrait_Rotation(deviceTrait, device) {
     return [
         supportsContinuousRotation: deviceTrait.continuousRotation,
         supportsPercent:            true,
@@ -3394,26 +3397,26 @@ private attributesForTrait_Rotation(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Scene(deviceTrait) {
+private attributesForTrait_Scene(deviceTrait, device) {
     return [
         sceneReversible: deviceTrait.sceneReversible
     ]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_SoftwareUpdate(deviceTrait) {
+private attributesForTrait_SoftwareUpdate(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_StartStop(deviceTrait) {
+private attributesForTrait_StartStop(deviceTrait, device) {
     return [
         pausable: deviceTrait.canPause
     ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureControl(deviceTrait) {
+private attributesForTrait_TemperatureControl(deviceTrait, device) {
     def attrs = [
         temperatureUnitForUX:        deviceTrait.temperatureUnit,
         queryOnlyTemperatureControl: deviceTrait.queryOnly
@@ -3446,7 +3449,7 @@ private attributesForTrait_TemperatureControl(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureSetting(deviceTrait) {
+private attributesForTrait_TemperatureSetting(deviceTrait, device) {
     def attrs = [
         thermostatTemperatureUnit:   deviceTrait.temperatureUnit,
         queryOnlyTemperatureSetting: deviceTrait.queryOnly
@@ -3480,7 +3483,7 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Timer(deviceTrait) {
+private attributesForTrait_Timer(deviceTrait, device) {
     return [
         maxTimerLimitSec:    deviceTrait.maxTimerLimitSec,
         commandOnlyTimer:    deviceTrait.commandOnlyTimer,
@@ -3488,7 +3491,7 @@ private attributesForTrait_Timer(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Toggles(deviceTrait) {
+private attributesForTrait_Toggles(deviceTrait, device) {
     return [
         availableToggles: deviceTrait.toggles.collect { toggle ->
             [
@@ -3505,7 +3508,7 @@ private attributesForTrait_Toggles(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Volume(deviceTrait) {
+private attributesForTrait_Volume(deviceTrait, device) {
     return [
         volumeMaxLevel:         100,
         volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
@@ -3515,6 +3518,7 @@ private attributesForTrait_Volume(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_ArmDisarm(traitName) {
+
     def armDisarmMapping = [
         armedAttribute:                 settings."${traitName}.armedAttribute",
         armLevelAttribute:              settings."${traitName}.armLevelAttribute",
@@ -3553,10 +3557,11 @@ private traitFromSettings_Brightness(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_CameraStream(traitName) {
     return [
-        cameraStreamURLAttribute:       settings."${traitName}.cameraStreamURLAttribute",
-        cameraStreamProtocolAttribute:  settings."${traitName}.cameraStreamProtocolAttribute",
-        cameraStreamCommand:            settings."${traitName}.cameraStreamCommand",
-        commands:                       ["Display"]
+        cameraStreamURLAttribute:           settings."${traitName}.cameraStreamURLAttribute",
+        cameraSupportedProtocolsAttribute:  settings."${traitName}.cameraSupportedProtocolsAttribute",
+        cameraStreamProtocolAttribute:      settings."${traitName}.cameraStreamProtocolAttribute",
+        cameraStreamCommand:                settings."${traitName}.cameraStreamCommand",
+        commands:                           ["Display"]
     ]
 }
 
@@ -4058,7 +4063,6 @@ private addTraitToDeviceTypeState(deviceTypeName, traitType) {
 private deviceTypeTraitFromSettings(traitName) {
     def pieces = traitName.split("\\.traits\\.")
     def traitType = pieces[1]
-
     def traitAttrs = "traitFromSettings_${traitType}"(traitName)
     traitAttrs.name = traitName
     traitAttrs.type = traitType
@@ -4082,13 +4086,13 @@ private deleteDeviceTrait_ArmDisarm(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.exitAllowanceAttribute")
     app.removeSetting("${deviceTrait.name}.cancelCommand")
     deviceTrait.armLevels.each { armLevel, googleNames ->
-        app.removeSetting("${deviceTrait.name}.armLevels.${armLevels}.googleNames")
+        app.removeSetting("${deviceTrait.name}.armLevels.${armLevel}.googleNames")
     }
     deviceTrait.armLevels.each { armLevel, commandName ->
-        app.removeSetting("${deviceTrait.name}.armCommands.${armLevels}.commandName")
+        app.removeSetting("${deviceTrait.name}.armCommands.${armLevel}.commandName")
     }
     deviceTrait.armLevels.each { armLevel, value ->
-        app.removeSetting("${deviceTrait.name}.armValues.${armLevels}.value")
+        app.removeSetting("${deviceTrait.name}.armValues.${armLevel}.value")
     }
     app.removeSetting("${deviceTrait.name}.armLevels")
     app.removeSetting("${deviceTrait.name}.useDevicePinCodes")
@@ -4107,6 +4111,7 @@ private deleteDeviceTrait_Brightness(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_CameraStream(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.cameraStreamURLAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraSupportedProtocolsAttribute")
     app.removeSetting("${deviceTrait.name}.cameraStreamProtocolAttribute")
     app.removeSetting("${deviceTrait.name}.cameraStreamCommand")
 }
