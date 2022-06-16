@@ -61,6 +61,7 @@
 //   * Jun 27 2021 - Log a warning on SYNC if a device is selected as multiple device types
 //   * Mar 05 2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
 //   * May 07 2022 - Add error handling so one bad device doesn't prevent reporting state of other devices
+//   * Jun 15 2022 - Fix a crash on trait configuration introduced by Hubitat 2.3.2.127
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
