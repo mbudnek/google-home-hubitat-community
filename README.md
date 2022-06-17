@@ -123,24 +123,21 @@ The Arm/Disarm trait is user to control security systems.  It can be controlled 
 	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `disarmed` attribute by default.
 	- Google Home Level Names for Night: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Night` attribute by default.
 	- Hubitat Command for Night: The device command used to set this level.  Maps to the `armNight` attribute by default.
-	- Hubitat Value for Night: The device value returned when the device is set to this level.  Maps to the `armed night` attribute by default.	
-	
+	- Hubitat Value for Night: The device value returned when the device is set to this level.  Maps to the `armed night` attribute by default.
 	- Google Home Level Names for Home: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Home` attribute by default.
 	- Hubitat Command for Home: The device command used to set this level.  Maps to the `armHome` attribute by default.
-	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `armed home` attribute by default.	
-	
+	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `armed home` attribute by default.
 	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
 	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
-	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.	
+	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.
 - Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
   NOTE: Global pincodes are always useable.
 	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
 	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 	- Return user index: If selected, during a successful pincode challenge, the user index is returned with the Arm/Disarm commands. Defaults to 'false'.
 	  NOTE: Device must support parameters in the arm / disarm commands.
-	  - Device pin code no match value:  The value returned from CheckMFA when a pin code challenge fails.  Maps to the `-1` value by default.
-	  
-	
+
+
 ## Device Traits
 
 Google Home defines a number of device traits that you can mix-and-match to define the functionality of any particular type of device.  Not all traits are currently supported by Google Home Community.  The following are the currently supported device traits and their configuration parameters:
@@ -151,7 +148,7 @@ The Brightness trait is primarily used for devices like dimmer switches and ligh
 
 - Current Brightness Attribute: The device attribute used to query the current brightness level of the device.  Should be in the range 0-100.  Maps to the `level` attribute by default.
 - Set Brightness Command: A device command used to set the brightness of the device.  Should accept a brightness level in the range 0-100.  Maps to the `setLevel` command by default.
-	
+
 ### CameraStream
 
 The CameraStream trait is used to map compatible video streams for viewing on ChromeCast enabled devices (Nest Hubs, ChromeCast, etc).
@@ -260,7 +257,7 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
   NOTE: Global pincodes are always useable.
 	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
 	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
-	  
+
 ### Media State
 
 The Media State trait is used for reporting the current playback and activity state of a media device.  Query command is unknown at the is time.  The trait has the following configuration parameters:
