@@ -65,11 +65,9 @@
 //   * Jun 16 2022 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
 //                   driver level to accomodate different camera stream sources
 //                 - Added Arm/Disarm Trait
-//                 - Added ability for the app to use trait level pin codes retrieved from the device for
-//                   Arm/Disarm and Lock/Unlock
-//                 - Modified checkMfa to accept deviceInfo (instead of deviceType)
-//                   Added support for trait level pincodes, as well as returning the matching user position or
-//                   no match error value on pincode challenge in the order of trait -> device -> global -> null
+//                 - Added ability for the app to use device level pin codes retrieved from the device driver
+//                 - Pincode challenge in the order device_driver -> device_GHC -> global_GHC -> null
+//                 - Added support for returning the matching user position for Arm/Disarm and Lock/Unlock to the device driver
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -357,14 +355,6 @@ def deviceTypePreferences(deviceType) {
                             defaultValue: "code",
                             required: true
                         )
-                        input(
-                            name: "${devicePropertyName}.returnUserIndexToDevice",
-                            title: "Select to return the user index with the device command on a pincode match. " +
-                                    "Not all device drivers support this operation.",
-                            type: "bool",
-                            defaultValue: false,
-                            submitOnChange: true
-                        )
                     }
                 } else {
                     // device attribute is set to use app pincodes
@@ -417,7 +407,6 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.useDevicePinCodes")
         app.removeSetting("${deviceType.name}.pinCodeAttribute")
         app.removeSetting("${deviceType.name}.pinCodeValue")
-        app.removeSetting("${deviceType.name}.returnUserIndexToDevice")
         def pinCodeIds = deviceType.pinCodes*.id
         pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
         app.removeSetting("${deviceType.name}.pinCodes")
@@ -552,6 +541,14 @@ private deviceTraitPreferences_ArmDisarm(deviceTrait) {
                 defaultValue: hubitatAlarmValues[armLevel.key]
             )
         }
+        input(
+            name: "${deviceTrait.name}.returnUserIndexToDevice",
+            title: "Select to return the user index with the device command on a pincode match. " +
+                "Not all device drivers support this operation.",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
+        )
     }
 }
 
@@ -1038,6 +1035,14 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
             type: "text",
             defaultValue: "unlock",
             required: true
+        )
+        input(
+            name: "${deviceTrait.name}.returnUserIndexToDevice",
+            title: "Select to return the user index with the device command on a pincode match. " +
+                "Not all device drivers support this operation.",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
         )
     }
 }
@@ -2090,9 +2095,8 @@ private controlScene(options) {
     device."${options.command}"()
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private issueCommand(deviceInfo, command, codePosition) {
-    if (deviceInfo.deviceType.returnUserIndexToDevice) {
+private issueCommandWithCodePosition(deviceInfo, command, codePosition, returnIndex) {
+    if (returnIndex) {
         deviceInfo.device."${command}"(codePosition)
     } else {
         deviceInfo.device."${command}"()
@@ -2138,24 +2142,23 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 private executeCommand_ArmDisarm(deviceInfo, command) {
     def armDisarmTrait = deviceInfo.deviceType.traits.ArmDisarm
     def checkValue = "${armDisarmTrait.armValues["disarmed"]}"
-    def codePosition
 
     // if the user canceled arming, issue the cancel command
-    if (command.params.cancel == true) {
-        codePosition = checkMfa(deviceInfo, "Cancel", command)
-        issueCommand(deviceInfo, armDisarmTrait.cancelCommand, codePosition)
+    if (command.params.cancel) {
+        def codePosition = checkMfa(deviceInfo, "Cancel", command)
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.cancelCommand, codePosition,
+                     armDisarmTrait.returnUserIndexToDevice)
+    } else if (command.params.arm) {
+        // Google sent back an alarm level, execute the matching alarm level command
+        def codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
+        checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands[command.params.armLevel], codePosition,
+                                     armDisarmTrait.returnUserIndexToDevice)
     } else {
-        // if Google returns arm=false, that indicates disarm, otherwise execute the matching alarm level command
-        if (command.params.arm == false) {
-            // Google sent back disarm
-            codePosition = checkMfa(deviceInfo, "Disarm", command)
-            issueCommand(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition)
-        } else {
-            // Google sent back an alarm level
-            codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
-            checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
-            issueCommand(deviceInfo, armDisarmTrait.armCommands[command.params.armLevel], codePosition)
-        }
+        // if Google returns arm=false, that indicates disarm
+        def codePosition = checkMfa(deviceInfo, "Disarm", command)
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition,
+                                     armDisarmTrait.returnUserIndexToDevice)
     }
 
     return [
@@ -2306,11 +2309,11 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     if (command.params.lock) {
         codePosition = checkMfa(deviceInfo, "Lock", command)
         checkValue = lockUnlockTrait.lockedValue
-        issueCommand(deviceInfo, lockUnlockTrait.lockCommand, codePosition)
+        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.lockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
     } else {
         codePosition = checkMfa(deviceInfo, "Unlock", command)
         checkValue = { it != lockUnlockTrait.lockedValue }
-        issueCommand(deviceInfo, lockUnlockTrait.unlockCommand, codePosition)
+        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.unlockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
     }
 
     return [
@@ -3485,6 +3488,7 @@ private traitFromSettings_ArmDisarm(traitName) {
         armLevels:                      [:],
         armCommands:                    [:],
         armValues:                      [:],
+        returnUserIndexToDevice:        settings."${traitName}.returnUserIndexToDevice",
         commands:                       ["Cancel", "Disarm", "Arm Home", "Arm Night", "Arm Away"]
     ]
 
@@ -3654,6 +3658,7 @@ private traitFromSettings_LockUnlock(traitName) {
         lockedValue:             settings."${traitName}.lockedValue",
         lockCommand:             settings."${traitName}.lockCommand",
         unlockCommand:           settings."${traitName}.unlockCommand",
+        returnUserIndexToDevice: settings."${traitName}.returnUserIndexToDevice",
         commands:                ["Lock", "Unlock"]
     ]
 }
@@ -4044,6 +4049,7 @@ private deleteDeviceTrait_ArmDisarm(deviceTrait) {
         app.removeSetting("${deviceTrait.name}.armValues.${armLevel}.value")
     }
     app.removeSetting("${deviceTrait.name}.armLevels")
+    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4137,6 +4143,7 @@ private deleteDeviceTrait_LockUnlock(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.lockedValue")
     app.removeSetting("${deviceTrait.name}.lockCommand")
     app.removeSetting("${deviceTrait.name}.unlockCommand")
+    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4315,10 +4322,9 @@ private deviceTypeFromSettings(deviceTypeName) {
         confirmCommands:          [],
         secureCommands:           [],
         pinCodes:                 [],
-        useDevicePinCodes:        [],
-        pinCodeAttribute:         [],
-        pinCodeValue:             [],
-        returnUserIndexToDevice:  [],
+        useDevicePinCodes:        false,
+        pinCodeAttribute:         null,
+        pinCodeValue:             null,
     ]
 
     if (deviceType.display == null) {
@@ -4349,7 +4355,6 @@ private deviceTypeFromSettings(deviceTypeName) {
         deviceType.useDevicePinCodes = useDevicePinCodes
         deviceType.pinCodeAttribute = settings."${deviceTypeName}.pinCodeAttribute"
         deviceType.pinCodeValue = settings."${deviceTypeName}.pinCodeValue"
-        deviceType.returnUserIndexToDevice = settings."${deviceTypeName}.returnUserIndexToDevice"
     }
 
     return deviceType
