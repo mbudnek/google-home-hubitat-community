@@ -67,7 +67,7 @@
 //                 - Added Arm/Disarm Trait
 //                 - Added ability for the app to use trait level pin codes retrieved from the device for
 //                   Arm/Disarm and Lock/Unlock
-//                 - Modified checkMfa to accept deviceInfo (instead of deviceTrait)
+//                 - Modified checkMfa to accept deviceInfo (instead of deviceType)
 //                   Added support for trait level pincodes, as well as returning the matching user position or
 //                   no match error value on pincode challenge in the order of trait -> device -> global -> null
 
@@ -328,12 +328,47 @@ def deviceTypePreferences(deviceType) {
                 )
             }
 
-            def useDevicePinCodes = false
-            deviceType?.traits.each { useDevicePinCodes = it.value?.useDevicePinCodes }
-            if ((deviceType?.secureCommands || deviceType?.pinCodes)) {
-                // device attribute is set to use app pincodes
-                if (useDevicePinCodes == false) {
-                    section("PIN Codes") {
+            if (deviceType?.secureCommands || deviceType?.pinCodes) {
+                section {
+                    input(
+                        name: "${devicePropertyName}.useDevicePinCodes",
+                        title: "Select to use device driver pincodes.  Deselect to use Google Home Community app pincodes.",
+                        type: "bool",
+                        defaultValue: "false",
+                        submitOnChange: true
+                    )
+                }
+
+                if (deviceType?.useDevicePinCodes == true) {
+                    // device attribute is set to use device driver pincodes
+                    section("PIN Codes (Device Driver)") {
+                        input(
+                            name: "${devicePropertyName}.pinCodeAttribute",
+                            title: "Device pin code attribute",
+                            type: "text",
+                            defaultValue: "lockCodes",
+                            required: true
+                        )
+
+                        input(
+                            name: "${devicePropertyName}.pinCodeValue",
+                            title: "Device pin code value",
+                            type: "text",
+                            defaultValue: "code",
+                            required: true
+                        )
+                        input(
+                            name: "${devicePropertyName}.returnUserIndexToDevice",
+                            title: "Select to return the user index with the device command on a pincode match. " +
+                                    "Not all device drivers support this operation.",
+                            type: "bool",
+                            defaultValue: false,
+                            submitOnChange: true
+                        )
+                    }
+                } else {
+                    // device attribute is set to use app pincodes
+                    section("PIN Codes (Google Home Community)") {
                         deviceType.pinCodes.each { pinCode ->
                             input(
                                 name: "${devicePropertyName}.pin.${pinCode.id}.name",
@@ -364,11 +399,6 @@ def deviceTypePreferences(deviceType) {
                             )
                         }
                     }
-                } else {
-                    // device attribute is set to use device pincodes
-                    section("<b>Device trait has use device pincodes selected.  " +
-                            "Configure JSON non-encypted pincodes in the device driver.</b>") {
-                    }
                 }
             }
         }
@@ -384,6 +414,10 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.devices")
         app.removeSetting("${deviceType.name}.confirmCommands")
         app.removeSetting("${deviceType.name}.secureCommands")
+        app.removeSetting("${deviceType.name}.useDevicePinCodes")
+        app.removeSetting("${deviceType.name}.pinCodeAttribute")
+        app.removeSetting("${deviceType.name}.pinCodeValue")
+        app.removeSetting("${deviceType.name}.returnUserIndexToDevice")
         def pinCodeIds = deviceType.pinCodes*.id
         pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
         app.removeSetting("${deviceType.name}.pinCodes")
@@ -516,42 +550,6 @@ private deviceTraitPreferences_ArmDisarm(deviceTrait) {
                 type: "text",
                 required: "true",
                 defaultValue: hubitatAlarmValues[armLevel.key]
-            )
-        }
-    }
-    section("Arm/Disarm Security") {
-        input(
-            name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
-        )
-        if (deviceTrait.useDevicePinCodes == true) {
-            input(
-                name: "${deviceTrait.name}.pinCodeAttribute",
-                title: "Device pin code attribute",
-                type: "text",
-                defaultValue: "lockCodes",
-                required: true
-            )
-
-            input(
-                name: "${deviceTrait.name}.pinCodeValue",
-                title: "Device pin code value",
-                type: "text",
-                defaultValue: "code",
-                required: true
-            )
-
-            input(
-                name: "${deviceTrait.name}.returnUserIndexToDevice",
-                title: "Select to return the user index with the device command on a pincode match",
-                type: "bool",
-                defaultValue: false,
-                required: true,
-                submitOnChange: true
             )
         }
     }
@@ -1041,34 +1039,6 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
             defaultValue: "unlock",
             required: true
         )
-    }
-    section("Lock/Unlock Security") {
-        input(
-            name: "${deviceTrait.name}.useDevicePinCodes",
-            title: "Select to use device pincodes.  Deselect to use Google Home Community app pincodes.",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
-        )
-        if (deviceTrait.useDevicePinCodes == true) {
-            input(
-                name: "${deviceTrait.name}.pinCodeAttribute",
-                title: "Device pin code attribute",
-                type: "text",
-                defaultValue: "lockCodes",
-                required: true
-            )
-        }
-        if (deviceTrait.useDevicePinCodes == true) {
-            input(
-                name: "${deviceTrait.name}.pinCodeValue",
-                title: "Device pin code value",
-                type: "text",
-                defaultValue: "code",
-                required: true
-            )
-        }
     }
 }
 
@@ -2039,28 +2009,26 @@ private handleExecuteRequest(request) {
     return resp
 }
 
-private checkTraitPinMatch(deviceInfo, command) {
+private checkDevicePinMatch(deviceInfo, command) {
     def matchPosition = null
-    // check all traits for the device for a matching pin
-    deviceInfo.deviceType?.traits.each {
-        if (it.value?.useDevicePinCodes == true) {
-            // grab the lock code map and decrypt if necessary
-            def jsonLockCodeMap = deviceInfo.device.currentValue(it.value.pinCodeAttribute)
-            if (jsonLockCodeMap[0] == "{") {
-                lockCodeMap = parseJson(jsonLockCodeMap)
-            } else {
-                lockCodeMap = parseJson(decrypt(jsonLockCodeMap))
-            }
-            // check all users for a pin code match
-            lockCodeMap.each { position, user ->
-                if (user.(it.value?.pinCodeValue) == command.challenge.pin) {
-                    // grab the code position in the JSON map
-                    matchPosition = position
-                }
+
+    if (deviceInfo.deviceType.useDevicePinCodes == true) {
+        // grab the lock code map and decrypt if necessary
+        def jsonLockCodeMap = deviceInfo.device.currentValue(deviceInfo.deviceType.pinCodeAttribute)
+        if (jsonLockCodeMap[0] == "{") {
+            lockCodeMap = parseJson(jsonLockCodeMap)
+        } else {
+            lockCodeMap = parseJson(decrypt(jsonLockCodeMap))
+        }
+        // check all users for a pin code match
+        lockCodeMap.each { position, user ->
+            if (user.(deviceInfo.deviceType?.pinCodeValue) == command.challenge.pin) {
+                // grab the code position in the JSON map
+                matchPosition = position
             }
         }
     }
-    return(matchPosition)
+    return matchPosition
 }
 
 @SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
@@ -2091,7 +2059,7 @@ private checkMfa(deviceInfo, commandType, command) {
                 (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
             def positionMatchDevice =
                 (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-            def positionMatchTrait = checkTraitPinMatch(deviceInfo, command)
+            def positionMatchTrait = checkDevicePinMatch(deviceInfo, command)
 
             // return pincode matches in the order of trait -> device -> global -> null
             if (positionMatchTrait != null) {
@@ -2112,7 +2080,7 @@ private checkMfa(deviceInfo, commandType, command) {
         }
     }
 
-    return(matchPosition)
+    return matchPosition
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2120,6 +2088,15 @@ private controlScene(options) {
     def allDevices = allKnownDevices()
     def device = allDevices[options.deviceId].device
     device."${options.command}"()
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private issueCommand(deviceInfo, command, codePosition) {
+    if (deviceInfo.deviceType.returnUserIndexToDevice) {
+        deviceInfo.device."${command}"(codePosition)
+    } else {
+        deviceInfo.device."${command}"()
+    }
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2166,30 +2143,18 @@ private executeCommand_ArmDisarm(deviceInfo, command) {
     // if the user canceled arming, issue the cancel command
     if (command.params.cancel == true) {
         codePosition = checkMfa(deviceInfo, "Cancel", command)
-        if (armDisarmTrait.returnUserIndexToDevice) {
-            deviceInfo.device."${armDisarmTrait.cancelCommand}"(codePosition)
-        } else {
-            deviceInfo.device."${armDisarmTrait.cancelCommand}"()
-        }
+        issueCommand(deviceInfo, armDisarmTrait.cancelCommand, codePosition)
     } else {
         // if Google returns arm=false, that indicates disarm, otherwise execute the matching alarm level command
         if (command.params.arm == false) {
             // Google sent back disarm
             codePosition = checkMfa(deviceInfo, "Disarm", command)
-            if (armDisarmTrait.returnUserIndexToDevice) {
-                deviceInfo.device."${armDisarmTrait.armCommands["disarmed"]}"(codePosition)
-            } else {
-                deviceInfo.device."${armDisarmTrait.armCommands["disarmed"]}"()
-            }
+            issueCommand(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition)
         } else {
             // Google sent back an alarm level
             codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
             checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
-            if (armDisarmTrait.returnUserIndexToDevice) {
-                deviceInfo.device."${armDisarmTrait.armCommands[command.params.armLevel]}"(codePosition)
-            } else {
-                deviceInfo.device."${armDisarmTrait.armCommands[command.params.armLevel]}"()
-            }
+            issueCommand(deviceInfo, armDisarmTrait.armCommands[command.params.armLevel], codePosition)
         }
     }
 
@@ -2337,14 +2302,15 @@ private executeCommand_Locate(deviceInfo, command) {
 private executeCommand_LockUnlock(deviceInfo, command) {
     def lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
     def checkValue
+    def codePosition
     if (command.params.lock) {
-        checkMfa(deviceInfo, "Lock", command)
+        codePosition = checkMfa(deviceInfo, "Lock", command)
         checkValue = lockUnlockTrait.lockedValue
-        deviceInfo.device."${lockUnlockTrait.lockCommand}"()
+        issueCommand(deviceInfo, lockUnlockTrait.lockCommand, codePosition)
     } else {
-        checkMfa(deviceInfo, "Unlock", command)
+        codePosition = checkMfa(deviceInfo, "Unlock", command)
         checkValue = { it != lockUnlockTrait.lockedValue }
-        deviceInfo.device."${lockUnlockTrait.unlockCommand}"()
+        issueCommand(deviceInfo, lockUnlockTrait.unlockCommand, codePosition)
     }
 
     return [
@@ -3519,10 +3485,6 @@ private traitFromSettings_ArmDisarm(traitName) {
         armLevels:                      [:],
         armCommands:                    [:],
         armValues:                      [:],
-        useDevicePinCodes:              settings."${traitName}.useDevicePinCodes",
-        pinCodeAttribute:               settings."${traitName}.pinCodeAttribute",
-        pinCodeValue:                   settings."${traitName}.pinCodeValue",
-        returnUserIndexToDevice:        settings."${traitName}.returnUserIndexToDevice",
         commands:                       ["Cancel", "Disarm", "Arm Home", "Arm Night", "Arm Away"]
     ]
 
@@ -3692,9 +3654,6 @@ private traitFromSettings_LockUnlock(traitName) {
         lockedValue:             settings."${traitName}.lockedValue",
         lockCommand:             settings."${traitName}.lockCommand",
         unlockCommand:           settings."${traitName}.unlockCommand",
-        useDevicePinCodes:       settings."${traitName}.useDevicePinCodes",
-        pinCodeAttribute:        settings."${traitName}.pinCodeAttribute",
-        pinCodeValue:            settings."${traitName}.pinCodeValue",
         commands:                ["Lock", "Unlock"]
     ]
 }
@@ -4053,7 +4012,6 @@ private addTraitToDeviceTypeState(deviceTypeName, traitType) {
 private deviceTypeTraitFromSettings(traitName) {
     def pieces = traitName.split("\\.traits\\.")
     def traitType = pieces[1]
-
     def traitAttrs = "traitFromSettings_${traitType}"(traitName)
     traitAttrs.name = traitName
     traitAttrs.type = traitType
@@ -4086,10 +4044,6 @@ private deleteDeviceTrait_ArmDisarm(deviceTrait) {
         app.removeSetting("${deviceTrait.name}.armValues.${armLevel}.value")
     }
     app.removeSetting("${deviceTrait.name}.armLevels")
-    app.removeSetting("${deviceTrait.name}.useDevicePinCodes")
-    app.removeSetting("${deviceTrait.name}.pinCodeAttribute")
-    app.removeSetting("${deviceTrait.name}.pinCodeValue")
-    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4183,9 +4137,6 @@ private deleteDeviceTrait_LockUnlock(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.lockedValue")
     app.removeSetting("${deviceTrait.name}.lockCommand")
     app.removeSetting("${deviceTrait.name}.unlockCommand")
-    app.removeSetting("${deviceTrait.name}.useDevicePinCodes")
-    app.removeSetting("${deviceTrait.name}.pinCodeAttribute")
-    app.removeSetting("${deviceTrait.name}.pinCodeValue")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4355,15 +4306,19 @@ private deviceTypeTraitsFromSettings(deviceTypeName) {
 
 private deviceTypeFromSettings(deviceTypeName) {
     def deviceType = [
-        name:             deviceTypeName,
-        display:          settings."${deviceTypeName}.display",
-        type:             settings."${deviceTypeName}.type",
-        googleDeviceType: settings."${deviceTypeName}.googleDeviceType",
-        devices:          settings."${deviceTypeName}.devices",
-        traits:           deviceTypeTraitsFromSettings(deviceTypeName),
-        confirmCommands:  [],
-        secureCommands:   [],
-        pinCodes:         [],
+        name:                     deviceTypeName,
+        display:                  settings."${deviceTypeName}.display",
+        type:                     settings."${deviceTypeName}.type",
+        googleDeviceType:         settings."${deviceTypeName}.googleDeviceType",
+        devices:                  settings."${deviceTypeName}.devices",
+        traits:                   deviceTypeTraitsFromSettings(deviceTypeName),
+        confirmCommands:          [],
+        secureCommands:           [],
+        pinCodes:                 [],
+        useDevicePinCodes:        [],
+        pinCodeAttribute:         [],
+        pinCodeValue:             [],
+        returnUserIndexToDevice:  [],
     ]
 
     if (deviceType.display == null) {
@@ -4387,6 +4342,14 @@ private deviceTypeFromSettings(deviceTypeName) {
             name:  settings."${deviceTypeName}.pin.${pinCodeId}.name",
             value: settings."${deviceTypeName}.pin.${pinCodeId}.value",
         ]
+    }
+
+    def useDevicePinCodes = settings."${deviceTypeName}.useDevicePinCodes"
+    if (useDevicePinCodes) {
+        deviceType.useDevicePinCodes = useDevicePinCodes
+        deviceType.pinCodeAttribute = settings."${deviceTypeName}.pinCodeAttribute"
+        deviceType.pinCodeValue = settings."${deviceTypeName}.pinCodeValue"
+        deviceType.returnUserIndexToDevice = settings."${deviceTypeName}.returnUserIndexToDevice"
     }
 
     return deviceType
