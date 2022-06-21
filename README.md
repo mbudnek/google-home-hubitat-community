@@ -322,6 +322,15 @@ This is used for controlling scenes, and should generally only be used with the 
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
 - Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
 
+### Sensor State
+
+This is used for reporting sensor states such as air quality, smoke level, carbon monoxide level, filter cleanliness, water leak, etc.  It can be controlled by saying things like "Hey Google, what is the filter lifetime of (device)" or "Hey Google, what is the carbon dioxide level of (device)".  It has the following configuration parameters:
+
+- Google Home Available States: Comma separated list of available sensor states.
+- Hubitat Descriptive State Attribute: The device attribute used to query the current descriptive value of the device.
+- Google Numeric Units: Units for the sensor state if the sensor supports numerical output.
+- Hubitat Numeric Attribute: The device attribute used to query the current numerical value of the device.
+
 ### SoftwareUpdate
 
 The Software Update trait is used for devices that can have a software update.  It can be controlled by saying things like "Hey Google, Software update {device}." and queried by saying things like "Hey Google, When was {device} last updated?".  It has the following configuration parameters:
