@@ -109,10 +109,6 @@ Each device type has the following settings:
 - Actions to Confirm:  Only visible if the device has one or more traits with actions.  The Google Assistant will ask for confirmation before performing these actions.  This is primarily useful to prevent the assistant from triggering an action accidentally.
 - Actions requiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
 - PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
-- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
-  NOTE: Global pincodes are always useable.
-	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
-	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 
 ### Arm/Disarm
 
@@ -134,9 +130,12 @@ The Arm/Disarm trait is user to control security systems.  It can be controlled 
 	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
 	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
 	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 	- Return user index: If selected, during a successful pincode challenge, the user index is returned with the Arm/Disarm commands. Defaults to 'false'.
 	  NOTE: Device must support parameters in the arm / disarm commands.
-
 
 
 ## Device Traits
@@ -254,8 +253,10 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 - Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
 - Lock Command: A device command used to lock the device.  Should not require any parameters.  Maps to `lock` by default.
 - Lock Command: A device command used to unlock the device.  Should not require any parameters.  Maps to `unlock` by default.
-- Return user index: If selected, during a successful pincode challenge, the user index is returned with the Arm/Disarm commands. Defaults to 'false'.
-	  NOTE: Device must support parameters in the lock / unlock commands.
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 
 ### Media State
 
@@ -320,6 +321,15 @@ This is used for controlling scenes, and should generally only be used with the 
 - Activate Command: A device command used to activate this scene.  Maps to `on` by default.
 - Can this scene be deactivated?: Should be left unset if this scene can only be activated and set if this scene can be both activated and deactivated.
 - Deactivate Command: A device command used to deactivate this scene.  Only available if the scene can be deactivated.  Maps to `off` by default.
+
+### Sensor State
+
+This is used for reporting sensor states such as air quality, smoke level, carbon monoxide level, filter cleanliness, water leak, etc.  It can be controlled by saying things like "Hey Google, what is the filter lifetime of (device)" or "Hey Google, what is the carbon dioxide level of (device)".  It has the following configuration parameters:
+
+- Google Home Available States: Comma separated list of available sensor states.
+- Hubitat Descriptive State Attribute: The device attribute used to query the current descriptive value of the device.
+- Google Numeric Units: Units for the sensor state if the sensor supports numerical output.
+- Hubitat Numeric Attribute: The device attribute used to query the current numerical value of the device.
 
 ### SoftwareUpdate
 
