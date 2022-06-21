@@ -62,6 +62,12 @@
 //   * Mar 05 2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
 //   * May 07 2022 - Add error handling so one bad device doesn't prevent reporting state of other devices
 //   * Jun 15 2022 - Fix a crash on trait configuration introduced by Hubitat 2.3.2.127
+//   * Jun 20 2022 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
+//                   driver level to accomodate different camera stream sources
+//                 - Added Arm/Disarm Trait
+//                 - Added ability for the app to use device level pin codes retrieved from the device driver
+//                 - Pincode challenge in the order device_driver -> device_GHC -> global_GHC -> null
+//                 - Added support for returning the matching user position for Arm/Disarm and Lock/Unlock to the device driver
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -319,36 +325,69 @@ def deviceTypePreferences(deviceType) {
                     submitOnChange: true
                 )
             }
+
             if (deviceType?.secureCommands || deviceType?.pinCodes) {
-                section("PIN Codes") {
-                    deviceType.pinCodes.each { pinCode ->
+                section {
+                    input(
+                        name: "${devicePropertyName}.useDevicePinCodes",
+                        title: "Select to use device driver pincodes.  Deselect to use Google Home Community app pincodes.",
+                        type: "bool",
+                        defaultValue: "false",
+                        submitOnChange: true
+                    )
+                }
+
+                if (deviceType?.useDevicePinCodes == true) {
+                    // device attribute is set to use device driver pincodes
+                    section("PIN Codes (Device Driver)") {
                         input(
-                            name: "${devicePropertyName}.pin.${pinCode.id}.name",
-                            title: "PIN Code Name",
+                            name: "${devicePropertyName}.pinCodeAttribute",
+                            title: "Device pin code attribute",
                             type: "text",
-                            required: true,
-                            width: 6
+                            defaultValue: "lockCodes",
+                            required: true
                         )
+
                         input(
-                            name: "${devicePropertyName}.pin.${pinCode.id}.value",
-                            title: "PIN Code Value",
-                            type: "password",
-                            required: true,
-                            width: 5
-                        )
-                        input(
-                            name: "deletePin:${devicePropertyName}.pin.${pinCode.id}",
-                            title: "X",
-                            type: "button",
-                            width: 1
+                            name: "${devicePropertyName}.pinCodeValue",
+                            title: "Device pin code value",
+                            type: "text",
+                            defaultValue: "code",
+                            required: true
                         )
                     }
-                    if (deviceType?.secureCommands) {
-                        input(
-                            name: "addPin:${devicePropertyName}",
-                            title: "Add PIN Code",
-                            type: "button"
-                        )
+                } else {
+                    // device attribute is set to use app pincodes
+                    section("PIN Codes (Google Home Community)") {
+                        deviceType.pinCodes.each { pinCode ->
+                            input(
+                                name: "${devicePropertyName}.pin.${pinCode.id}.name",
+                                title: "PIN Code Name",
+                                type: "text",
+                                required: true,
+                                width: 6
+                            )
+                            input(
+                                name: "${devicePropertyName}.pin.${pinCode.id}.value",
+                                title: "PIN Code Value",
+                                type: "password",
+                                required: true,
+                                width: 5
+                            )
+                            input(
+                                name: "deletePin:${devicePropertyName}.pin.${pinCode.id}",
+                                title: "X",
+                                type: "button",
+                                width: 1
+                            )
+                        }
+                        if (deviceType?.secureCommands) {
+                            input(
+                                name: "addPin:${devicePropertyName}",
+                                title: "Add PIN Code",
+                                type: "button"
+                            )
+                        }
                     }
                 }
             }
@@ -365,6 +404,9 @@ def deviceTypeDelete(deviceType) {
         app.removeSetting("${deviceType.name}.devices")
         app.removeSetting("${deviceType.name}.confirmCommands")
         app.removeSetting("${deviceType.name}.secureCommands")
+        app.removeSetting("${deviceType.name}.useDevicePinCodes")
+        app.removeSetting("${deviceType.name}.pinCodeAttribute")
+        app.removeSetting("${deviceType.name}.pinCodeValue")
         def pinCodeIds = deviceType.pinCodes*.id
         pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
         app.removeSetting("${deviceType.name}.pinCodes")
@@ -412,6 +454,104 @@ def deviceTraitDelete(deviceTrait) {
     }
 }
 
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
+private deviceTraitPreferences_ArmDisarm(deviceTrait) {
+    hubitatAlarmLevels = [
+        "disarmed":              "Disarm",
+        "armed home":            "Home",
+        "armed night":           "Night",
+        "armed away":            "Away",
+    ]
+    hubitatAlarmCommands = [
+        "disarmed":              "disarm",
+        "armed home":            "armHome",
+        "armed night":           "armNight",
+        "armed away":            "armAway",
+    ]
+    hubitatAlarmValues = [
+        "disarmed":              "disarmed",
+        "armed home":            "armed home",
+        "armed night":           "armed night",
+        "armed away":            "armed away",
+    ]
+
+    section("Arm/Disarm Settings") {
+        input(
+            name: "${deviceTrait.name}.armedAttribute",
+            title: "Armed/Disarmed Attribute",
+            type: "text",
+            defaultValue: "securityKeypad",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.armLevelAttribute",
+            title: "Current Arm Level Attribute",
+            type: "text",
+            defaultValue: "securityKeypad",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.exitAllowanceAttribute",
+            title: "Exit Delay Value Attribute",
+            type: "text",
+            defaultValue: "exitAllowance",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cancelCommand",
+            title: "Cancel Arming Command",
+            type: "text",
+            defaultValue: "disarm",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.armLevels",
+            title: "Supported Alarm Levels",
+            type: "enum",
+            options: hubitatAlarmLevels,
+            multiple: true,
+            required: true,
+            submitOnChange: true
+        )
+
+        deviceTrait.armLevels.each { armLevel ->
+            input(
+                name: "${deviceTrait.name}.armLevels.${armLevel.key}.googleNames",
+                title: "Google Home Level Names for ${hubitatAlarmLevels[armLevel.key]}",
+                description: "A comma-separated list of names that the Google Assistant will " +
+                             "accept for this alarm setting",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmLevels[armLevel.key]
+            )
+
+            input(
+                name: "${deviceTrait.name}.armCommands.${armLevel.key}.commandName",
+                title: "Hubitat Command for ${hubitatAlarmLevels[armLevel.key]}",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmCommands[armLevel.key]
+            )
+
+            input(
+                name: "${deviceTrait.name}.armValues.${armLevel.key}.value",
+                title: "Hubitat Value for ${hubitatAlarmLevels[armLevel.key]}",
+                type: "text",
+                required: "true",
+                defaultValue: hubitatAlarmValues[armLevel.key]
+            )
+        }
+        input(
+            name: "${deviceTrait.name}.returnUserIndexToDevice",
+            title: "Select to return the user index with the device command on a pincode match. " +
+                "Not all device drivers support this operation.",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
+        )
+    }
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_Brightness(deviceTrait) {
     section ("Brightness Settings") {
@@ -434,27 +574,34 @@ private deviceTraitPreferences_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 def deviceTraitPreferences_CameraStream(deviceTrait) {
-    googleCameraStreamSupportedProtocols = [
-        "progressive_mp4":         "Progressive MP4",
-        "hls":                     "HLS",
-        "dash":                    "Dash",
-        "smooth_stream":           "Smooth Stream",
-    ]
     section("Stream Camera") {
         input(
-            name: "${deviceTrait.name}.cameraStreamAttribute",
+            name: "${deviceTrait.name}.cameraStreamURLAttribute",
             title: "Camera Stream URL Attribute",
             type: "text",
-            defaultValue: "settings",
+            defaultValue: "streamURL",
             required: true
         )
         input(
-            name: "${deviceTrait.name}.cameraStreamSupportedProtocols",
-            title: "Camera Stream Supported Protocols",
-            type: "enum",
-            options: googleCameraStreamSupportedProtocols,
-            multiple: true,
-            required: true,
+            name: "${deviceTrait.name}.cameraSupportedProtocolsAttribute",
+            title: "Camera Stream Supported Protocols Attribute",
+            type: "text",
+            defaultValue: "supportedProtocols",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cameraStreamProtocolAttribute",
+            title: "Camera Stream Protocol Attribute",
+            type: "text",
+            defaultValue: "streamProtocol",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.cameraStreamCommand",
+            title: "Start Camera Stream Command",
+            type: "text",
+            defaultValue: "on",
+            required: true
         )
     }
 }
@@ -888,6 +1035,14 @@ private deviceTraitPreferences_LockUnlock(deviceTrait) {
             type: "text",
             defaultValue: "unlock",
             required: true
+        )
+        input(
+            name: "${deviceTrait.name}.returnUserIndexToDevice",
+            title: "Select to return the user index with the device command on a pincode match. " +
+                "Not all device drivers support this operation.",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
         )
     }
 }
@@ -1859,10 +2014,34 @@ private handleExecuteRequest(request) {
     return resp
 }
 
-private checkMfa(deviceType, commandType, command) {
+private checkDevicePinMatch(deviceInfo, command) {
+    def matchPosition = null
+
+    if (deviceInfo.deviceType.useDevicePinCodes == true) {
+        // grab the lock code map and decrypt if necessary
+        def jsonLockCodeMap = deviceInfo.device.currentValue(deviceInfo.deviceType.pinCodeAttribute)
+        if (jsonLockCodeMap[0] == "{") {
+            lockCodeMap = parseJson(jsonLockCodeMap)
+        } else {
+            lockCodeMap = parseJson(decrypt(jsonLockCodeMap))
+        }
+        // check all users for a pin code match
+        lockCodeMap.each { position, user ->
+            if (user.(deviceInfo.deviceType?.pinCodeValue) == command.challenge.pin) {
+                // grab the code position in the JSON map
+                matchPosition = position
+            }
+        }
+    }
+    return matchPosition
+}
+
+@SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
+private checkMfa(deviceInfo, commandType, command) {
+    def matchPosition = null
     commandType = commandType as String
     LOGGER.debug("Checking MFA for ${commandType} command")
-    if (commandType in deviceType.confirmCommands && !command.challenge?.ack) {
+    if (commandType in deviceInfo.deviceType.confirmCommands && !command.challenge?.ack) {
         throw new Exception(JsonOutput.toJson([
             errorCode: "challengeNeeded",
             challengeNeeded: [
@@ -1870,7 +2049,7 @@ private checkMfa(deviceType, commandType, command) {
             ]
         ]))
     }
-    if (commandType in deviceType.secureCommands) {
+    if (commandType in deviceInfo.deviceType.secureCommands) {
         def globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
         if (!command.challenge?.pin) {
             throw new Exception(JsonOutput.toJson([
@@ -1879,16 +2058,34 @@ private checkMfa(deviceType, commandType, command) {
                     type: "pinNeeded"
                 ]
             ]))
-        } else if (!(command.challenge.pin in deviceType.pinCodes*.value)
-                   && !(command.challenge.pin in globalPinCodes.pinCodes*.value)) {
-            throw new Exception(JsonOutput.toJson([
-                errorCode: "challengeNeeded",
-                challengeNeeded: [
-                    type: "challengeFailedPinNeeded"
-                ]
-            ]))
+        } else {
+            // check for a match in the global and device level pincodes and return the position if found, 0 otherwise
+            def positionMatchGlobal =
+                (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
+            def positionMatchDevice =
+                (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
+            def positionMatchTrait = checkDevicePinMatch(deviceInfo, command)
+
+            // return pincode matches in the order of trait -> device -> global -> null
+            if (positionMatchTrait != null) {
+                matchPosition = positionMatchTrait
+            } else if (positionMatchDevice != 0) {
+                matchPosition = positionMatchDevice
+            } else if (positionMatchGlobal != 0) {
+                matchPosition = positionMatchGlobal
+            } else {
+                // no matching pins
+                throw new Exception(JsonOutput.toJson([
+                    errorCode: "challengeNeeded",
+                    challengeNeeded: [
+                        type: "challengeFailedPinNeeded"
+                    ]
+                ]))
+            }
         }
     }
+
+    return matchPosition
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -1898,6 +2095,14 @@ private controlScene(options) {
     device."${options.command}"()
 }
 
+private issueCommandWithCodePosition(deviceInfo, command, codePosition, returnIndex) {
+    if (returnIndex) {
+        deviceInfo.device."${command}"(codePosition)
+    } else {
+        deviceInfo.device."${command}"()
+    }
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ActivateScene(deviceInfo, command) {
     def sceneTrait = deviceInfo.deviceType.traits.Scene
@@ -1905,7 +2110,7 @@ private executeCommand_ActivateScene(deviceInfo, command) {
         location.mode = deviceInfo.device.name
     } else {
         if (command.params.deactivate) {
-            checkMfa(deviceInfo.deviceType, "Deactivate Scene", command)
+            checkMfa(deviceInfo, "Deactivate Scene", command)
             runIn(
                 0,
                 "controlScene",
@@ -1917,7 +2122,7 @@ private executeCommand_ActivateScene(deviceInfo, command) {
                 ]
             )
         } else {
-            checkMfa(deviceInfo.deviceType, "Activate Scene", command)
+            checkMfa(deviceInfo, "Activate Scene", command)
             runIn(
                 0,
                 "controlScene",
@@ -1934,8 +2139,43 @@ private executeCommand_ActivateScene(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_ArmDisarm(deviceInfo, command) {
+    def armDisarmTrait = deviceInfo.deviceType.traits.ArmDisarm
+    def checkValue = "${armDisarmTrait.armValues["disarmed"]}"
+
+    // if the user canceled arming, issue the cancel command
+    if (command.params.cancel) {
+        def codePosition = checkMfa(deviceInfo, "Cancel", command)
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.cancelCommand, codePosition,
+                     armDisarmTrait.returnUserIndexToDevice)
+    } else if (command.params.arm) {
+        // Google sent back an alarm level, execute the matching alarm level command
+        def codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
+        checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands[command.params.armLevel], codePosition,
+                                     armDisarmTrait.returnUserIndexToDevice)
+    } else {
+        // if Google returns arm=false, that indicates disarm
+        def codePosition = checkMfa(deviceInfo, "Disarm", command)
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition,
+                                     armDisarmTrait.returnUserIndexToDevice)
+    }
+
+    return [
+        [
+            (armDisarmTrait.armedAttribute): checkValue,
+        ],
+        [
+            isArmed: command.params.arm,
+            armLevel: command.params.armLevel,
+            exitAllowance: armDisarmTrait.exitAllowanceAttribute,
+        ],
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_BrightnessAbsolute(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Brightness", command)
+    checkMfa(deviceInfo, "Set Brightness", command)
     def brightnessTrait = deviceInfo.deviceType.traits.Brightness
     def brightnessToSet = googlePercentageToHubitat(command.params.brightness)
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
@@ -1958,12 +2198,25 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_GetCameraStream(deviceInfo, command) {
-    return [[:], [:]]
+    checkMfa(deviceInfo, "Display", command)
+    def cameraStreamTrait = deviceInfo.deviceType.traits.CameraStream
+    def supportedStreamProtocols = command.params.SupportedStreamProtocols
+
+    deviceInfo.device."${cameraStreamTrait.cameraStreamCommand}"(supportedStreamProtocols)
+    return [
+        [:],
+        [
+            cameraStreamAccessUrl:
+                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
+            cameraStreamProtocol:
+                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
+        ],
+    ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ColorAbsolute(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Color", command)
+    checkMfa(deviceInfo, "Set Color", command)
     def colorTrait = deviceInfo.deviceType.traits.ColorSetting
 
     def checkAttrs = [:]
@@ -2011,7 +2264,7 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
 private executeCommand_Dock(deviceInfo, command) {
     def dockTrait = deviceInfo.deviceType.traits.Dock
     def checkValue
-    checkMfa(deviceInfo.deviceType, "Dock", command)
+    checkMfa(deviceInfo, "Dock", command)
     checkValue = dockTrait.dockValue
     deviceInfo.device."${dockTrait.dockCommand}"()
     return [
@@ -2026,7 +2279,7 @@ private executeCommand_Dock(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_Charge(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Charge", command)
+    checkMfa(deviceInfo, "Charge", command)
     def energyStorageTrait = deviceInfo.deviceType.traits.EnergyStorage
     deviceInfo.device."${energyStorageTrait.chargeCommand}"()
     return [:]
@@ -2034,7 +2287,7 @@ private executeCommand_Charge(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_Reverse(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Reverse", command)
+    checkMfa(deviceInfo, "Reverse", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     deviceInfo.device."${fanSpeedTrait.reverseCommand}"()
     return [[:], [:]]
@@ -2043,7 +2296,7 @@ private executeCommand_Reverse(deviceInfo, command) {
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private executeCommand_Locate(deviceInfo, command) {
     def locatorTrait = deviceInfo.deviceType.traits.Locator
-    checkMfa(deviceInfo.deviceType, "Locate", command)
+    checkMfa(deviceInfo, "Locate", command)
     deviceInfo.device."${locatorTrait.locatorCommand}"()
     return [[:], [:]]
 }
@@ -2052,14 +2305,15 @@ private executeCommand_Locate(deviceInfo, command) {
 private executeCommand_LockUnlock(deviceInfo, command) {
     def lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
     def checkValue
+    def codePosition
     if (command.params.lock) {
-        checkMfa(deviceInfo.deviceType, "Lock", command)
+        codePosition = checkMfa(deviceInfo, "Lock", command)
         checkValue = lockUnlockTrait.lockedValue
-        deviceInfo.device."${lockUnlockTrait.lockCommand}"()
+        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.lockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
     } else {
-        checkMfa(deviceInfo.deviceType, "Unlock", command)
+        codePosition = checkMfa(deviceInfo, "Unlock", command)
         checkValue = { it != lockUnlockTrait.lockedValue }
-        deviceInfo.device."${lockUnlockTrait.unlockCommand}"()
+        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.unlockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
     }
 
     return [
@@ -2078,11 +2332,11 @@ private executeCommand_mute(deviceInfo, command) {
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def checkValue
     if (command.params.mute) {
-        checkMfa(deviceInfo.deviceType, "Mute", command)
+        checkMfa(deviceInfo, "Mute", command)
         deviceInfo.device."${volumeTrait.muteCommand}"()
         checkValue = volumeTrait.mutedValue
     } else {
-        checkMfa(deviceInfo.deviceType, "Unmute", command)
+        checkMfa(deviceInfo, "Unmute", command)
         deviceInfo.device."${volumeTrait.unmuteCommand}"()
         checkValue = volumeTrait.unmutedValue
     }
@@ -2113,7 +2367,7 @@ private executeCommand_OnOff(deviceInfo, command) {
 
     def checkValue
     if (command.params.on) {
-        checkMfa(deviceInfo.deviceType, "On", command)
+        checkMfa(deviceInfo, "On", command)
         on(deviceInfo.device)
         if (onOffTrait.onValue) {
             checkValue = onOffTrait.onValue
@@ -2121,7 +2375,7 @@ private executeCommand_OnOff(deviceInfo, command) {
             checkValue = { it != onOffTrait.offValue }
         }
     } else {
-        checkMfa(deviceInfo.deviceType, "Off", command)
+        checkMfa(deviceInfo, "Off", command)
         off(deviceInfo.device)
         if (onOffTrait.onValue) {
             checkValue = onOffTrait.offValue
@@ -2145,15 +2399,15 @@ private executeCommand_OpenClose(deviceInfo, command) {
     def openPercent = googlePercentageToHubitat(command.params.openPercent)
     def checkValue
     if (openCloseTrait.discreteOnlyOpenClose && openPercent == 100) {
-        checkMfa(deviceInfo.deviceType, "Open", command)
+        checkMfa(deviceInfo, "Open", command)
         deviceInfo.device."${openCloseTrait.openCommand}"()
         checkValue = { it in openCloseTrait.openValue.split(",") }
     } else if (openCloseTrait.discreteOnlyOpenClose && openPercent == 0) {
-        checkMfa(deviceInfo.deviceType, "Close", command)
+        checkMfa(deviceInfo, "Close", command)
         deviceInfo.device."${openCloseTrait.closeCommand}"()
         checkValue = { it in openCloseTrait.closedValue.split(",") }
     } else {
-        checkMfa(deviceInfo.deviceType, "Set Position", command)
+        checkMfa(deviceInfo, "Set Position", command)
         def hubitatOpenPercent = openPercent
         if (openCloseTrait.reverseDirection) {
             hubitatOpenPercent = 100 - openPercent
@@ -2179,7 +2433,7 @@ private executeCommand_OpenClose(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_Reboot(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Reboot", command)
+    checkMfa(deviceInfo, "Reboot", command)
     def rebootTrait = deviceInfo.deviceType.traits.Reboot
     deviceInfo.device."${rebootTrait.rebootCommand}"()
     return [:]
@@ -2187,7 +2441,7 @@ private executeCommand_Reboot(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_RotateAbsolute(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Rotate", command)
+    checkMfa(deviceInfo, "Rotate", command)
     def rotationTrait = deviceInfo.deviceType.traits.Rotation
     def position = command.params.rotationPercent
 
@@ -2204,7 +2458,7 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetFanSpeed(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Fan Speed", command)
+    checkMfa(deviceInfo, "Set Fan Speed", command)
     def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
 
     if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
@@ -2235,7 +2489,7 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetHumidity(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Humidity", command)
+    checkMfa(deviceInfo, "Set Humidity", command)
     def humiditySettingTrait = deviceInfo.deviceType.traits.HumiditySetting
     def humiditySetpoint = command.params.humidity
 
@@ -2252,7 +2506,7 @@ private executeCommand_SetHumidity(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetTemperature(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Temperature", command)
+    checkMfa(deviceInfo, "Set Temperature", command)
     def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
     def setpoint = command.params.temperature
     if (temperatureControlTrait.temperatureUnit == "F") {
@@ -2289,7 +2543,7 @@ private executeCommand_SetToggles(deviceInfo, command) {
             ],
             device: deviceInfo.device
         ]
-        checkMfa(deviceInfo.deviceType, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
+        checkMfa(deviceInfo, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
         def onOffResponse = executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
         attrsToCheck << onOffResponse[0]
         states << onOffResponse[1]
@@ -2299,7 +2553,7 @@ private executeCommand_SetToggles(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_setVolume(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    checkMfa(deviceInfo, "Set Volume", command)
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeLevel = command.params.volumeLevel
     deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
@@ -2317,7 +2571,7 @@ private executeCommand_setVolume(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SoftwareUpdate(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Software Update", command)
+    checkMfa(deviceInfo, "Software Update", command)
     def softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
     deviceInfo.device."${softwareUpdateTrait.softwareUpdateCommand}"()
     return [:]
@@ -2328,11 +2582,11 @@ private executeCommand_StartStop(deviceInfo, command) {
     def startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
     if (command.params.start) {
-        checkMfa(deviceInfo.deviceType, "Start", command)
+        checkMfa(deviceInfo, "Start", command)
         checkValue = startStopTrait.startValue
         deviceInfo.device."${startStopTrait.startCommand}"()
     } else {
-        checkMfa(deviceInfo.deviceType, "Stop", command)
+        checkMfa(deviceInfo, "Stop", command)
         checkValue = { it != startStopTrait.startValue }
         deviceInfo.device."${startStopTrait.stopCommand}"()
     }
@@ -2351,7 +2605,7 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
     def startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
     if (command.params.pause) {
-        checkMfa(deviceInfo.deviceType, "Pause", command)
+        checkMfa(deviceInfo, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
         checkValue = startStopTrait.pauseValue
     }
@@ -2367,7 +2621,7 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
+    checkMfa(deviceInfo, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def setpoint = command.params.thermostatTemperatureSetpoint
     if (temperatureSettingTrait.temperatureUnit == "F") {
@@ -2391,7 +2645,7 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Setpoint", command)
+    checkMfa(deviceInfo, "Set Setpoint", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def coolSetpoint = command.params.thermostatTemperatureSetpointHigh
     def heatSetpoint = command.params.thermostatTemperatureSetpointLow
@@ -2418,7 +2672,7 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_ThermostatSetMode(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Mode", command)
+    checkMfa(deviceInfo, "Set Mode", command)
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def googleMode = command.params.thermostatMode
     def hubitatMode = temperatureSettingTrait.googleToHubitatModeMap[googleMode]
@@ -2436,7 +2690,7 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerAdjust(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Adjust", command)
+    checkMfa(deviceInfo, "Adjust", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerAdjustCommand}"()
     def retVal = [:]
@@ -2450,7 +2704,7 @@ private executeCommand_TimerAdjust(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerCancel(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Cancel", command)
+    checkMfa(deviceInfo, "Cancel", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerCancelCommand}"()
     return [:]
@@ -2458,7 +2712,7 @@ private executeCommand_TimerCancel(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerPause(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Pause", command)
+    checkMfa(deviceInfo, "Pause", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerPauseCommand}"()
     return [:]
@@ -2466,7 +2720,7 @@ private executeCommand_TimerPause(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerResume(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Resume", command)
+    checkMfa(deviceInfo, "Resume", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerResumeCommand}"()
     return [:]
@@ -2474,7 +2728,7 @@ private executeCommand_TimerResume(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_TimerStart(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Start", command)
+    checkMfa(deviceInfo, "Start", command)
     def timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerStartCommand}"()
     def retVal = [:]
@@ -2488,7 +2742,7 @@ private executeCommand_TimerStart(deviceInfo, command) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_volumeRelative(deviceInfo, command) {
-    checkMfa(deviceInfo.deviceType, "Set Volume", command)
+    checkMfa(deviceInfo, "Set Volume", command)
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeChange = command.params.relativeSteps
     def device = deviceInfo.device
@@ -2560,6 +2814,16 @@ private handleQueryRequest(request) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_ArmDisarm(deviceTrait, device) {
+    def isArmed = device.currentValue(deviceTrait.armedAttribute) != deviceTrait.disarmedValue
+    return [
+        isArmed: isArmed,
+        currentArmLevel: device.currentValue(deviceTrait.armLevelAttribute),
+        exitAllowance: device.currentValue(deviceTrait.exitAllowanceAttribute),
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Brightness(deviceTrait, device) {
     def brightness = hubitatPercentageToGoogle(device.currentValue(deviceTrait.brightnessAttribute))
     return [
@@ -2569,12 +2833,7 @@ private deviceStateForTrait_Brightness(deviceTrait, device) {
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_CameraStream(deviceTrait, device) {
-    return [
-        cameraStreamAccessUrl:        device.currentValue(deviceTrait.cameraStreamAttribute),
-        cameraStreamReceiverAppId:    null,
-        cameraStreamAuthToken:        null,
-        cameraStreamProtocol:         deviceTrait.cameraStreamSupportedProtocols
-    ]
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2900,16 +3159,15 @@ private handleSyncRequest(request) {
     ]
 
     def deviceIdsEncountered = [] as Set
-
     (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
         def traits = deviceType.traits.collect { traitType, deviceTrait ->
             "action.devices.traits.${traitType}"
         }
-        def attributes = [:]
-        deviceType.traits.each { traitType, deviceTrait ->
-            attributes += "attributesForTrait_${traitType}"(deviceTrait)
-        }
         deviceType.devices.each { device ->
+            def attributes = [:]
+            deviceType.traits.each { traitType, deviceTrait ->
+                attributes += "attributesForTrait_${traitType}"(deviceTrait, device)
+            }
             def deviceName = device.label ?: device.name
             if (deviceIdsEncountered.contains(device.id)) {
                 LOGGER.warn(
@@ -2947,21 +3205,42 @@ private handleSyncRequest(request) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Brightness(deviceTrait) {
+private attributesForTrait_ArmDisarm(deviceTrait, device) {
+    def armDisarmAttrs = [
+        availableArmLevels: [
+            levels: deviceTrait.armLevels.collect { hubitatLevelName, googleLevelNames ->
+                def levels = googleLevelNames.split(",")
+                [
+                    level_name: hubitatLevelName,
+                    level_values: [
+                        [
+                            level_synonym: levels,
+                            lang: "en"
+                        ]
+                    ]
+                ]
+            },
+            ordered: true
+        ],
+    ]
+    return armDisarmAttrs
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_Brightness(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_CameraStream(deviceTrait) {
+private attributesForTrait_CameraStream(deviceTrait, device) {
     return [
-        cameraStreamSupportedProtocols: deviceTrait.cameraStreamSupportedProtocols,
+        cameraStreamSupportedProtocols: device.currentValue(deviceTrait.cameraSupportedProtocolsAttribute).tokenize(','),
         cameraStreamNeedAuthToken:      false,
-        cameraStreamNeedDrmEncryption:  false
     ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_ColorSetting(deviceTrait) {
+private attributesForTrait_ColorSetting(deviceTrait, device) {
     def colorAttrs = [:]
     if (deviceTrait.fullSpectrum) {
         colorAttrs << [
@@ -2980,12 +3259,12 @@ private attributesForTrait_ColorSetting(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Dock(deviceTrait) {
+private attributesForTrait_Dock(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_EnergyStorage(deviceTrait) {
+private attributesForTrait_EnergyStorage(deviceTrait, device) {
     return [
         queryOnlyEnergyStorage:         deviceTrait.queryOnlyEnergyStorage,
         energyStorageDistanceUnitForUX: deviceTrait.energyStorageDistanceUnitForUX,
@@ -2994,7 +3273,7 @@ private attributesForTrait_EnergyStorage(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_FanSpeed(deviceTrait) {
+private attributesForTrait_FanSpeed(deviceTrait, device) {
     def fanSpeedAttrs = [
         availableFanSpeeds: [
             speeds: deviceTrait.fanSpeeds.collect { hubitatLevelName, googleLevelNames ->
@@ -3019,7 +3298,7 @@ private attributesForTrait_FanSpeed(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_HumiditySetting(deviceTrait) {
+private attributesForTrait_HumiditySetting(deviceTrait, device) {
     def attrs = [
         queryOnlyHumiditySetting: deviceTrait.queryOnly
     ]
@@ -3033,17 +3312,17 @@ private attributesForTrait_HumiditySetting(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Locator(deviceTrait) {
+private attributesForTrait_Locator(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_LockUnlock(deviceTrait) {
+private attributesForTrait_LockUnlock(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_MediaState(deviceTrait) {
+private attributesForTrait_MediaState(deviceTrait, device) {
     return [
         supportActivityState: deviceTrait.supportActivityState,
         supportPlaybackState: deviceTrait.supportPlaybackState
@@ -3051,12 +3330,12 @@ private attributesForTrait_MediaState(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_OnOff(deviceTrait) {
+private attributesForTrait_OnOff(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_OpenClose(deviceTrait) {
+private attributesForTrait_OpenClose(deviceTrait, device) {
     return [
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
@@ -3064,12 +3343,12 @@ private attributesForTrait_OpenClose(deviceTrait) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Reboot(deviceTrait) {
+private attributesForTrait_Reboot(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Rotation(deviceTrait) {
+private attributesForTrait_Rotation(deviceTrait, device) {
     return [
         supportsContinuousRotation: deviceTrait.continuousRotation,
         supportsPercent:            true,
@@ -3078,26 +3357,26 @@ private attributesForTrait_Rotation(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Scene(deviceTrait) {
+private attributesForTrait_Scene(deviceTrait, device) {
     return [
         sceneReversible: deviceTrait.sceneReversible
     ]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_SoftwareUpdate(deviceTrait) {
+private attributesForTrait_SoftwareUpdate(deviceTrait, device) {
     return [:]
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_StartStop(deviceTrait) {
+private attributesForTrait_StartStop(deviceTrait, device) {
     return [
         pausable: deviceTrait.canPause
     ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureControl(deviceTrait) {
+private attributesForTrait_TemperatureControl(deviceTrait, device) {
     def attrs = [
         temperatureUnitForUX:        deviceTrait.temperatureUnit,
         queryOnlyTemperatureControl: deviceTrait.queryOnly
@@ -3130,7 +3409,7 @@ private attributesForTrait_TemperatureControl(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureSetting(deviceTrait) {
+private attributesForTrait_TemperatureSetting(deviceTrait, device) {
     def attrs = [
         thermostatTemperatureUnit:   deviceTrait.temperatureUnit,
         queryOnlyTemperatureSetting: deviceTrait.queryOnly
@@ -3164,7 +3443,7 @@ private attributesForTrait_TemperatureSetting(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Timer(deviceTrait) {
+private attributesForTrait_Timer(deviceTrait, device) {
     return [
         maxTimerLimitSec:    deviceTrait.maxTimerLimitSec,
         commandOnlyTimer:    deviceTrait.commandOnlyTimer,
@@ -3172,7 +3451,7 @@ private attributesForTrait_Timer(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Toggles(deviceTrait) {
+private attributesForTrait_Toggles(deviceTrait, device) {
     return [
         availableToggles: deviceTrait.toggles.collect { toggle ->
             [
@@ -3189,12 +3468,37 @@ private attributesForTrait_Toggles(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Volume(deviceTrait) {
+private attributesForTrait_Volume(deviceTrait, device) {
     return [
         volumeMaxLevel:         100,
         volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
         levelStepSize:          deviceTrait.volumeStep
     ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_ArmDisarm(traitName) {
+
+    def armDisarmMapping = [
+        armedAttribute:                 settings."${traitName}.armedAttribute",
+        armLevelAttribute:              settings."${traitName}.armLevelAttribute",
+        exitAllowanceAttribute:         settings."${traitName}.exitAllowanceAttribute",
+        disarmedValue:                  settings."${traitName}.disarmedValue",
+        cancelCommand:                  settings."${traitName}.cancelCommand",
+        armLevels:                      [:],
+        armCommands:                    [:],
+        armValues:                      [:],
+        returnUserIndexToDevice:        settings."${traitName}.returnUserIndexToDevice",
+        commands:                       ["Cancel", "Disarm", "Arm Home", "Arm Night", "Arm Away"]
+    ]
+
+    settings."${traitName}.armLevels"?.each { armLevel ->
+        armDisarmMapping.armLevels[armLevel] = settings."${traitName}.armLevels.${armLevel}.googleNames"
+        armDisarmMapping.armCommands[armLevel] = settings."${traitName}.armCommands.${armLevel}.commandName"
+        armDisarmMapping.armValues[armLevel] = settings."${traitName}.armValues.${armLevel}.value"
+    }
+
+    return armDisarmMapping
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3209,9 +3513,11 @@ private traitFromSettings_Brightness(traitName) {
 @SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_CameraStream(traitName) {
     return [
-        cameraStreamAttribute:          settings."${traitName}.cameraStreamAttribute",
-        cameraStreamSupportedProtocols: settings."${traitName}.cameraStreamSupportedProtocols",
-        commands:              []
+        cameraStreamURLAttribute:           settings."${traitName}.cameraStreamURLAttribute",
+        cameraSupportedProtocolsAttribute:  settings."${traitName}.cameraSupportedProtocolsAttribute",
+        cameraStreamProtocolAttribute:      settings."${traitName}.cameraStreamProtocolAttribute",
+        cameraStreamCommand:                settings."${traitName}.cameraStreamCommand",
+        commands:                           ["Display"]
     ]
 }
 
@@ -3352,6 +3658,7 @@ private traitFromSettings_LockUnlock(traitName) {
         lockedValue:             settings."${traitName}.lockedValue",
         lockCommand:             settings."${traitName}.lockCommand",
         unlockCommand:           settings."${traitName}.unlockCommand",
+        returnUserIndexToDevice: settings."${traitName}.returnUserIndexToDevice",
         commands:                ["Lock", "Unlock"]
     ]
 }
@@ -3710,7 +4017,6 @@ private addTraitToDeviceTypeState(deviceTypeName, traitType) {
 private deviceTypeTraitFromSettings(traitName) {
     def pieces = traitName.split("\\.traits\\.")
     def traitType = pieces[1]
-
     def traitAttrs = "traitFromSettings_${traitType}"(traitName)
     traitAttrs.name = traitName
     traitAttrs.type = traitType
@@ -3728,6 +4034,25 @@ private deleteDeviceTrait(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_ArmDisarm(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.armedAttribute")
+    app.removeSetting("${deviceTrait.name}.armLevelAttribute")
+    app.removeSetting("${deviceTrait.name}.exitAllowanceAttribute")
+    app.removeSetting("${deviceTrait.name}.cancelCommand")
+    deviceTrait.armLevels.each { armLevel, googleNames ->
+        app.removeSetting("${deviceTrait.name}.armLevels.${armLevel}.googleNames")
+    }
+    deviceTrait.armLevels.each { armLevel, commandName ->
+        app.removeSetting("${deviceTrait.name}.armCommands.${armLevel}.commandName")
+    }
+    deviceTrait.armLevels.each { armLevel, value ->
+        app.removeSetting("${deviceTrait.name}.armValues.${armLevel}.value")
+    }
+    app.removeSetting("${deviceTrait.name}.armLevels")
+    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_Brightness(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.brightnessAttribute")
     app.removeSetting("${deviceTrait.name}.setBrightnessCommand")
@@ -3735,8 +4060,10 @@ private deleteDeviceTrait_Brightness(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_CameraStream(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.cameraStreamAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraStreamSupportedProtocols")
+    app.removeSetting("${deviceTrait.name}.cameraStreamURLAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraSupportedProtocolsAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraStreamProtocolAttribute")
+    app.removeSetting("${deviceTrait.name}.cameraStreamCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3816,6 +4143,7 @@ private deleteDeviceTrait_LockUnlock(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.lockedValue")
     app.removeSetting("${deviceTrait.name}.lockCommand")
     app.removeSetting("${deviceTrait.name}.unlockCommand")
+    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3985,15 +4313,18 @@ private deviceTypeTraitsFromSettings(deviceTypeName) {
 
 private deviceTypeFromSettings(deviceTypeName) {
     def deviceType = [
-        name:             deviceTypeName,
-        display:          settings."${deviceTypeName}.display",
-        type:             settings."${deviceTypeName}.type",
-        googleDeviceType: settings."${deviceTypeName}.googleDeviceType",
-        devices:          settings."${deviceTypeName}.devices",
-        traits:           deviceTypeTraitsFromSettings(deviceTypeName),
-        confirmCommands:  [],
-        secureCommands:   [],
-        pinCodes:         [],
+        name:                     deviceTypeName,
+        display:                  settings."${deviceTypeName}.display",
+        type:                     settings."${deviceTypeName}.type",
+        googleDeviceType:         settings."${deviceTypeName}.googleDeviceType",
+        devices:                  settings."${deviceTypeName}.devices",
+        traits:                   deviceTypeTraitsFromSettings(deviceTypeName),
+        confirmCommands:          [],
+        secureCommands:           [],
+        pinCodes:                 [],
+        useDevicePinCodes:        false,
+        pinCodeAttribute:         null,
+        pinCodeValue:             null,
     ]
 
     if (deviceType.display == null) {
@@ -4017,6 +4348,13 @@ private deviceTypeFromSettings(deviceTypeName) {
             name:  settings."${deviceTypeName}.pin.${pinCodeId}.name",
             value: settings."${deviceTypeName}.pin.${pinCodeId}.value",
         ]
+    }
+
+    def useDevicePinCodes = settings."${deviceTypeName}.useDevicePinCodes"
+    if (useDevicePinCodes) {
+        deviceType.useDevicePinCodes = useDevicePinCodes
+        deviceType.pinCodeAttribute = settings."${deviceTypeName}.pinCodeAttribute"
+        deviceType.pinCodeValue = settings."${deviceTypeName}.pinCodeValue"
     }
 
     return deviceType
@@ -4325,7 +4663,7 @@ private static final GOOGLE_DEVICE_TYPES = [
 @Field
 private static final GOOGLE_DEVICE_TRAITS = [
     //AppSelector: "App Selector",
-    //ArmDisarm: "Arm/Disarm",
+    ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
     CameraStream: "Camera Stream",
     //Channel: "Channel",

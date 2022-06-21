@@ -110,6 +110,33 @@ Each device type has the following settings:
 - Actions requiring PIN:  Only visible if the device has one or more traits with actions.  The Google Assistant will request a PIN code before performing these actions.  Useful for security-critical actions such as unlocking a lock or opening a garage door.
 - PIN Codes:  Only visible if one or more actions are configured to require a PIN code.  Allows you to manage the PIN codes that will be accepted for this device type.
 
+### Arm/Disarm
+
+The Arm/Disarm trait is user to control security systems.  It can be controlled by saying things like "Hey Google, arm {device} to {level}" or "Hey Google, disarm {device}}" and queried by saying things like "Hey Google, is the {device} armed?".  It has the following configuration parameters:
+
+- Armed/Disarmed Attribute: The device attribute used to query the current alarm status of the device.  Maps to the `securityKeypad` attribute by default.
+- Current Arm Level Attribute: The device attribute used to query the current alarm level of the device.  Maps to the `securityKeypad` attribute by default.
+- Exit Delay Value Attribute: The device attribute used to indicate how long the user has until the alarm is set.  Maps to the `exitAllowance` attribute by default.
+- Supported Alarm Levels: The device attribute used to indicate which alarm levels are available.  Available selections are "Disarm, Home, Night, Away".  For each setting the following settings are available:
+	- Google Home Level Names for Disarm: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Disarm` attribute by default.
+	- Hubitat Command for Disarm: The device command used to set this level.  Maps to the `disarm` attribute by default.
+	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `disarmed` attribute by default.
+	- Google Home Level Names for Night: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Night` attribute by default.
+	- Hubitat Command for Night: The device command used to set this level.  Maps to the `armNight` attribute by default.
+	- Hubitat Value for Night: The device value returned when the device is set to this level.  Maps to the `armed night` attribute by default.
+	- Google Home Level Names for Home: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Home` attribute by default.
+	- Hubitat Command for Home: The device command used to set this level.  Maps to the `armHome` attribute by default.
+	- Hubitat Value for Home: The device value returned when the device is set to this level.  Maps to the `armed home` attribute by default.
+	- Google Home Level Names for Away: Comma separated list of synonyms that Google can send to set this level.  Maps to the `Away` attribute by default.
+	- Hubitat Command for Away: The device command used to set this level.  Maps to the `armAway` attribute by default.
+	- Hubitat Value for Away: The device value returned when the device is set to this level.  Maps to the `armed away` attribute by default.
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
+	- Return user index: If selected, during a successful pincode challenge, the user index is returned with the Arm/Disarm commands. Defaults to 'false'.
+	  NOTE: Device must support parameters in the arm / disarm commands.
+
 
 ## Device Traits
 
@@ -129,8 +156,10 @@ The CameraStream trait is used to map compatible video streams for viewing on Ch
 It requires a driver that maps the stream URL to the Camera Stream URL Attribute setting.  Maps to `settings` by default.
 
 - This can be accomplished using one or both of the supplied drivers:
-    -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URL in the `Camera stream HTTP URL` input field.
+    -  Hubitat Virtual Generic Camera Stream Object.groovy: Enter the complete stream URLs of all camera supported protocols in the `Camera HLS stream HTTP URL`, `Camera MP4 stream HTTP URL`, `Camera dash stream HTTP URL`, and/or `Camera smooth stream HTTP URL` input fields.
+	   NOTE:  At least ONE URL must be set.  The driver will serve up the supported streams based on the display device request.
     -  Hubitat Virtual BlueIris Camera Stream Object.groovy: For use with the Blue Iris DVR. Enter the `Webserver HTTP URL:Port` (omit the http://), `Camera Short Name`, `Webserver Username (Optional)` and `Webserver Password  (Optional)`.
+    -  For both of the above drivers, select the protocol for the stream.
 
 NOTE: These drivers offer no other functionality other than a placeholder for the stream URL.  The buttons are non-functional.
 
@@ -224,6 +253,10 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 - Locked Value: The value that the Locked/Unlocked attribute will report when the device is locked.  Defaults to "locked".
 - Lock Command: A device command used to lock the device.  Should not require any parameters.  Maps to `lock` by default.
 - Lock Command: A device command used to unlock the device.  Should not require any parameters.  Maps to `unlock` by default.
+- Use device pincodes: Set to retrieve the pincodes from the device.  Set to false to use the app pincodes.  Defaults to 'false'.
+  NOTE: Global pincodes are always useable.
+	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
+	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 
 ### Media State
 

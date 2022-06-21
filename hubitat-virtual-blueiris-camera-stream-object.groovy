@@ -1,5 +1,5 @@
 /**
- *  Copyright 2020 Lyle Pakula
+ *  Copyright 2022 Lyle Pakula
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -20,14 +20,23 @@
  *      (regardless if the camera source supplies audio)
  *
  *  Author: Lyle Pakula (wir3z)
- *  Date: 2020-08-02
+ *  Date: 2022-06-14
  */
 
 preferences {
+    googleCameraStreamSupportedProtocols = [
+        "progressive_mp4":         "Progressive MP4",
+        "hls":                     "HLS",
+        "dash":                    "Dash",
+        "smooth_stream":           "Smooth Stream",
+//      "webrtc":                  "WebRTC",    // requires extra development
+    ]
     input "deviceIP", "text", title: "Webserver HTTP URL:Port", required: true
     input "deviceName", "text", title: "Camera Short Name", required: true
     input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
     input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
+    input "sourceProtocol", "enum", title: "Camera Stream Protocol",
+        options: googleCameraStreamSupportedProtocols, multiple: false, required: true
 }
 
 metadata {
@@ -36,8 +45,10 @@ metadata {
 
         attribute   "camera", "enum"
         attribute   "mute", "enum"
-        attribute   "settings", "JSON_OBJECT"
+        attribute   "streamURL", "JSON_OBJECT"
+        attribute   "streamProtocol", "enum"
         attribute   "statusMessage", "string"
+        attribute   "supportedProtocols", "string"
     }
 }
 
@@ -51,16 +62,18 @@ def updated() {
     sendEvent(name: "mute", value: "off")
     // check if a user and password was entered, and add it to the URL, otherwise just create the URL
     if (deviceUser && devicePWD) {
-        sendEvent(name: "settings",
-            value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
+        sendEvent(name: "streamURL",
+        value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8?user=${deviceUser}&pw=${devicePWD}")
     } else {
-        sendEvent(name: "settings", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
+        sendEvent(name: "streamURL", value: "http://${deviceIP}/h264/${deviceName}/temp.m3u8")
     }
+    sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
+    sendEvent(name: "supportedProtocols", value: "${sourceProtocol}")
     sendEvent(name: "statusMessage", value: "SUCCESS")
 }
 
-def on() {
-    log.debug "${device.label}: on()"
+def on(supportedStreamProtocols) {
+    log.debug "${device.label}: on() ${supportedStreamProtocols}"
 }
 
 def off() {
