@@ -62,7 +62,7 @@
 //   * Mar 05 2022 - Added supportsFanSpeedPercent trait for controlling fan by percentage
 //   * May 07 2022 - Add error handling so one bad device doesn't prevent reporting state of other devices
 //   * Jun 15 2022 - Fix a crash on trait configuration introduced by Hubitat 2.3.2.127
-//   * Jun 16 2022 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
+//   * Jun 20 2022 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
 //                   driver level to accomodate different camera stream sources
 //                 - Added Arm/Disarm Trait
 //                 - Added ability for the app to use device level pin codes retrieved from the device driver
