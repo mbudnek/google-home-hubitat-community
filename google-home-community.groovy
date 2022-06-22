@@ -68,6 +68,7 @@
 //                 - Added ability for the app to use device level pin codes retrieved from the device driver
 //                 - Pincode challenge in the order device_driver -> device_GHC -> global_GHC -> null
 //                 - Added support for returning the matching user position for Arm/Disarm and Lock/Unlock to the device driver
+//   * Jun 21 2022 - Apply rounding more consistently to temperatures
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -2510,8 +2511,10 @@ private executeCommand_SetTemperature(deviceInfo, command) {
     def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
     def setpoint = command.params.temperature
     if (temperatureControlTrait.temperatureUnit == "F") {
-        setpoint = celsiusToFahrenheitRounded(setpoint)
+        setpoint = celsiusToFahrenheit(setpoint)
     }
+    setpoint = roundTo(setpoint, 1)
+
     deviceInfo.device."${temperatureControlTrait.setTemperatureCommand}"(setpoint)
 
     return [
@@ -2625,8 +2628,10 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
     def setpoint = command.params.thermostatTemperatureSetpoint
     if (temperatureSettingTrait.temperatureUnit == "F") {
-        setpoint = celsiusToFahrenheitRounded(setpoint)
+        setpoint = celsiusToFahrenheit(setpoint)
     }
+
+    setpoint = roundTo(setpoint, 1)
 
     def hubitatMode = deviceInfo.device.currentValue(temperatureSettingTrait.currentModeAttribute)
     def googleMode = temperatureSettingTrait.hubitatToGoogleModeMap[hubitatMode]
@@ -2650,9 +2655,11 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
     def coolSetpoint = command.params.thermostatTemperatureSetpointHigh
     def heatSetpoint = command.params.thermostatTemperatureSetpointLow
     if (temperatureSettingTrait.temperatureUnit == "F") {
-        coolSetpoint = celsiusToFahrenheitRounded(coolSetpoint)
-        heatSetpoint = celsiusToFahrenheitRounded(heatSetpoint)
+        coolSetpoint = celsiusToFahrenheit(coolSetpoint)
+        heatSetpoint = celsiusToFahrenheit(heatSetpoint)
     }
+    coolSetpoint = roundTo(coolSetpoint, 1)
+    heatSetpoint = roundTo(heatSetpoint, 1)
     def setRangeCommands = temperatureSettingTrait.modeSetSetpointCommands["heatcool"]
     deviceInfo.device."${setRangeCommands.setCoolingSetpointCommand}"(coolSetpoint)
     deviceInfo.device."${setRangeCommands.setHeatingSetpointCommand}"(heatSetpoint)
@@ -3049,10 +3056,10 @@ private deviceStateForTrait_StartStop(deviceTrait, device) {
 private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
     def currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
     if (deviceTrait.temperatureUnit == "F") {
-        currentTemperature = fahrenheitToCelsiusRounded(currentTemperature)
+        currentTemperature = fahrenheitToCelsius(currentTemperature)
     }
     def state = [
-        temperatureAmbientCelsius: currentTemperature
+        temperatureAmbientCelsius: roundTo(currentTemperature, 1)
     ]
 
     if (deviceTrait.queryOnly) {
@@ -3060,9 +3067,9 @@ private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
     } else {
         def setpoint = device.currentValue(deviceTrait.currentSetpointAttribute)
         if (deviceTrait.temperatureUnit == "F") {
-            setpoint = fahrenheitToCelsiusRounded(setpoint)
+            setpoint = fahrenheitToCelsius(setpoint)
         }
-        state.temperatureSetpointCelsius = setpoint
+        state.temperatureSetpointCelsius = roundTo(setpoint, 1)
     }
 
     return state
@@ -3074,9 +3081,9 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
 
     def currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
     if (deviceTrait.temperatureUnit == "F") {
-        currentTemperature = fahrenheitToCelsiusRounded(currentTemperature)
+        currentTemperature = fahrenheitToCelsius(currentTemperature)
     }
-    state.thermostatTemperatureAmbient = currentTemperature
+    state.thermostatTemperatureAmbient = roundTo(currentTemperature, 1)
 
     if (deviceTrait.queryOnly) {
         state.thermostatMode = "on"
@@ -3092,19 +3099,19 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
             def heatSetpoint = device.currentValue(heatingSetpointAttr)
             def coolSetpoint = device.currentValue(coolingSetpointAttr)
             if (deviceTrait.temperatureUnit == "F") {
-                heatSetpoint = fahrenheitToCelsiusRounded(heatSetpoint)
-                coolSetpoint = fahrenheitToCelsiusRounded(coolSetpoint)
+                heatSetpoint = fahrenheitToCelsius(heatSetpoint)
+                coolSetpoint = fahrenheitToCelsius(coolSetpoint)
             }
-            state.thermostatTemperatureSetpointHigh = coolSetpoint
-            state.thermostatTemperatureSetpointLow = heatSetpoint
+            state.thermostatTemperatureSetpointHigh = roundTo(coolSetpoint, 1)
+            state.thermostatTemperatureSetpointLow = roundTo(heatSetpoint, 1)
         } else {
             def setpointAttr = deviceTrait.modeSetpointAttributes[googleMode]
             if (setpointAttr) {
                 def setpoint = device.currentValue(setpointAttr)
                 if (deviceTrait.temperatureUnit == "F") {
-                    setpoint = fahrenheitToCelsiusRounded(setpoint)
+                    setpoint = fahrenheitToCelsius(setpoint)
                 }
-                state.thermostatTemperatureSetpoint = setpoint
+                state.thermostatTemperatureSetpoint = roundTo(setpoint, 1)
             }
         }
     }
@@ -3383,25 +3390,26 @@ private attributesForTrait_TemperatureControl(deviceTrait, device) {
     ]
 
     if (!deviceTrait.queryOnly) {
-        if (deviceTrait.temperatureUnit == "C") {
+        def minTemperature = deviceTrait.minTemperature
+        def maxTemperature = deviceTrait.maxTemperature
+        if (deviceTrait.temperatureUnit == "F") {
             attrs.temperatureRange = [
-                minThresholdCelsius: deviceTrait.minTemperature,
-                maxThresholdCelsius: deviceTrait.maxTemperature
-            ]
-        } else {
-            attrs.temperatureRange = [
-                minThresholdCelsius: fahrenheitToCelsiusRounded(deviceTrait.minTemperature),
-                maxThresholdCelsius: fahrenheitToCelsiusRounded(deviceTrait.maxTemperature)
+                minTemperature = fahrenheitToCelsius(minTemperature),
+                maxTemperature = fahrenheitToCelsius(maxTemperature)
             ]
         }
+        attrs.temperatureRange = [
+            minThresholdCelsius: roundTo(minTemperature, 1),
+            maxThresholdCelsius: roundTo(maxTemperature, 1)
+        ]
 
         if (deviceTrait.temperatureStep) {
-            if (deviceTrait.temperatureUnit == "C") {
-                attrs.temperatureStepCelsius = deviceTrait.temperatureStep
-            } else {
+            def temperatureStep = deviceTrait.temperatureStep
+            if (deviceTrait.temperatureUnit == "F") {
                 // 5/9 is the scale factor for converting from F to C
-                attrs.temperatureStepCelsius = deviceTrait.temperatureStep * (5 / 9)
+                temperatureStep = temperatureStep * (5 / 9)
             }
+            attrs.temperatureStepCelsius = roundTo(temperatureStep, 1)
         }
     }
 
@@ -3422,12 +3430,12 @@ private attributesForTrait_TemperatureSetting(deviceTrait, device) {
             def minSetpoint = deviceTrait.setRangeMin
             def maxSetpoint = deviceTrait.setRangeMax
             if (deviceTrait.temperatureUnit == "F") {
-                minSetpoint = fahrenheitToCelsiusRounded(minSetpoint)
-                maxSetpoint = fahrenheitToCelsiusRounded(maxSetpoint)
+                minSetpoint = fahrenheitToCelsius(minSetpoint)
+                maxSetpoint = fahrenheitToCelsius(maxSetpoint)
             }
             attrs.thermostatTemperatureRange = [
-                minThresholdCelsius: minSetpoint,
-                maxThresholdCelsius: maxSetpoint
+                minThresholdCelsius: roundTo(minSetpoint, 1),
+                maxThresholdCelsius: roundTo(maxSetpoint, 1)
             ]
         }
 
@@ -4433,16 +4441,9 @@ private allKnownDevices() {
     return knownDevices
 }
 
-private fahrenheitToCelsiusRounded(temperature) {
-    def tempCelsius = fahrenheitToCelsius(temperature)
-    // Round to one decimal place
-    return Math.round(tempCelsius * 10) / 10
-}
-
-private celsiusToFahrenheitRounded(temperature) {
-    def tempFahrenheit = celsiusToFahrenheit(temperature)
-    // Round to one decimal place
-    return Math.round(tempFahrenheit * 10) / 10
+private roundTo(number, decimalPlaces) {
+    def factor = Math.max(1, 10 * decimalPlaces)
+    return Math.round(number * factor) / factor
 }
 
 private googlePercentageToHubitat(percentage) {
