@@ -69,6 +69,7 @@
 //                 - Pincode challenge in the order device_driver -> device_GHC -> global_GHC -> null
 //                 - Added support for returning the matching user position for Arm/Disarm and Lock/Unlock to the device driver
 //   * Jun 21 2022 - Apply rounding more consistently to temperatures
+//   * Jun 21 2022 - Added SensorState Trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1309,6 +1310,59 @@ def deviceTraitPreferences_Scene(deviceTrait) {
                 defaultValue: "off",
                 required: true
             )
+        }
+    }
+}
+
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
+private deviceTraitPreferences_SensorState(deviceTrait) {
+    section("Sensor State Settings") {
+        input(
+            name: "${deviceTrait.name}.sensorTypes",
+            title: "Supported Sensor Types",
+            type: "enum",
+            options: GOOGLE_SENSOR_STATES,
+            multiple: true,
+            required: true,
+            submitOnChange: true
+        )
+
+        deviceTrait.sensorTypes.each { sensorType ->
+            // only display if the sensor has descriptive values
+            if (GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState) {
+                input(
+                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.availableStates",
+                    title: "Google Home Available States for ${sensorType.key}",
+                    type: "enum",
+                    multiple: "true",
+                    required: "true",
+                    options: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState,
+                )
+                input(
+                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.descriptiveAttribute",
+                    title: "Hubitat Descriptive State Attribute for ${sensorType.key}",
+                    type: "text",
+                    required: "true",
+                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveAttribute
+                )
+            }
+            // only display if the sensor has numerical values
+            if (GOOGLE_SENSOR_STATES[sensorType.key].numericUnits) {
+                input(
+                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericAttribute",
+                    title: "Hubitat Numeric Attribute for ${sensorType.key} with units ${GOOGLE_SENSOR_STATES[sensorType.key].numericUnits}",
+                    type: "text",
+                    required: "true",
+                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute
+                )
+                input(
+                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericUnits",
+                    title: "Google Numeric Units for ${sensorType.key}",
+                    type: "text",
+                    required: "true",
+                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericUnits
+                )
+            }
         }
     }
 }
@@ -3033,6 +3087,27 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
     return [:]
 }
 
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_SensorState(deviceTrait, device) {
+    def deviceState = [:]
+
+    deviceTrait.sensorTypes.collect { sensorType ->
+        def deviceStateMapping = [:]
+        deviceStateMapping << [ name: sensorType.key ]
+        if (deviceTrait.sensorTypes[sensorType.key].descriptiveState) {
+            deviceStateMapping << [ currentSensorState: device.currentValue(deviceTrait.sensorTypes[sensorType.key].descriptiveAttribute) ]
+        }
+        if (deviceTrait.sensorTypes[sensorType.key].numericUnits) {
+            deviceStateMapping << [ rawValue: device.currentValue(deviceTrait.sensorTypes[sensorType.key].numericAttribute) ]
+        }
+        deviceState << deviceStateMapping
+    }
+
+    return [
+        currentSensorStateData: [ deviceState ]
+    ]
+}
+
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private deviceStateForTrait_SoftwareUpdate(deviceTrait, device) {
     return [
@@ -3367,6 +3442,35 @@ private attributesForTrait_Rotation(deviceTrait, device) {
 private attributesForTrait_Scene(deviceTrait, device) {
     return [
         sceneReversible: deviceTrait.sceneReversible
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private attributesForTrait_SensorState(deviceTrait, device) {
+    def sensorStateAttrs = []
+
+    deviceTrait.sensorTypes.collect { sensorType ->
+        def supportedStateAttrs = [:]
+        supportedStateAttrs << [ name: sensorType.key ]
+        if (deviceTrait.sensorTypes[sensorType.key].descriptiveState) {
+            supportedStateAttrs << [
+                descriptiveCapabilities: [
+                    availableStates: deviceTrait.sensorTypes[sensorType.key].descriptiveState,
+                ]
+            ]
+        }
+        if (deviceTrait.sensorTypes[sensorType.key].numericUnits) {
+            supportedStateAttrs << [
+                numericCapabilities: [
+                    rawValueUnit: deviceTrait.sensorTypes[sensorType.key].numericUnits,
+                ]
+            ]
+        }
+        sensorStateAttrs << supportedStateAttrs
+    }
+
+    return [
+        sensorStatesSupported: sensorStateAttrs
     ]
 }
 
@@ -3764,6 +3868,30 @@ private traitFromSettings_Scene(traitName) {
         sceneTrait.commands << "Deactivate Scene"
     }
     return sceneTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_SensorState(traitName) {
+    def sensorStateMapping = [
+        sensorTypes:                    [:],
+        commands:                       []
+    ]
+
+    settings."${traitName}.sensorTypes"?.each { sensorType ->
+        def sensorMapping = [
+            descriptiveState:               [:],
+            descriptiveAttribute:           [:],
+            numericAttribute:               [:],
+            numericUnits:                   [:],
+        ]
+        sensorMapping.descriptiveState = settings."${traitName}.sensorTypes.${sensorType}.availableStates"
+        sensorMapping.descriptiveAttribute = settings."${traitName}.sensorTypes.${sensorType}.descriptiveAttribute"
+        sensorMapping.numericAttribute = settings."${traitName}.sensorTypes.${sensorType}.numericAttribute"
+        sensorMapping.numericUnits = settings."${traitName}.sensorTypes.${sensorType}.numericUnits"
+        sensorStateMapping.sensorTypes[sensorType] = sensorMapping
+    }
+
+    return sensorStateMapping
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4205,6 +4333,23 @@ private deleteDeviceTrait_Scene(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.activateCommand")
     app.removeSetting("${deviceTrait.name}.deactivateCommand")
     app.removeSetting("${deviceTrait.name}.sceneReversible")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_SensorState(deviceTrait) {
+    GOOGLE_SENSOR_STATES.each { sensorType, availableStates ->
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.availableStates")
+    }
+    GOOGLE_SENSOR_STATES.each { sensorType, descriptiveAttribute ->
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.descriptiveAttribute")
+    }
+    GOOGLE_SENSOR_STATES.each { sensorType, numericAttribute ->
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericAttribute")
+    }
+    GOOGLE_SENSOR_STATES.each { sensorType, numericUnits ->
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericUnits")
+    }
+    app.removeSetting("${deviceTrait.name}.sensorTypes")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4689,7 +4834,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     Reboot: "Reboot",
     Rotation: "Rotation",
     //RunCycle: "Run Cycle",
-    //SensorState: "Sensor State",
+    SensorState: "Sensor State",
     Scene: "Scene",
     SoftwareUpdate: "Software Update",
     StartStop: "Start/Stop",
@@ -4714,6 +4859,164 @@ private static final GOOGLE_THERMOSTAT_MODES = [
     "purifier": "Purifier",
     "eco":      "Energy Saving",
     "dry":      "Dry"
+]
+
+@Field
+private static final GOOGLE_SENSOR_STATES = [
+    "AirQuality" :
+    [
+        "AirQuality" :                           "Air Quality",
+        "descriptiveAttribute" :                 "airQualityDescriptive",
+        "descriptiveState" :  [
+            "healthy":                           "Healthy",
+            "moderate":                          "Moderate",
+            "unhealthy":                         "Unhealthy",
+            "unhealthy for sensitive groups":    "Unhealthy for Sensitive Groups",
+            "very unhealthy":                    "Very Unhealthy",
+            "hazardous":                         "Hazardous",
+            "good":                              "Good",
+            "fair":                              "Fair",
+            "poor":                              "Poor",
+            "very poor":                         "Very Poor",
+            "severe":                            "Severe",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "airQualityValue",
+        "numericUnits" :                         "AQI",
+    ],
+    "CarbonMonoxideLevel" :
+    [
+        "CarbonMonoxideLevel" :                  "Carbon Monoxide Level",
+        "descriptiveAttribute" :                 "carbonMonoxideDescriptive",
+        "descriptiveState" :  [
+            "carbon monoxide detected":          "Carbon Monoxide Detected",
+            "high":                              "High",
+            "no carbon monoxide detected":       "No Carbon Monoxide Detected",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "carbonMonoxideValue",
+        "numericUnits" :                         "PARTS_PER_MILLION",
+    ],
+    "SmokeLevel" :
+    [
+        "SmokeLevel" :                           "Smoke Level",
+        "descriptiveAttribute" :                 "smokeLevelDescriptive",
+        "descriptiveState" :  [
+            "smoke detected":                    "Smoke Detected",
+            "high":                              "High",
+            "no smoke detected":                 "No Smoke Detected",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "smokeLevelValue",
+        "numericUnits" :                         "PARTS_PER_MILLION",
+    ],
+    "FilterCleanliness" :
+    [
+        "FilterCleanliness" :                    "Filter Cleanliness",
+        "descriptiveAttribute" :                 "filterCleanlinesDescriptive",
+        "descriptiveState" :  [
+            "clean":                             "Clean",
+            "dirty":                             "Dirty",
+            "needs replacement":                 "Needs Replacement",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "",
+        "numericUnits" :                         "",
+    ],
+    "WaterLeak" :
+    [
+        "WaterLeak" :                           "Water Leak",
+        "descriptiveAttribute" :                 "waterLeakDescriptive",
+        "descriptiveState" :  [
+            "leak":                              "Leak",
+            "no leak":                           "No Leak",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "",
+        "numericUnits" :                         "",
+    ],
+    "RainDetection" :
+    [
+        "RainDetection" :                        "Rain Detection",
+        "descriptiveAttribute" :                 "rainDetectionDescriptive",
+        "descriptiveState" :  [
+            "rain detected":                     "Rain Detected",
+            "no rain detected":                  "No Rain Detected",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "",
+        "numericUnits" :                         "",
+    ],
+    "FilterLifeTime" :
+    [
+        "FilterLifeTime" :                       "Filter Life Time",
+        "descriptiveAttribute" :                 "filterLifeTimeDescriptive",
+        "descriptiveState" :  [
+            "new":                               "New",
+            "good":                              "Good",
+            "replace soon":                      "Replace Soon",
+            "replace now":                       "Replace Now",
+            "unknown":                           "Unknown",
+        ],
+        "numericAttribute":                      "filterLifeTimeValue",
+        "numericUnits" :                         "PERCENTAGE",
+    ],
+    "PreFilterLifeTime" :
+    [
+        "PreFilterLifeTime" :                    "Pre-Filter Life Time",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "preFilterLifeTimeValue",
+        "numericUnits" :                         "PERCENTAGE",
+    ],
+    "HEPAFilterLifeTime" :
+    [
+        "HEPAFilterLifeTime" :                   "HEPA Filter Life Time",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "HEPAFilterLifeTimeValue",
+        "numericUnits" :                         "PERCENTAGE",
+    ],
+    "Max2FilterLifeTime" :
+    [
+        "Max2FilterLifeTime" :                   "Max2 Filter Life Time",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "max2FilterLifeTimeValue",
+        "numericUnits" :                         "PERCENTAGE",
+    ],
+    "CarbonDioxideLevel" :
+    [
+        "CarbonDioxideLevel" :                   "Carbon Dioxide Level",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "carbonDioxideLevel",
+        "numericUnits" :                         "PARTS_PER_MILLION",
+    ],
+    "PM2.5" :
+    [
+        "PM2.5" :                                "PM2.5",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "PM2_5Level",
+        "numericUnits" :                         "MICROGRAMS_PER_CUBIC_METER",
+    ],
+    "PM10" :
+    [
+        "PM10" :                                 "PM10",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "PM10Level",
+        "numericUnits" :                         "MICROGRAMS_PER_CUBIC_METER",
+    ],
+    "VolatileOrganicCompounds" :
+    [
+        "VolatileOrganicCompounds" :             "Volatile Organic Compounds",
+        "descriptiveAttribute" :                 "",
+        "descriptiveState" :                     "",
+        "numericAttribute":                      "volatileOrganicCompoundsLevel",
+        "numericUnits" :                         "PARTS_PER_MILLION",
+    ],
 ]
 
 @Field
