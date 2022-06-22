@@ -2682,9 +2682,6 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
         setpoint = celsiusToFahrenheitRounded(setpoint)
     }
 
-    // round to 0.1 degree resolution
-    setpoint = (setpoint.toFloat()*10).toInteger()/10
-
     def hubitatMode = deviceInfo.device.currentValue(temperatureSettingTrait.currentModeAttribute)
     def googleMode = temperatureSettingTrait.hubitatToGoogleModeMap[hubitatMode]
     def setSetpointCommand = temperatureSettingTrait.modeSetSetpointCommands[googleMode]
