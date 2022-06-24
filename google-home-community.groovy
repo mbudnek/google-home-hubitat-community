@@ -4591,7 +4591,7 @@ private roundTo(number, decimalPlaces) {
     def factor = Math.max(1, 10 * decimalPlaces)
     try {
         return Math.round(number * factor) / factor
-    catch (NullPointerException e) {
+    } catch (NullPointerException e) {
         LOGGER.exception("Attempted to round null!", e)
         return null
     }
