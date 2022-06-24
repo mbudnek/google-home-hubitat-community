@@ -70,6 +70,7 @@
 //                 - Added support for returning the matching user position for Arm/Disarm and Lock/Unlock to the device driver
 //   * Jun 21 2022 - Apply rounding more consistently to temperatures
 //   * Jun 21 2022 - Added SensorState Trait
+//   * Jun 23 2022 - Fix error attempting to round null
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -4588,7 +4589,12 @@ private allKnownDevices() {
 
 private roundTo(number, decimalPlaces) {
     def factor = Math.max(1, 10 * decimalPlaces)
-    return Math.round(number * factor) / factor
+    try {
+        return Math.round(number * factor) / factor
+    catch (NullPointerException e) {
+        LOGGER.exception("Attempted to round null!", e)
+        return null
+    }
 }
 
 private googlePercentageToHubitat(percentage) {
