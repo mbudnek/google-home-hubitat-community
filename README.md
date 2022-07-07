@@ -56,7 +56,7 @@ To create your Google smart home Action:
         - Your app ID from step 11 of the "Installing the Hubitat App" section above is `12345`
         - Your Hub ID from step 5 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
         - Your Fulfillment URL would be `https://cloud.hubitat.com/api/b97ac781-df30-43cd-98a4-e8a9a040bada/apps/12345/action`
-9. Click "Account linkig" in the menu
+9. Click "Account linking" in the menu
 10. Enter the Client ID and Client Secret you got when enabling OAuth for the Google Home Community app
 11. Enter `https://oauth.cloud.hubitat.com/oauth/authorize` as the Authorization URL
 12. Enter `https://oauth.cloud.hubitat.com/oauth/token` as the Token URL
