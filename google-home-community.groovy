@@ -71,6 +71,7 @@
 //   * Jun 21 2022 - Apply rounding more consistently to temperatures
 //   * Jun 21 2022 - Added SensorState Trait
 //   * Jun 23 2022 - Fix error attempting to round null
+//   * Sep 08 2022 - Fix SensorState labels
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1322,7 +1323,9 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
             name: "${deviceTrait.name}.sensorTypes",
             title: "Supported Sensor Types",
             type: "enum",
-            options: GOOGLE_SENSOR_STATES,
+            options: GOOGLE_SENSOR_STATES.collectEntries {key, value ->
+                [key, value.label]
+            },
             multiple: true,
             required: true,
             submitOnChange: true
@@ -4871,7 +4874,7 @@ private static final GOOGLE_THERMOSTAT_MODES = [
 private static final GOOGLE_SENSOR_STATES = [
     "AirQuality" :
     [
-        "AirQuality" :                           "Air Quality",
+        "label" :                                "Air Quality",
         "descriptiveAttribute" :                 "airQualityDescriptive",
         "descriptiveState" :  [
             "healthy":                           "Healthy",
@@ -4892,7 +4895,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "CarbonMonoxideLevel" :
     [
-        "CarbonMonoxideLevel" :                  "Carbon Monoxide Level",
+        "label" :                                "Carbon Monoxide Level",
         "descriptiveAttribute" :                 "carbonMonoxideDescriptive",
         "descriptiveState" :  [
             "carbon monoxide detected":          "Carbon Monoxide Detected",
@@ -4905,7 +4908,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "SmokeLevel" :
     [
-        "SmokeLevel" :                           "Smoke Level",
+        "label" :                                "Smoke Level",
         "descriptiveAttribute" :                 "smokeLevelDescriptive",
         "descriptiveState" :  [
             "smoke detected":                    "Smoke Detected",
@@ -4918,7 +4921,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "FilterCleanliness" :
     [
-        "FilterCleanliness" :                    "Filter Cleanliness",
+        "label" :                                "Filter Cleanliness",
         "descriptiveAttribute" :                 "filterCleanlinesDescriptive",
         "descriptiveState" :  [
             "clean":                             "Clean",
@@ -4931,7 +4934,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "WaterLeak" :
     [
-        "WaterLeak" :                           "Water Leak",
+        "label" :                                "Water Leak",
         "descriptiveAttribute" :                 "waterLeakDescriptive",
         "descriptiveState" :  [
             "leak":                              "Leak",
@@ -4943,7 +4946,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "RainDetection" :
     [
-        "RainDetection" :                        "Rain Detection",
+        "label" :                                "Rain Detection",
         "descriptiveAttribute" :                 "rainDetectionDescriptive",
         "descriptiveState" :  [
             "rain detected":                     "Rain Detected",
@@ -4955,7 +4958,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "FilterLifeTime" :
     [
-        "FilterLifeTime" :                       "Filter Life Time",
+        "label" :                                "Filter Life Time",
         "descriptiveAttribute" :                 "filterLifeTimeDescriptive",
         "descriptiveState" :  [
             "new":                               "New",
@@ -4969,7 +4972,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PreFilterLifeTime" :
     [
-        "PreFilterLifeTime" :                    "Pre-Filter Life Time",
+        "label" :                                "Pre-Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "preFilterLifeTimeValue",
@@ -4977,7 +4980,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "HEPAFilterLifeTime" :
     [
-        "HEPAFilterLifeTime" :                   "HEPA Filter Life Time",
+        "label" :                                "HEPA Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "HEPAFilterLifeTimeValue",
@@ -4985,7 +4988,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "Max2FilterLifeTime" :
     [
-        "Max2FilterLifeTime" :                   "Max2 Filter Life Time",
+        "label" :                                "Max2 Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "max2FilterLifeTimeValue",
@@ -4993,7 +4996,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "CarbonDioxideLevel" :
     [
-        "CarbonDioxideLevel" :                   "Carbon Dioxide Level",
+        "label" :                                "Carbon Dioxide Level",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "carbonDioxideLevel",
@@ -5001,7 +5004,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PM2.5" :
     [
-        "PM2.5" :                                "PM2.5",
+        "label" :                                "PM2.5",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "PM2_5Level",
@@ -5009,7 +5012,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PM10" :
     [
-        "PM10" :                                 "PM10",
+        "label" :                                "PM10",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "PM10Level",
@@ -5017,7 +5020,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "VolatileOrganicCompounds" :
     [
-        "VolatileOrganicCompounds" :             "Volatile Organic Compounds",
+        "label" :                                "Volatile Organic Compounds",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "volatileOrganicCompoundsLevel",
