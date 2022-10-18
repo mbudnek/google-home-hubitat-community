@@ -72,6 +72,7 @@
 //   * Jun 21 2022 - Added SensorState Trait
 //   * Jun 23 2022 - Fix error attempting to round null
 //   * Sep 08 2022 - Fix SensorState labels
+//   * Oct 18 2022 - Added TransportControl Trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1858,6 +1859,47 @@ def toggleDelete(toggle) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_TransportControl(deviceTrait) {
+    section("Transport Control Preferences") {
+        input(
+            name: "${deviceTrait.name}.nextCommand",
+            title: "Next Command",
+            type: "text",
+            required: true,
+            defaultValue: "nextTrack"
+        )
+        input(
+            name: "${deviceTrait.name}.pauseCommand",
+            title: "Pause Command",
+            type: "text",
+            required: true,
+            defaultValue: "pause"
+        )
+        input(
+            name: "${deviceTrait.name}.previousCommand",
+            title: "Previous Command",
+            type: "text",
+            required: true,
+            defaultValue: "previousTrack"
+        )
+        input(
+            name: "${deviceTrait.name}.resumeCommand",
+            title: "Resume Command",
+            type: "text",
+            required: true,
+            defaultValue: "play"
+        )
+        input(
+            name: "${deviceTrait.name}.stopCommand",
+            title: "Stop Command",
+            type: "text",
+            required: true,
+            defaultValue: "stop"
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_Volume(deviceTrait) {
     section("Volume Preferences") {
         input(
@@ -2806,6 +2848,46 @@ private executeCommand_TimerStart(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaNext(deviceInfo, command) {
+    checkMfa(deviceInfo, "Next", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.nextCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaPause(deviceInfo, command) {
+    checkMfa(deviceInfo, "Pause", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.pauseCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaPrevious(deviceInfo, command) {
+    checkMfa(deviceInfo, "Previous", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.previousCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaResume(deviceInfo, command) {
+    checkMfa(deviceInfo, "Resume", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.resumeCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaStop(deviceInfo, command) {
+    checkMfa(deviceInfo, "Stop", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.stopCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_volumeRelative(deviceInfo, command) {
     checkMfa(deviceInfo, "Set Volume", command)
     def volumeTrait = deviceInfo.deviceType.traits.Volume
@@ -3223,6 +3305,11 @@ private deviceStateForTrait_Toggles(deviceTrait, device) {
     ]
 }
 
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_TransportControl(deviceTrait, device) {
+    return [:]
+}
+
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_Volume(deviceTrait, device) {
     def deviceState = [
@@ -3580,6 +3667,13 @@ private attributesForTrait_Toggles(deviceTrait, device) {
                 ]
             ]
         }
+    ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_TransportControl(deviceTrait, device) {
+    return [
+        transportControlSupportedCommands: ["NEXT", "PAUSE", "PREVIOUS", "RESUME", "STOP"]
     ]
 }
 
@@ -4105,6 +4199,19 @@ private traitFromSettings_Toggles(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_TransportControl(traitName) {
+    def transportControlTrait = [
+        nextCommand:  settings."${traitName}.nextCommand",
+        pauseCommand:  settings."${traitName}.pauseCommand",
+        previousCommand:  settings."${traitName}.previousCommand",
+        resumeCommand:  settings."${traitName}.resumeCommand",
+        stopCommand:  settings."${traitName}.stopCommand",
+        commands: ["Next", "Pause", "Previous", "Resume", "Stop"],
+    ]
+    return transportControlTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Volume(traitName) {
     def canMuteUnmute = settings."${traitName}.canMuteUnmute"
     if (canMuteUnmute == null) {
@@ -4427,6 +4534,15 @@ private deleteDeviceTrait_Timer(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.timerPauseCommand")
     app.removeSetting("${deviceTrait.name}.timerResumeCommand")
     app.removeSetting("${deviceTrait.name}.timerPausedValue")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_TransportControl(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.nextCommand")
+    app.removeSetting("${deviceTrait.name}.pauseCommand")
+    app.removeSetting("${deviceTrait.name}.previousCommand")
+    app.removeSetting("${deviceTrait.name}.resumeCommand")
+    app.removeSetting("${deviceTrait.name}.stopCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4852,7 +4968,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     TemperatureSetting: "Temperature Setting",
     Timer: "Timer",
     Toggles: "Toggles",
-    //TransportControl: "Transport Control",
+    TransportControl: "Transport Control",
     Volume: "Volume",
 ]
 
