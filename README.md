@@ -35,11 +35,8 @@ To install the Hubitat App:
 
 Before creating your Google smart home Action, you will need your Hubitat hub's ID:
 
-1. Navigate to https://portal.hubitat.com
-2. Log in
-3. Navigate to "My Hubs"
-4. Click on the Hubitat logo above your hub
-5. Find "Hub ID" in the dialog that pops up, and make a note of its value
+1. Navigate to the "Settings -> Hub Details" page in Hubitat
+2. Note the value under "Hub UID"
 
 To create your Google smart home Action:
 
@@ -54,7 +51,7 @@ To create your Google smart home Action:
     - `https://cloud.hubitat.com/api/{your hub ID}/apps/{app ID}/action`
     - For example:
         - Your app ID from step 11 of the "Installing the Hubitat App" section above is `12345`
-        - Your Hub ID from step 5 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
+        - Your Hub ID from step 2 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
         - Your Fulfillment URL would be `https://cloud.hubitat.com/api/b97ac781-df30-43cd-98a4-e8a9a040bada/apps/12345/action`
 9. Click "Account linking" in the menu
 10. Enter the Client ID and Client Secret you got when enabling OAuth for the Google Home Community app
