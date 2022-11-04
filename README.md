@@ -35,11 +35,8 @@ To install the Hubitat App:
 
 Before creating your Google smart home Action, you will need your Hubitat hub's ID:
 
-1. Navigate to https://portal.hubitat.com
-2. Log in
-3. Navigate to "My Hubs"
-4. Click on the Hubitat logo above your hub
-5. Find "Hub ID" in the dialog that pops up, and make a note of its value
+1. Navigate to the "Settings -> Hub Details" page in Hubitat
+2. Note the value under "Hub UID"
 
 To create your Google smart home Action:
 
@@ -54,7 +51,7 @@ To create your Google smart home Action:
     - `https://cloud.hubitat.com/api/{your hub ID}/apps/{app ID}/action`
     - For example:
         - Your app ID from step 11 of the "Installing the Hubitat App" section above is `12345`
-        - Your Hub ID from step 5 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
+        - Your Hub ID from step 2 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
         - Your Fulfillment URL would be `https://cloud.hubitat.com/api/b97ac781-df30-43cd-98a4-e8a9a040bada/apps/12345/action`
 9. Click "Account linking" in the menu
 10. Enter the Client ID and Client Secret you got when enabling OAuth for the Google Home Community app
@@ -259,7 +256,7 @@ The Lock/Unlock trait is used for anything that can lock and unlock, such as doo
 
 ### Media State
 
-The Media State trait is used for reporting the current playback and activity state of a media device.  Query command is unknown at the is time.  The trait has the following configuration parameters:
+The Media State trait is used for reporting the current playback and activity state of a media device.  Query command is unknown at this time.  The trait has the following configuration parameters:
 
 - Support Activity State: Should be set if this device can report the current activity state.  Defaults to 'false'.  If 'true', the following state is available:
     - Activity State Attribute: The device attribute used to query the current activity state of the device.
@@ -406,6 +403,17 @@ This trait is used for devices that have one or more independently togglable on/
 Multiple toggles may be defined for a device type, each has all of the parameters defined for the [On/Off trait](#onoff), as well as the following:
 
 - Toggle Names: A comma-separated list of names that can be used to control or query this toggle.  The Google Assistant will accept any of the defined names, but will always respond with the first name in the list.
+
+### Transport Control
+
+This trait is used for devices which are able to control media playback such as Music Players. It can be controlled by saying things like "Hey Google, pause {device}.", "Hey Google, resume {device}.", "Hey Google, stop {device}.", "Hey Google, next on {device}.", "Hey Google, previous on {device}.". It supports the following commands (based on the Hubitat Music Player device capability):
+
+- Next Command: A device command used to skip to next media item. Maps to `nextTrack` by default.
+- Pause Command: A device command used to pause media playback. Maps to `pause` by default.
+- Previous Command: A device command used to skip to previous media item. Maps to `previousTrack` by default.
+- Resume Command: A device command used to resume media playback. Maps to `play` by default.
+- Stop Command: A device command used to stop media playback. Maps to `stop` by default.
+
 
 ### Volume
 
