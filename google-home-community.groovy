@@ -76,10 +76,16 @@ import groovy.json.JsonException
 import groovy.json.JsonOutput
 import groovy.transform.Field
 import java.time.Duration
+import java.time.Instant
 
+import java.security.KeyFactory
+import java.security.PrivateKey
+import java.security.spec.RSAPrivateKeySpec
+
+import com.nimbusds.jose.JOSEObjectType
+import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.RSASSASigner
-
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
@@ -115,7 +121,7 @@ mappings {
 }
 
 def installed() {
-    LOGGER.debug("App installed, agentUserId=${getAgentUserId()}")
+    LOGGER.debug("App installed, agentUserId=${agentUserId}")
     updateDeviceEventSubscription()
 }
 
@@ -126,19 +132,21 @@ def updated() {
 
 def updateDeviceEventSubscription() {
     unsubscribe(handleDeviceEvent)
-    allKnownDevices().each { entry ->
-        subscribe(entry.value.device, handleDeviceEvent, ["filterEvents": false])
+    if (settings.reportState) {
+        allKnownDevices().each { entry ->
+            subscribe(entry.value.device, handleDeviceEvent, ["filterEvents": false])
+        }
     }
 }
 
 def handleDeviceEvent(e) {
-    LOGGER.debug("Handling device event, deviceId=${e.getDeviceId()} device=${e.getDevice()}")
+    LOGGER.debug("Handling device event, deviceId=${e.deviceId} device=${e.device}")
     def requestId = UUID.randomUUID().toString()
-    def deviceId = e.getDeviceId()
+    def deviceId = e.deviceId
     def deviceInfo = allKnownDevices()."${deviceId}"
     def req = [
         requestId: requestId,
-        agentUserId: getAgentUserId(),
+        agentUserId: agentUserId,
         payload: [
             devices: [
                 states: [:],
@@ -151,25 +159,24 @@ def handleDeviceEvent(e) {
             deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
         }
     } else {
-        LOGGER.warn("Requested device ${e.getDevice()} not found.")
+        LOGGER.warn("Requested device ${e.device} not found.")
     }
     if (!deviceState.size()) {
-        LOGGER.debug("Not posting device event for ${e.getDevice()} to Home Graph (no state -- maybe a scene?)")
+        LOGGER.debug("Not posting device event for ${e.device} to Home Graph (no state -- maybe a scene?)")
         return
     }
     req.payload.devices.states."${deviceId}" = deviceState
-    fetchOAuthToken { token ->
-        params = [
-            uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
-            headers: [
-                Authorization: "Bearer ${token}",
-            ],
-            body: req,
-        ]
-        LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
-        httpPostJson(params) { resp ->
-            LOGGER.debug("Finished posting device state requestId=${requestId}")
-        }
+    def jwt = fetchOAuthToken()
+    params = [
+        uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
+        headers: [
+            Authorization: "Bearer ${jwt}",
+        ],
+        body: req,
+    ]
+    LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
+    httpPostJson(params) { resp ->
+        LOGGER.debug("Finished posting device state requestId=${requestId}")
     }
 }
 
@@ -274,30 +281,22 @@ def mainPreferences() {
         }
         paragraph
         section {
+            input(
+                name: "reportState",
+                title: "Push device events to Google",
+                type: "bool",
+                submitOnChange: true
+            )
             paragraph "Follow these steps to enable Google Home Graph Integration"
             paragraph "1) Enable Google Home Graph API at: https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview"
             paragraph "2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey"
             paragraph "3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON, save to disk, and paste contents in Google Service Account Authorization (JSON) below"
-            paragraph """
-4) (sorry, this is annoying, the version of Nimbus JOSE+JWT in Hubitat is very old)
-
-Convert private key from JSON to JWK format, e.g.:
-
-npm -install rasha
-cat /path/to/google-service-account.json | node -pe 'var rasha = require("rasha"); var input = require("fs").readFileSync(0, "utf-8"); var pem = JSON.parse(input).private_key; rasha.import({pem: pem}).then(result => { console.log(result); } );'
-
-Paste JSON output (not including the 'Promise { <pending> }' bit in Private Key JWK (JSON) below
-"""
-            paragraph "5) From Google Assistant, say: OK Google, sync my devices"
+            paragraph "4) From Google Assistant, say: OK Google, sync my devices"
             input(
                 name: "googleServiceAccountJSON",
-                title: "Paste Google Service Account Authorization (JSON)",
+                title: "Paste Google Service Account Key",
                 type: "password",
-            )
-            input(
-                name: "googleJWKJSON",
-                title: "Paste Private Key JWK (JSON)",
-                type: "password",
+                required: settings.reportState == true
             )
         }
         section("Global PIN Codes") {
@@ -3331,41 +3330,50 @@ private deviceStateForTrait_Volume(deviceTrait, device) {
     return deviceState
 }
 
+private parsePemPrivateKey(pem) {
+    def rawB64 = pem
+        .replace("-----BEGIN PRIVATE KEY-----", "")
+        .replaceAll(System.lineSeparator(), "")
+        .replace("-----END PRIVATE KEY-----", "")
+
+    byte[] decoded = Base64.decodeBase64(rawB64)
+
+    KeyFactory keyFactory = KeyFactory.getInstance("RSA")
+    return (PrivateKey)keyFactory.generatePrivate(new PKCS8EncodedKeySpec(decoded))
+}
+
 private generateSignedJWT() {
-    if (!settings.googleServiceAccountJSON || !settings.googleJWKJSON) {
-        LOGGER.warn("Must generate and paste Google Service Account JSON and JWK JSON into Preferences")
-        return
+    if (!settings.googleServiceAccountJSON) {
+        throw new Exception("Must generate and paste Google Service Account JSON and JWK JSON into Preferences")
     }
     def keyJson = parseJson(settings.googleServiceAccountJSON)
 
-    def header = JWSHeader.parse("""{
-        "alg": "RS256",
-        "kid": "${keyJson.private_key_id}",
-        "typ": "jwt"}
-    """)
+    def header = new JWSHeader.Builder(JWSAlgorithm.RS256)
+        .keyID(keyJson.private_key_id)
+        .type(JOSEObjectType.JWT)
+        .build()
 
     // Must be in the past, so start 30 seconds ago.
-    def issueTime = new Date().toInstant() - Duration.ofSeconds(30)
+    def issueTime = Instant.now() - Duration.ofSeconds(30)
 
     // Must be no more than 60 minutes in the future.
-    def expiryTime = issueTime.plus(Duration.ofMinutes(60))
-    def payload = JWTClaimsSet.parse("""{
-        "aud": "https://oauth2.googleapis.com/token",
-        "iat": ${issueTime.getEpochSecond()},
-        "exp": ${expiryTime.getEpochSecond()},
-        "iss": "${keyJson.client_email}",
-        "scope": "https://www.googleapis.com/auth/homegraph"}
-    """)
+    def expirationTime = issueTime + Duration.ofMinutes(60)
+    def payload = new JWTClaimsSet.Builder()
+        .audience("https://oauth2.googleapis.com/token")
+        .issueTime(Date.from(issueTime))
+        .expirationTime(Date.from(expirationTime))
+        .issuer(keyJson.client_email)
+        .claim("scope", "https://www.googleapis.com/auth/homegraph")
+        .build()
 
     def signedJWT = new SignedJWT(header, payload)
-    def jwk = JWK.parse(settings.googleJWKJSON)
-    def signer = new RSASSASigner(jwk.toRSAPrivateKey())
+    def signer = new RSASSASigner(parsePemPrivateKey(keyJson.private_key))
     signedJWT.sign(signer)
 
     return [signedJWT.serialize(), expiryTime]
 }
 
-private fetchOAuthToken(callback) {
+private fetchOAuthToken() {
     if (!settings.googleServiceAccountJSON) {
         LOGGER.debug("Can't refresh Report State auth without Google Service Account JSON")
         return
@@ -3374,28 +3382,17 @@ private fetchOAuthToken(callback) {
     if (state.oauthAccessToken &&
         state.oauthExpiryTimeMillis &&
         state.oauthExpiryTimeMillis >= refreshAfterMillis) {
-        LOGGER.debug("Re-using existing OAuth token ${state.oauthAccessToken} (expiry ${state.oauthExpiryTimeMillis})")
-        callback(state.oauthAccessToken)
-        return
+        LOGGER.debug("Re-using existing OAuth token (expires ${state.oauthExpiryTimeMillis})")
+        return state.oauthAccessToken
     }
-    if (!state.signedJWT ||
-        !state.signedJWTExpiryTimeMillis ||
-        state.signedJWTExpiryTimeMillis < (new Date().toInstant() - Duration.ofSeconds(30)).toEpochMilli()) {
-        LOGGER.debug("Generating freshly-signed JWT to exchange for OAuth token")
-        def (signedJWT, signedJWTExpiryTime) = generateSignedJWT()
-        if (!signedJWT) {
-            LOGGER.debug("Signed JWT not available")
-            return
-        }
-        state.signedJWT = signedJWT
-        state.signedJWTExpiryTimeMillis = signedJWTExpiryTime.toEpochMilli()
-    }
-    LOGGER.debug("Generated signed JWT: ${state.signedJWT}")
+    LOGGER.debug("Generating JWT to exchange for OAuth token")
+    def (signedJWT, signedJWTExpiryTime) = generateSignedJWT()
+    LOGGER.debug("Generated signed JWT: ${signedJWT}")
     params = [
         uri: "https://accounts.google.com/o/oauth2/token",
         body: [
             grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            assertion: state.signedJWT,
+            assertion: signedJWT,
         ],
         requestContentType: "application/x-www-form-urlencoded",
     ]
@@ -3403,16 +3400,15 @@ private fetchOAuthToken(callback) {
     httpPost(params) { resp ->
         LOGGER.debug("Got OAuth response: ${resp.data}")
         state.oauthAccessToken = resp.data.access_token
-        def oauthExpiryTimeMillis = new Date().toInstant().plus(
-            Duration.ofSeconds(resp.data.expires_in)).toEpochMilli()
+        def oauthExpiryTimeMillis = (Instant.now() + Duration.ofSeconds(resp.data.expires_in)).toEpochMilli()
         LOGGER.debug("oauthExpiryTimeMillis: ${oauthExpiryTimeMillis}")
         state.oauthExpiryTimeMillis = oauthExpiryTimeMillis
-        callback(state.oauthAccessToken)
+        return state.oauthAccessToken
     }
 }
 
 private getAgentUserId() {
-    return "${getHubUID()}_${app?.id}"
+    return "${hubUID}_${app?.id}"
 }
 
 private handleSyncRequest(request) {
@@ -3420,7 +3416,7 @@ private handleSyncRequest(request) {
     def resp = [
         requestId: request.JSON.requestId,
         payload: [
-            agentUserId: getAgentUserId(),
+            agentUserId: agentUserId,
             devices: [],
         ]
     ]
