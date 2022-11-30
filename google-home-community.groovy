@@ -305,13 +305,18 @@ def mainPreferences() {
         }
         if (!hubVersionLessThan("2.3.4.115")) {
             section("Home Graph Integration") {
-                paragraph "Follow these steps to enable Google Home Graph Integration"
-                paragraph "1) Enable Google Home Graph API at: https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview"
-                paragraph "2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey"
-                paragraph "3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON, save to disk, and paste contents in Google Service Account Authorization (JSON) below"
+                paragraph(
+                    '''\
+                    Follow these steps to enable Google Home Graph Integration:
+                      1) Enable Google Home Graph API at https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview
+                      2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey
+                      3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON and save to disk
+                      4) Paste contents of the file in Google Service Account Authorization below\
+                    '''.stripIndent()
+                )
                 input(
                     name: "googleServiceAccountJSON",
-                    title: "Paste Google Service Account Key",
+                    title: "Google Service Account Authorization",
                     type: "password",
                     submitOnChange: true
                 )
