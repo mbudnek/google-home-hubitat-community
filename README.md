@@ -114,6 +114,10 @@ Each device type has the following settings:
 	- Device pin code attribute: The device attribute used to query the device pincodes JSON map.  Maps to the `lockCodes` attribute by default.
 	- Device pin code value: The key value in the JSON map pointing to the user pincode.  Maps to the `code` value by default.
 
+## Device Traits
+
+Google Home defines a number of device traits that you can mix-and-match to define the functionality of any particular type of device.  Not all traits are currently supported by Google Home Community.  The following are the currently supported device traits and their configuration parameters:
+
 ### Arm/Disarm
 
 The Arm/Disarm trait is user to control security systems.  It can be controlled by saying things like "Hey Google, arm {device} to {level}" or "Hey Google, disarm {device}}" and queried by saying things like "Hey Google, is the {device} armed?".  It has the following configuration parameters:
@@ -138,10 +142,6 @@ The Arm/Disarm trait is user to control security systems.  It can be controlled 
 	  NOTE: Device must support parameters in the arm / disarm commands.
 
 
-
-## Device Traits
-
-Google Home defines a number of device traits that you can mix-and-match to define the functionality of any particular type of device.  Not all traits are currently supported by Google Home Community.  The following are the currently supported device traits and their configuration parameters:
 
 ### Brightness
 
@@ -433,3 +433,14 @@ This allows a single user/pin combination to apply to all security actions.
 Note that using the Global PIN Codes does not preclude the use of the per-device-type codes; that is, you can use both.
 If you have users that should have access to control everything, then use the Global PIN Codes; for the other users, you can set them up on the specific device type
 - IE: Mr. Smith should have access to the entire system - setup a Global PIN; Johnny Jr. should have access to only the Door Locks - setup a user/pin on the Door Lock Device Type
+
+## Enabling Google Home Graph Support
+
+The Google Home Graph API is used for requesting that Google update its list of devices when changes are made and for proactively pushing device events to Google to enable some Google Home features such as device-based automation triggers.  Follow these steps to enable Google Home Graph API support:
+
+1. Enable the Google Home Graph API at: https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview
+2. Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey
+3. From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON and save the document to your device
+4. Paste the contents of the file into the "Google Service Account Authorization" field on the Hubitat app's main settings page
+
+Once these steps are complete, both Google's Report State and Request Sync APIs will be enabled.  You may optionally disable the "Push device events to Google" toggle if you do not want all of your devices' events to be proactively pushed to Google for privacy or other reasons.

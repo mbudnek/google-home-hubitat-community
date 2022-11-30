@@ -71,16 +71,13 @@
 //   * Jun 21 2022 - Apply rounding more consistently to temperatures
 //   * Jun 21 2022 - Added SensorState Trait
 //   * Jun 23 2022 - Fix error attempting to round null
+//   * Nov 30 2022 - Implement RequestSync and ReportState APIs
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
 import groovy.transform.Field
 import java.time.Duration
 import java.time.Instant
-
-import java.security.KeyFactory
-import java.security.PrivateKey
-import java.security.spec.RSAPrivateKeySpec
 
 import com.nimbusds.jose.JOSEObjectType
 import com.nimbusds.jose.JWSAlgorithm
@@ -127,23 +124,27 @@ def installed() {
 
 def updated() {
     LOGGER.debug("Preferences updated")
-    updateDeviceEventSubscription()
-}
-
-def updateDeviceEventSubscription() {
-    unsubscribe(handleDeviceEvent)
-    if (settings.reportState) {
-        allKnownDevices().each { entry ->
-            subscribe(entry.value.device, handleDeviceEvent, ["filterEvents": false])
+    unsubscribe("handleDeviceEvent")
+    if (settings.googleServiceAccountJSON) {
+        requestSync()
+        if (settings.reportState) {
+            allKnownDevices().each { entry ->
+                subscribe(entry.value.device, "handleDeviceEvent", [filterEvents: true])
+            }
+            reportStateForDevices(allKnownDevices())
         }
     }
 }
 
-def handleDeviceEvent(e) {
-    LOGGER.debug("Handling device event, deviceId=${e.deviceId} device=${e.device}")
-    def requestId = UUID.randomUUID().toString()
-    def deviceId = e.deviceId
+def handleDeviceEvent(event) {
+    LOGGER.debug("Handling device event, deviceId=${event.deviceId} device=${event.device}")
+    def deviceId = event.deviceId
     def deviceInfo = allKnownDevices()."${deviceId}"
+    reportStateForDevices([(deviceId): deviceInfo])
+}
+
+private reportStateForDevices(devices) {
+    def requestId = UUID.randomUUID().toString()
     def req = [
         requestId: requestId,
         agentUserId: agentUserId,
@@ -153,30 +154,48 @@ def handleDeviceEvent(e) {
             ],
         ],
     ]
-    def deviceState = [:]
-    if (deviceInfo != null) {
+
+    devices.each { deviceId, deviceInfo ->
+        def deviceState = [:]
         deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
             deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
         }
-    } else {
-        LOGGER.warn("Requested device ${e.device} not found.")
+        if (deviceState.size()) {
+            req.payload.devices.states."${deviceId}" = deviceState
+        } else {
+            LOGGER.debug("Not reporting state for device ${deviceInfo.device} to Home Graph (no state -- maybe a scene?)")
+        }
+
     }
-    if (!deviceState.size()) {
-        LOGGER.debug("Not posting device event for ${e.device} to Home Graph (no state -- maybe a scene?)")
-        return
-    }
-    req.payload.devices.states."${deviceId}" = deviceState
-    def jwt = fetchOAuthToken()
+
+    def token = fetchOAuthToken()
     params = [
         uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
         headers: [
-            Authorization: "Bearer ${jwt}",
+            Authorization: "Bearer REDACTED",
         ],
         body: req,
     ]
     LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
+    params.headers.authorization = "Bearer ${token}"
     httpPostJson(params) { resp ->
         LOGGER.debug("Finished posting device state requestId=${requestId}")
+    }
+}
+
+def requestSync() {
+    LOGGER.info("Requesting Google sync devices")
+    params = [
+        uri: "https://homegraph.googleapis.com/v1/devices:requestSync",
+        headers: [
+            Authorization: "Bearer ${fetchOAuthToken()}",
+        ],
+        body: [
+            agentUserId: agentUserId,
+        ]
+    ]
+    httpPostJson(params) { resp ->
+        LOGGER.debug("Finished requesting Google sync devices")
     }
 }
 
@@ -200,6 +219,17 @@ def appButtonHandler(buttonPressed) {
         // page will take care of actually deleting it.
         state.pinToDelete = pinId
     }
+}
+
+private hubVersionLessThan(versionString) {
+    def hubVersion = location.hub.firmwareVersionString.split("\\.")
+    def targetVersion = versionString.split("\\.")
+    for (def i = 0; i < targetVersion.length; ++i) {
+        if ((hubVersion[i] as int) < (targetVersion[i] as int)) {
+            return true
+        }
+    }
+    return false
 }
 
 @SuppressWarnings('MethodSize')
@@ -271,33 +301,28 @@ def mainPreferences() {
             }
             href(title: "Define new device type", description: "", style: "page", page: "deviceTypePreferences")
         }
-        section {
-            input(
-                name: "debugLogging",
-                title: "Enable Debug Logging",
-                type: "bool",
-                defaultValue: false
-            )
-        }
-        paragraph
-        section {
-            input(
-                name: "reportState",
-                title: "Push device events to Google",
-                type: "bool",
-                submitOnChange: true
-            )
-            paragraph "Follow these steps to enable Google Home Graph Integration"
-            paragraph "1) Enable Google Home Graph API at: https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview"
-            paragraph "2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey"
-            paragraph "3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON, save to disk, and paste contents in Google Service Account Authorization (JSON) below"
-            paragraph "4) From Google Assistant, say: OK Google, sync my devices"
-            input(
-                name: "googleServiceAccountJSON",
-                title: "Paste Google Service Account Key",
-                type: "password",
-                required: settings.reportState == true
-            )
+        if (!hubVersionLessThan("2.3.4.115")) {
+            section("Home Graph Integration") {
+                paragraph "Follow these steps to enable Google Home Graph Integration"
+                paragraph "1) Enable Google Home Graph API at: https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview"
+                paragraph "2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey"
+                paragraph "3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON, save to disk, and paste contents in Google Service Account Authorization (JSON) below"
+                input(
+                    name: "googleServiceAccountJSON",
+                    title: "Paste Google Service Account Key",
+                    type: "password",
+                    submitOnChange: true
+                )
+
+                if (settings.googleServiceAccountJSON) {
+                    input(
+                        name: "reportState",
+                        title: "Push device events to Google",
+                        type: "bool",
+                        defaultValue: true
+                    )
+                }
+            }
         }
         section("Global PIN Codes") {
             globalPinCodes?.pinCodes?.each { pinCode ->
@@ -326,6 +351,15 @@ def mainPreferences() {
                 name: "addPin:GlobalPinCodes",
                 title: "Add PIN Code",
                 type: "button"
+            )
+
+        }
+        section {
+            input(
+                name: "debugLogging",
+                title: "Enable Debug Logging",
+                type: "bool",
+                defaultValue: false
             )
         }
     }
@@ -3331,15 +3365,30 @@ private deviceStateForTrait_Volume(deviceTrait, device) {
 }
 
 private parsePemPrivateKey(pem) {
+    // Dynamically load these classes and use them via reflection because they weren't available prior
+    // to Hubitat version 2.3.4.115 and so I can't import them at the top level and maintain any sort
+    // of compatibility with older Hubitat versions
+    def KeyFactory
+    def PKCS8EncodedKeySpec
+    try {
+        KeyFactory = "java.security.KeyFactory" as Class
+        PKCS8EncodedKeySpec = "java.security.spec.PKCS8EncodedKeySpec" as Class
+    } catch (Exception ex) {
+        throw new Exception(
+            "Unable to load required java.security classes.  Hub version is likely older than 2.3.4.115",
+             ex
+        )
+    }
+
     def rawB64 = pem
         .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replaceAll(System.lineSeparator(), "")
+        .replaceAll("\n", "")
         .replace("-----END PRIVATE KEY-----", "")
 
-    byte[] decoded = Base64.decodeBase64(rawB64)
+    byte[] decoded = rawB64.decodeBase64()
 
-    KeyFactory keyFactory = KeyFactory.getInstance("RSA")
-    return (PrivateKey)keyFactory.generatePrivate(new PKCS8EncodedKeySpec(decoded))
+    def keyFactory = KeyFactory.getInstance("RSA")
+    return keyFactory.generatePrivate(PKCS8EncodedKeySpec.newInstance(decoded))
 }
 
 private generateSignedJWT() {
@@ -3398,13 +3447,13 @@ private fetchOAuthToken() {
     ]
     LOGGER.debug("Fetching OAuth token with signed JWT: ${params}")
     httpPost(params) { resp ->
-        LOGGER.debug("Got OAuth response: ${resp.data}")
+        LOGGER.debug("Got OAuth token response")
         state.oauthAccessToken = resp.data.access_token
         def oauthExpiryTimeMillis = (Instant.now() + Duration.ofSeconds(resp.data.expires_in)).toEpochMilli()
         LOGGER.debug("oauthExpiryTimeMillis: ${oauthExpiryTimeMillis}")
         state.oauthExpiryTimeMillis = oauthExpiryTimeMillis
-        return state.oauthAccessToken
     }
+    return state.oauthAccessToken
 }
 
 private getAgentUserId() {
