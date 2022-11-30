@@ -71,6 +71,8 @@
 //   * Jun 21 2022 - Apply rounding more consistently to temperatures
 //   * Jun 21 2022 - Added SensorState Trait
 //   * Jun 23 2022 - Fix error attempting to round null
+//   * Sep 08 2022 - Fix SensorState labels
+//   * Oct 18 2022 - Added TransportControl Trait
 //   * Nov 30 2022 - Implement RequestSync and ReportState APIs
 
 import groovy.json.JsonException
@@ -1455,7 +1457,9 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
             name: "${deviceTrait.name}.sensorTypes",
             title: "Supported Sensor Types",
             type: "enum",
-            options: GOOGLE_SENSOR_STATES,
+            options: GOOGLE_SENSOR_STATES.collectEntries {key, value ->
+                [key, value.label]
+            },
             multiple: true,
             required: true,
             submitOnChange: true
@@ -1984,6 +1988,47 @@ def toggleDelete(toggle) {
         section {
             paragraph("The ${toggle.labels ? toggle.labels.join(",") : "new"} toggle has been removed")
         }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_TransportControl(deviceTrait) {
+    section("Transport Control Preferences") {
+        input(
+            name: "${deviceTrait.name}.nextCommand",
+            title: "Next Command",
+            type: "text",
+            required: true,
+            defaultValue: "nextTrack"
+        )
+        input(
+            name: "${deviceTrait.name}.pauseCommand",
+            title: "Pause Command",
+            type: "text",
+            required: true,
+            defaultValue: "pause"
+        )
+        input(
+            name: "${deviceTrait.name}.previousCommand",
+            title: "Previous Command",
+            type: "text",
+            required: true,
+            defaultValue: "previousTrack"
+        )
+        input(
+            name: "${deviceTrait.name}.resumeCommand",
+            title: "Resume Command",
+            type: "text",
+            required: true,
+            defaultValue: "play"
+        )
+        input(
+            name: "${deviceTrait.name}.stopCommand",
+            title: "Stop Command",
+            type: "text",
+            required: true,
+            defaultValue: "stop"
+        )
     }
 }
 
@@ -2936,6 +2981,46 @@ private executeCommand_TimerStart(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaNext(deviceInfo, command) {
+    checkMfa(deviceInfo, "Next", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.nextCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaPause(deviceInfo, command) {
+    checkMfa(deviceInfo, "Pause", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.pauseCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaPrevious(deviceInfo, command) {
+    checkMfa(deviceInfo, "Previous", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.previousCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaResume(deviceInfo, command) {
+    checkMfa(deviceInfo, "Resume", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.resumeCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_mediaStop(deviceInfo, command) {
+    checkMfa(deviceInfo, "Stop", command)
+    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    deviceInfo.device."${transportControlTrait.stopCommand}"()
+    return [[:],[:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_volumeRelative(deviceInfo, command) {
     checkMfa(deviceInfo, "Set Volume", command)
     def volumeTrait = deviceInfo.deviceType.traits.Volume
@@ -3351,6 +3436,11 @@ private deviceStateForTrait_Toggles(deviceTrait, device) {
             [toggle.name, deviceStateForTrait_OnOff(toggle, device).on]
         }
     ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private deviceStateForTrait_TransportControl(deviceTrait, device) {
+    return [:]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3808,6 +3898,13 @@ private attributesForTrait_Toggles(deviceTrait, device) {
                 ]
             ]
         }
+    ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_TransportControl(deviceTrait, device) {
+    return [
+        transportControlSupportedCommands: ["NEXT", "PAUSE", "PREVIOUS", "RESUME", "STOP"]
     ]
 }
 
@@ -4333,6 +4430,19 @@ private traitFromSettings_Toggles(traitName) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_TransportControl(traitName) {
+    def transportControlTrait = [
+        nextCommand:  settings."${traitName}.nextCommand",
+        pauseCommand:  settings."${traitName}.pauseCommand",
+        previousCommand:  settings."${traitName}.previousCommand",
+        resumeCommand:  settings."${traitName}.resumeCommand",
+        stopCommand:  settings."${traitName}.stopCommand",
+        commands: ["Next", "Pause", "Previous", "Resume", "Stop"],
+    ]
+    return transportControlTrait
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private traitFromSettings_Volume(traitName) {
     def canMuteUnmute = settings."${traitName}.canMuteUnmute"
     if (canMuteUnmute == null) {
@@ -4655,6 +4765,15 @@ private deleteDeviceTrait_Timer(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.timerPauseCommand")
     app.removeSetting("${deviceTrait.name}.timerResumeCommand")
     app.removeSetting("${deviceTrait.name}.timerPausedValue")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_TransportControl(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.nextCommand")
+    app.removeSetting("${deviceTrait.name}.pauseCommand")
+    app.removeSetting("${deviceTrait.name}.previousCommand")
+    app.removeSetting("${deviceTrait.name}.resumeCommand")
+    app.removeSetting("${deviceTrait.name}.stopCommand")
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -5080,7 +5199,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     TemperatureSetting: "Temperature Setting",
     Timer: "Timer",
     Toggles: "Toggles",
-    //TransportControl: "Transport Control",
+    TransportControl: "Transport Control",
     Volume: "Volume",
 ]
 
@@ -5102,7 +5221,7 @@ private static final GOOGLE_THERMOSTAT_MODES = [
 private static final GOOGLE_SENSOR_STATES = [
     "AirQuality" :
     [
-        "AirQuality" :                           "Air Quality",
+        "label" :                                "Air Quality",
         "descriptiveAttribute" :                 "airQualityDescriptive",
         "descriptiveState" :  [
             "healthy":                           "Healthy",
@@ -5123,7 +5242,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "CarbonMonoxideLevel" :
     [
-        "CarbonMonoxideLevel" :                  "Carbon Monoxide Level",
+        "label" :                                "Carbon Monoxide Level",
         "descriptiveAttribute" :                 "carbonMonoxideDescriptive",
         "descriptiveState" :  [
             "carbon monoxide detected":          "Carbon Monoxide Detected",
@@ -5136,7 +5255,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "SmokeLevel" :
     [
-        "SmokeLevel" :                           "Smoke Level",
+        "label" :                                "Smoke Level",
         "descriptiveAttribute" :                 "smokeLevelDescriptive",
         "descriptiveState" :  [
             "smoke detected":                    "Smoke Detected",
@@ -5149,7 +5268,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "FilterCleanliness" :
     [
-        "FilterCleanliness" :                    "Filter Cleanliness",
+        "label" :                                "Filter Cleanliness",
         "descriptiveAttribute" :                 "filterCleanlinesDescriptive",
         "descriptiveState" :  [
             "clean":                             "Clean",
@@ -5162,7 +5281,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "WaterLeak" :
     [
-        "WaterLeak" :                           "Water Leak",
+        "label" :                                "Water Leak",
         "descriptiveAttribute" :                 "waterLeakDescriptive",
         "descriptiveState" :  [
             "leak":                              "Leak",
@@ -5174,7 +5293,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "RainDetection" :
     [
-        "RainDetection" :                        "Rain Detection",
+        "label" :                                "Rain Detection",
         "descriptiveAttribute" :                 "rainDetectionDescriptive",
         "descriptiveState" :  [
             "rain detected":                     "Rain Detected",
@@ -5186,7 +5305,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "FilterLifeTime" :
     [
-        "FilterLifeTime" :                       "Filter Life Time",
+        "label" :                                "Filter Life Time",
         "descriptiveAttribute" :                 "filterLifeTimeDescriptive",
         "descriptiveState" :  [
             "new":                               "New",
@@ -5200,7 +5319,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PreFilterLifeTime" :
     [
-        "PreFilterLifeTime" :                    "Pre-Filter Life Time",
+        "label" :                                "Pre-Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "preFilterLifeTimeValue",
@@ -5208,7 +5327,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "HEPAFilterLifeTime" :
     [
-        "HEPAFilterLifeTime" :                   "HEPA Filter Life Time",
+        "label" :                                "HEPA Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "HEPAFilterLifeTimeValue",
@@ -5216,7 +5335,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "Max2FilterLifeTime" :
     [
-        "Max2FilterLifeTime" :                   "Max2 Filter Life Time",
+        "label" :                                "Max2 Filter Life Time",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "max2FilterLifeTimeValue",
@@ -5224,7 +5343,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "CarbonDioxideLevel" :
     [
-        "CarbonDioxideLevel" :                   "Carbon Dioxide Level",
+        "label" :                                "Carbon Dioxide Level",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "carbonDioxideLevel",
@@ -5232,7 +5351,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PM2.5" :
     [
-        "PM2.5" :                                "PM2.5",
+        "label" :                                "PM2.5",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "PM2_5Level",
@@ -5240,7 +5359,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "PM10" :
     [
-        "PM10" :                                 "PM10",
+        "label" :                                "PM10",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "PM10Level",
@@ -5248,7 +5367,7 @@ private static final GOOGLE_SENSOR_STATES = [
     ],
     "VolatileOrganicCompounds" :
     [
-        "VolatileOrganicCompounds" :             "Volatile Organic Compounds",
+        "label" :                                "Volatile Organic Compounds",
         "descriptiveAttribute" :                 "",
         "descriptiveState" :                     "",
         "numericAttribute":                      "volatileOrganicCompoundsLevel",
