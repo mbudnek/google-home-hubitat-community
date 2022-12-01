@@ -165,23 +165,28 @@ private reportStateForDevices(devices) {
         if (deviceState.size()) {
             req.payload.devices.states."${deviceId}" = deviceState
         } else {
-            LOGGER.debug("Not reporting state for device ${deviceInfo.device} to Home Graph (no state -- maybe a scene?)")
+            LOGGER.debug(
+                "Not reporting state for device ${deviceInfo.device} to Home Graph (no state -- maybe a scene?)"
+            )
         }
-
     }
 
-    def token = fetchOAuthToken()
-    params = [
-        uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
-        headers: [
-            Authorization: "Bearer REDACTED",
-        ],
-        body: req,
-    ]
-    LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
-    params.headers.authorization = "Bearer ${token}"
-    httpPostJson(params) { resp ->
-        LOGGER.debug("Finished posting device state requestId=${requestId}")
+    if (req.payload.devices.states.size()) {
+        def token = fetchOAuthToken()
+        params = [
+            uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
+            headers: [
+                Authorization: "Bearer REDACTED",
+            ],
+            body: req,
+        ]
+        LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
+        params.headers.authorization = "Bearer ${token}"
+        httpPostJson(params) { resp ->
+            LOGGER.debug("Finished posting device state requestId=${requestId}")
+        }
+    } else {
+        LOGGER.debug("No device state to report; not sending device state report to Home Graph")
     }
 }
 
