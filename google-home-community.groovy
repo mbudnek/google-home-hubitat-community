@@ -74,6 +74,7 @@
 //   * Sep 08 2022 - Fix SensorState labels
 //   * Oct 18 2022 - Added TransportControl Trait
 //   * Nov 30 2022 - Implement RequestSync and ReportState APIs
+//   * Jan 15 2023 - Added thermostatHumidityAmbient option for thermostat trait & fixes for Arm/Disarm trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -605,19 +606,16 @@ def deviceTraitDelete(deviceTrait) {
 @SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
 private deviceTraitPreferences_ArmDisarm(deviceTrait) {
     hubitatAlarmLevels = [
-        "disarmed":              "Disarm",
         "armed home":            "Home",
         "armed night":           "Night",
         "armed away":            "Away",
     ]
     hubitatAlarmCommands = [
-        "disarmed":              "disarm",
         "armed home":            "armHome",
         "armed night":           "armNight",
         "armed away":            "armAway",
     ]
     hubitatAlarmValues = [
-        "disarmed":              "disarmed",
         "armed home":            "armed home",
         "armed night":           "armed night",
         "armed away":            "armed away",
@@ -629,6 +627,20 @@ private deviceTraitPreferences_ArmDisarm(deviceTrait) {
             title: "Armed/Disarmed Attribute",
             type: "text",
             defaultValue: "securityKeypad",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.disarmedValue",
+            title: "Disarmed value",
+            type: "text",
+            defaultValue: "disarmed",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.disarmCommand",
+            title: "Disarm Command",
+            type: "text",
+            defaultValue: "disarm",
             required: true
         )
         input(
@@ -1689,6 +1701,22 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
             defaultValue: "temperature"
         )
         input(
+            name: "${deviceTrait.name}.supportsHumidityAmbient",
+            title: "Supports Humidity Ambient",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
+            )
+            if (settings."${deviceTrait.name}.supportsHumidityAmbient") {
+                input(
+                    name: "${deviceTrait.name}.currentHumidityAttribute",
+                    title: "Current Humidity Attribute",
+                    type: "text",
+                    required: true,
+                    defaultValue: "humidity",   
+                )
+            }
+        input(
             name: "${deviceTrait.name}.queryOnly",
             title: "Query Only Temperature Setting",
             type: "bool",
@@ -2401,7 +2429,7 @@ private executeCommand_ArmDisarm(deviceInfo, command) {
     } else {
         // if Google returns arm=false, that indicates disarm
         def codePosition = checkMfa(deviceInfo, "Disarm", command)
-        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition,
+        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.disarmCommand, codePosition,
                                      armDisarmTrait.returnUserIndexToDevice)
     }
 
@@ -3106,11 +3134,14 @@ private handleQueryRequest(request) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_ArmDisarm(deviceTrait, device) {
     def isArmed = device.currentValue(deviceTrait.armedAttribute) != deviceTrait.disarmedValue
-    return [
+    def currentArmLevel = device.currentValue(deviceTrait.armLevelAttribute)
+    def exitAllowance = device.currentValue(deviceTrait.exitAllowanceAttribute)
+    def deviceState = [
         isArmed: isArmed,
-        currentArmLevel: device.currentValue(deviceTrait.armLevelAttribute),
-        exitAllowance: device.currentValue(deviceTrait.exitAllowanceAttribute),
+        currentArmLevel: currentArmLevel,
+        exitAllowance: exitAllowance,
     ]
+    return deviceState
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3388,6 +3419,11 @@ private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
         currentTemperature = fahrenheitToCelsius(currentTemperature)
     }
     state.thermostatTemperatureAmbient = roundTo(currentTemperature, 1)
+
+    if (deviceTrait.supportsHumidityAmbient) {
+        def currentHumidity = device.currentValue(deviceTrait.currentHumidityAttribute)
+        state.thermostatHumidityAmbient = currentHumidity
+    }
 
     if (deviceTrait.queryOnly) {
         state.thermostatMode = "on"
@@ -3936,6 +3972,7 @@ private traitFromSettings_ArmDisarm(traitName) {
         exitAllowanceAttribute:         settings."${traitName}.exitAllowanceAttribute",
         disarmedValue:                  settings."${traitName}.disarmedValue",
         cancelCommand:                  settings."${traitName}.cancelCommand",
+        disarmCommand:                  settings."${traitName}.disarmCommand",
         armLevels:                      [:],
         armCommands:                    [:],
         armValues:                      [:],
@@ -4329,8 +4366,10 @@ private traitFromSettings_TemperatureSetting(traitName) {
     def tempSettingTrait = [
         temperatureUnit:             settings."${traitName}.temperatureUnit",
         currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute",
+        currentHumidityAttribute:    settings."${traitName}.currentHumidityAttribute",
         // queryOnly may be null for device traits defined with older versions,
         // so coerce it to a boolean
+        supportsHumidityAmbient:     settings."${traitName}.supportsHumidityAmbient" as boolean,
         queryOnly:                   settings."${traitName}.queryOnly" as boolean,
         commands:                    []
     ]
@@ -4524,9 +4563,11 @@ private deleteDeviceTrait(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_ArmDisarm(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.armedAttribute")
+    app.removeSetting("${deviceTrait.name}.disarmedValue")
     app.removeSetting("${deviceTrait.name}.armLevelAttribute")
     app.removeSetting("${deviceTrait.name}.exitAllowanceAttribute")
     app.removeSetting("${deviceTrait.name}.cancelCommand")
+    app.removeSetting("${deviceTrait.name}.disarmCommand")
     deviceTrait.armLevels.each { armLevel, googleNames ->
         app.removeSetting("${deviceTrait.name}.armLevels.${armLevel}.googleNames")
     }
@@ -4739,6 +4780,8 @@ private deleteDeviceTrait_TemperatureControl(deviceTrait) {
 private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.temperatureUnit")
     app.removeSetting("${deviceTrait.name}.currentTemperatureAttribute")
+    app.removeSetting("${deviceTrait.name}.currentHumidityAttribute")
+    app.removeSetting("${deviceTrait.name}.supportsHumidityAmbient")
     app.removeSetting("${deviceTrait.name}.queryOnly")
     app.removeSetting("${deviceTrait.name}.modes")
     app.removeSetting("${deviceTrait.name}.heatcoolBuffer")
