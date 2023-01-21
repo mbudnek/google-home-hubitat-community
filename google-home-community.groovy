@@ -5335,11 +5335,11 @@ private static final GOOGLE_SENSOR_STATES = [
     "WaterLeak" :
     [
         "label" :                                "Water Leak",
-        "descriptiveAttribute" :                 "waterLeakDescriptive"",
+        "descriptiveAttribute" :                 "waterLeakDescriptive",
         "descriptiveState" :  [
-            "leak":                             "Leak",
-            "no leak":                          "No Leak",
-            "unknown":                          "Unknown",
+            "leak":                              "Leak",
+            "no leak":                           "No Leak",
+            "unknown":                           "Unknown",
         ],
         "numericAttribute":                      "",
         "numericUnits" :                         "",
