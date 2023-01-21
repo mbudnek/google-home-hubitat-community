@@ -1010,15 +1010,12 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_FanSpeed(deviceTrait) {
     hubitatFanSpeeds = [
-        "on":          "On",
-        "off":         "Off",
         "low":         "Low",
         "medium-low":  "Medium-Low",
         "medium":      "Medium",
         "medium-high": "Medium-High",
         "high":        "High",
         "auto":        "Auto",
-        "sleep":       "Sleep",
     ]
     section("Fan Speed Settings") {
         input(
@@ -5293,7 +5290,7 @@ private static final GOOGLE_SENSOR_STATES = [
             "severe":                            "Severe",
             "unknown":                           "Unknown",
         ],
-        "numericAttribute":                      "airQualityIndex",
+        "numericAttribute":                      "airQualityValue",
         "numericUnits" :                         "AQI",
     ],
     "CarbonMonoxideLevel" :
@@ -5338,12 +5335,10 @@ private static final GOOGLE_SENSOR_STATES = [
     "WaterLeak" :
     [
         "label" :                                "Water Leak",
-        "descriptiveAttribute" :                 "water",
+        "descriptiveAttribute" :                 "waterLeakDescriptive"",
         "descriptiveState" :  [
-            "wet":                              "Wet",
-            "dry":                              "Dry",
-            "wet":                              "Leak",
-            "dry":                              "No Leak",
+            "leak":                             "Leak",
+            "no leak":                          "No Leak",
             "unknown":                          "Unknown",
         ],
         "numericAttribute":                      "",
