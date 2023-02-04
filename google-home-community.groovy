@@ -74,6 +74,7 @@
 //   * Sep 08 2022 - Fix SensorState labels
 //   * Oct 18 2022 - Added TransportControl Trait
 //   * Nov 30 2022 - Implement RequestSync and ReportState APIs
+//   * Feb 03 2023 - Uppercase values sent for MediaState attributes
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -182,8 +183,15 @@ private reportStateForDevices(devices) {
         ]
         LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
         params.headers.authorization = "Bearer ${token}"
-        httpPostJson(params) { resp ->
-            LOGGER.debug("Finished posting device state requestId=${requestId}")
+        try {
+            httpPostJson(params) { resp ->
+                LOGGER.debug("Finished posting device state requestId=${requestId}")
+            }
+        } catch (Exception ex) {
+            LOGGER.exception(
+                "Error posting device state:\nrequest=${req}\n",
+                ex
+            )
         }
     } else {
         LOGGER.debug("No device state to report; not sending device state report to Home Graph")
@@ -3260,8 +3268,8 @@ private deviceStateForTrait_LockUnlock(deviceTrait, device) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_MediaState(deviceTrait, device) {
     return [
-        activityState: device.currentValue(deviceTrait.activityStateAttribute),
-        playbackState: device.currentValue(deviceTrait.playbackStateAttribute)
+        activityState: device.currentValue(deviceTrait.activityStateAttribute)?.toUpperCase(),
+        playbackState: device.currentValue(deviceTrait.playbackStateAttribute)?.toUpperCase()
     ]
 }
 
