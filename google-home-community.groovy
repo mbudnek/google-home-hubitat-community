@@ -75,6 +75,7 @@
 //   * Oct 18 2022 - Added TransportControl Trait
 //   * Nov 30 2022 - Implement RequestSync and ReportState APIs
 //   * Feb 03 2023 - Uppercase values sent for MediaState attributes
+//   * Mar 06 2023 - Fix hub version comparison
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -242,6 +243,8 @@ private hubVersionLessThan(versionString) {
     for (def i = 0; i < targetVersion.length; ++i) {
         if ((hubVersion[i] as int) < (targetVersion[i] as int)) {
             return true
+        } else if ((hubVersion[i] as int) > (targetVersion[i] as int)) {
+            return false
         }
     }
     return false
