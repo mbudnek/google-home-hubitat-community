@@ -1507,15 +1507,15 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
                         name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.availableStates",
                         title: "Google Home Available States for ${sensorType.key}",
                         type: "enum",
-                        multiple: "true",
-                        required: "false",
+                        multiple: true,
+                        required: true,
                         options: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState,
                     )
                     input(
                         name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.descriptiveAttribute",
                         title: "Hubitat Descriptive State Attribute for ${sensorType.key}",
                         type: "text",
-                        required: "false",
+                        required: true,
                         defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveAttribute
                     )
                 }
@@ -1538,14 +1538,14 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
                         name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericAttribute",
                         title: "Hubitat Numeric Attribute for ${sensorType.key} with units ${GOOGLE_SENSOR_STATES[sensorType.key].numericUnits}",
                         type: "text",
-                       required: "false",
+                        required: true,
                         defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute
                     )
                     input(
                         name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericUnits",
                         title: "Google Numeric Units for ${sensorType.key}",
                         type: "text",
-                        required: "false",
+                        required: true,
                         defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericUnits
                     )
                 }
