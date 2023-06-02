@@ -76,6 +76,8 @@
 //   * Nov 30 2022 - Implement RequestSync and ReportState APIs
 //   * Feb 03 2023 - Uppercase values sent for MediaState attributes
 //   * Mar 06 2023 - Fix hub version comparison
+//   * May 20 2023 - Fix error in SensorState which prevented multiple trait types from being reported.
+//                   Allow for traits to support descriptive and/or numeric responses.
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1489,38 +1491,64 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
         deviceTrait.sensorTypes.each { sensorType ->
             // only display if the sensor has descriptive values
             if (GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState) {
-                input(
-                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.availableStates",
-                    title: "Google Home Available States for ${sensorType.key}",
-                    type: "enum",
-                    multiple: "true",
-                    required: "true",
-                    options: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState,
-                )
-                input(
-                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.descriptiveAttribute",
-                    title: "Hubitat Descriptive State Attribute for ${sensorType.key}",
-                    type: "text",
-                    required: "true",
-                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveAttribute
-                )
+                // if the sensor does not have a numeric state, do not allow the user to disable the descriptive state
+                if (GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute != "") {
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.reportsDescriptiveState",
+                        title: "${sensorType.key} reports descriptive state",
+                        type: "bool",
+                        defaultValue: true,
+                        required: true,
+                        submitOnChange: true
+                    )
+                }
+                if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.availableStates",
+                        title: "Google Home Available States for ${sensorType.key}",
+                        type: "enum",
+                        multiple: true,
+                        required: true,
+                        options: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState,
+                    )
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.descriptiveAttribute",
+                        title: "Hubitat Descriptive State Attribute for ${sensorType.key}",
+                        type: "text",
+                        required: true,
+                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveAttribute
+                    )
+                }
             }
             // only display if the sensor has numerical values
-            if (GOOGLE_SENSOR_STATES[sensorType.key].numericUnits) {
-                input(
-                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericAttribute",
-                    title: "Hubitat Numeric Attribute for ${sensorType.key} with units ${GOOGLE_SENSOR_STATES[sensorType.key].numericUnits}",
-                    type: "text",
-                    required: "true",
-                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute
-                )
-                input(
-                    name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericUnits",
-                    title: "Google Numeric Units for ${sensorType.key}",
-                    type: "text",
-                    required: "true",
-                    defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericUnits
-                )
+            if (GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute) {
+                // if the sensor does not have a descriptive state, do not allow the user to disable the numeric state
+                if (GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState != "") {
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.reportsNumericState",
+                        title: "${sensorType.key} reports numeric values",
+                        type: "bool",
+                        defaultValue: true,
+                        required: true,
+                        submitOnChange: true
+                    )
+                }
+                if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericAttribute",
+                        title: "Hubitat Numeric Attribute for ${sensorType.key} with units ${GOOGLE_SENSOR_STATES[sensorType.key].numericUnits}",
+                        type: "text",
+                        required: true,
+                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute
+                    )
+                    input(
+                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericUnits",
+                        title: "Google Numeric Units for ${sensorType.key}",
+                        type: "text",
+                        required: true,
+                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericUnits
+                    )
+                }
             }
         }
     }
@@ -3329,22 +3357,22 @@ private deviceStateForTrait_Scene(deviceTrait, device) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_SensorState(deviceTrait, device) {
-    def deviceState = [:]
+    def deviceState = []
 
     deviceTrait.sensorTypes.collect { sensorType ->
         def deviceStateMapping = [:]
         deviceStateMapping << [ name: sensorType.key ]
-        if (deviceTrait.sensorTypes[sensorType.key].descriptiveState) {
+        if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
             deviceStateMapping << [ currentSensorState: device.currentValue(deviceTrait.sensorTypes[sensorType.key].descriptiveAttribute) ]
         }
-        if (deviceTrait.sensorTypes[sensorType.key].numericUnits) {
+        if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
             deviceStateMapping << [ rawValue: device.currentValue(deviceTrait.sensorTypes[sensorType.key].numericAttribute) ]
         }
         deviceState << deviceStateMapping
     }
 
     return [
-        currentSensorStateData: [ deviceState ]
+        currentSensorStateData: deviceState
     ]
 }
 
@@ -3795,14 +3823,14 @@ private attributesForTrait_SensorState(deviceTrait, device) {
     deviceTrait.sensorTypes.collect { sensorType ->
         def supportedStateAttrs = [:]
         supportedStateAttrs << [ name: sensorType.key ]
-        if (deviceTrait.sensorTypes[sensorType.key].descriptiveState) {
+        if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
             supportedStateAttrs << [
                 descriptiveCapabilities: [
                     availableStates: deviceTrait.sensorTypes[sensorType.key].descriptiveState,
                 ]
             ]
         }
-        if (deviceTrait.sensorTypes[sensorType.key].numericUnits) {
+        if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
             supportedStateAttrs << [
                 numericCapabilities: [
                     rawValueUnit: deviceTrait.sensorTypes[sensorType.key].numericUnits,
@@ -4228,16 +4256,50 @@ private traitFromSettings_SensorState(traitName) {
     ]
 
     settings."${traitName}.sensorTypes"?.each { sensorType ->
+        // default to true
         def sensorMapping = [
-            descriptiveState:               [:],
-            descriptiveAttribute:           [:],
-            numericAttribute:               [:],
-            numericUnits:                   [:],
+             reportsDescriptiveState:            true,
+             reportsNumericState:                true,
         ]
-        sensorMapping.descriptiveState = settings."${traitName}.sensorTypes.${sensorType}.availableStates"
-        sensorMapping.descriptiveAttribute = settings."${traitName}.sensorTypes.${sensorType}.descriptiveAttribute"
-        sensorMapping.numericAttribute = settings."${traitName}.sensorTypes.${sensorType}.numericAttribute"
-        sensorMapping.numericUnits = settings."${traitName}.sensorTypes.${sensorType}.numericUnits"
+
+        // build the descriptive traits
+        if (GOOGLE_SENSOR_STATES[sensorType].descriptiveState) {
+             if (GOOGLE_SENSOR_STATES[sensorType].numericAttribute != "") {
+                  sensorMapping.reportsDescriptiveState = settings."${traitName}.sensorTypes.${sensorType}.reportsDescriptiveState"
+             }
+             // assign a default if undefined
+             if (sensorMapping.reportsDescriptiveState == null) {
+                 sensorMapping.reportsDescriptiveState = true
+             }
+             if (sensorMapping.reportsDescriptiveState) {
+                  sensorMapping << [
+                       descriptiveState:         settings."${traitName}.sensorTypes.${sensorType}.availableStates",
+                       descriptiveAttribute:     settings."${traitName}.sensorTypes.${sensorType}.descriptiveAttribute",
+                  ]
+             }
+        } else {
+            // not supported
+            sensorMapping.reportsDescriptiveState = false
+        }
+        // build the numeric traits
+        if (GOOGLE_SENSOR_STATES[sensorType].numericAttribute) {
+             if (GOOGLE_SENSOR_STATES[sensorType].descriptiveState != "") {
+                  sensorMapping.reportsNumericState = settings."${traitName}.sensorTypes.${sensorType}.reportsNumericState"
+             }
+             // assign a default if undefined
+             if (sensorMapping.reportsNumericState == null) {
+                 sensorMapping.reportsNumericState = true
+             }
+             if (sensorMapping.reportsNumericState) {
+                  sensorMapping << [
+                       numericAttribute:         settings."${traitName}.sensorTypes.${sensorType}.numericAttribute",
+                       numericUnits:             settings."${traitName}.sensorTypes.${sensorType}.numericUnits",
+                  ]
+             }
+        } else {
+            // not supported
+            sensorMapping.reportsNumericState = false
+        }
         sensorStateMapping.sensorTypes[sensorType] = sensorMapping
     }
 
@@ -4700,17 +4762,13 @@ private deleteDeviceTrait_Scene(deviceTrait) {
 
 @SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_SensorState(deviceTrait) {
-    GOOGLE_SENSOR_STATES.each { sensorType, availableStates ->
+    GOOGLE_SENSOR_STATES.each { sensorType, sensorSettings ->
         app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.availableStates")
-    }
-    GOOGLE_SENSOR_STATES.each { sensorType, descriptiveAttribute ->
         app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.descriptiveAttribute")
-    }
-    GOOGLE_SENSOR_STATES.each { sensorType, numericAttribute ->
         app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericAttribute")
-    }
-    GOOGLE_SENSOR_STATES.each { sensorType, numericUnits ->
         app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericUnits")
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.reportsDescriptiveState")
+        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.reportsNumericState")
     }
     app.removeSetting("${deviceTrait.name}.sensorTypes")
 }
