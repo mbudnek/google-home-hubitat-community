@@ -1295,7 +1295,7 @@ private deviceTraitPreferences_OccupancySensing(deviceTrait) {
             title: "Unoccupied to Occupied Event Threshold",
             type: "number",
             submitOnChange: true,
-            required: deviceTrait.occupiedToUnoccupiedDelaySec != null,
+            required: deviceTrait.unoccupiedToOccupiedDelaySec != null,
         )
     }
 }
