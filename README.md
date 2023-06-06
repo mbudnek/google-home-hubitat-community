@@ -263,6 +263,17 @@ The Media State trait is used for reporting the current playback and activity st
 - Support Playback State: Should be set if this device can report the current playback state.  Defaults to 'false'.  If 'true', the following state is available:
     - Playback State Attribute: The device attribute used to query the current playback state of the device.  Maps to the `status` attribute by default.
 
+### Occupancy Sensing
+
+The Occupancy Sensing trait is used for devices that can report whether a space is occupied or not such as motion sensors.  It can be queried by saying things like "Hey Google, is {room} occupied?".  It has the following configuration parameters:
+
+- Sensor Type: The type of sensor.  Most motion sensors are Passive Infrared.  This doesn't seem to affect functionality at all, so don't worry too much about getting it wrong.
+- Occupancy Attribute: The device attribute used to query whether the device currently detects occupancy or not.  Maps to the `motion` attribute by default.
+- Occupied Value: The value that the Occupancy Attribute will report when the device detects occupancy.  Defaults to "active".
+- Occupied to Unoccupied Delay (seconds): The number of seconds for which the device must report no occupancy before Google Home will consider the space to be unoccupied.
+- Unoccupied to Occupied Delay (seconds): The number of seconds for which the device must report occupancy before Google Home will consider the space to be occupied.  Required if "Occupied to Unoccupied Delay" is set.
+- Unoccupied to Occupied Event Threshold: The number of times the device must report the space occupied within the "Unoccupied to Occupied Delay" for Google Home to consider the space to be occupied.  Required if "Unoccupied to Occupied Delay" is set.
+
 ### On/Off
 
 The On/Off trait is used for devices that have discreet on and off states such as switches or lights.  It can be controlled by saying things like "Hey Google, turn on {device}" and queried by saying things like "Hey Google, is {device} on?".  It has the following configuration parameters:
