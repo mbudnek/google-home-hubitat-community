@@ -78,6 +78,7 @@
 //   * Mar 06 2023 - Fix hub version comparison
 //   * May 20 2023 - Fix error in SensorState which prevented multiple trait types from being reported.
 //                   Allow for traits to support descriptive and/or numeric responses.
+//   * Jun 06 2023 - Add support for the OccupancySensing trait
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1244,6 +1245,58 @@ private deviceTraitPreferences_MediaState(deviceTrait) {
                 required: true
             )
         }
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_OccupancySensing(deviceTrait) {
+    def SENSOR_TYPES = [
+        PIR:              "Passive Infrared (PIR)",
+        ULTRASONIC:       "Ultrasonic",
+        PHYSICAL_CONTACT: "Physical Contact"
+    ]
+    section("Occupancy Sensing Settings") {
+        input(
+            name: "${deviceTrait.name}.occupancySensorType",
+            title: "Sensor Type",
+            type: "enum",
+            options: SENSOR_TYPES,
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.occupancyAttribute",
+            title: "Occupancy Attribute",
+            type: "text",
+            defaultValue: "motion",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.occupiedValue",
+            title: "Occupied Value",
+            type: "text",
+            defaultValue: "active",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.occupiedToUnoccupiedDelaySec",
+            title: "Occupied to Unoccupied Delay (seconds)",
+            type: "number",
+            submitOnChange: true
+        )
+        input(
+            name: "${deviceTrait.name}.unoccupiedToOccupiedDelaySec",
+            title: "Unoccupied to Occupied Delay (seconds)",
+            type: "number",
+            submitOnChange: true,
+            required: deviceTrait.occupiedToUnoccupiedDelaySec != null
+        )
+        input(
+            name: "${deviceTrait.name}.unoccupiedToOccupiedEventThreshold",
+            title: "Unoccupied to Occupied Event Threshold",
+            type: "number",
+            submitOnChange: true,
+            required: deviceTrait.occupiedToUnoccupiedDelaySec != null,
+        )
     }
 }
 
@@ -3131,7 +3184,8 @@ private handleQueryRequest(request) {
                 }
                 deviceState.status = "SUCCESS"
             } catch (Exception ex) {
-                LOGGER.exception("Error retreiving state for device ${deviceInfo.device.name}", ex)
+                def deviceName = deviceInfo.device.label ?: deviceInfo.device.name
+                LOGGER.exception("Error retreiving state for device ${deviceName}", ex)
                 deviceState.status = "ERROR"
             }
         } else {
@@ -3301,6 +3355,17 @@ private deviceStateForTrait_MediaState(deviceTrait, device) {
     return [
         activityState: device.currentValue(deviceTrait.activityStateAttribute)?.toUpperCase(),
         playbackState: device.currentValue(deviceTrait.playbackStateAttribute)?.toUpperCase()
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_OccupancySensing(deviceTrait, device) {
+    def occupancy = "UNOCCUPIED"
+    if (device.currentValue(deviceTrait.occupancyAttribute) == deviceTrait.occupiedValue) {
+        occupancy = "OCCUPIED"
+    }
+    return [
+        occupancy: occupancy
     ]
 }
 
@@ -3783,6 +3848,20 @@ private attributesForTrait_MediaState(deviceTrait, device) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_OccupancySensing(deviceTrait, device) {
+    return [
+        occupancySensorConfiguration: [
+            [
+                occupancySensorType: deviceTrait.occupancySensorType,
+                occupiedToUnoccupiedDelaySec: deviceTrait.occupiedToUnoccupiedDelaySec,
+                unoccupiedToOccupiedDelaySec: deviceTrait.unoccupiedToOccupiedDelaySec,
+                unoccupiedToOccupiedEventTheshold: deviceTrait.unoccupiedToOccupiedEventThreshold
+            ]
+        ]
+    ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_OnOff(deviceTrait, device) {
     return [:]
 }
@@ -4161,6 +4240,19 @@ private traitFromSettings_MediaState(traitName) {
         activityStateAttribute:   settings."${traitName}.activityStateAttribute",
         playbackStateAttribute:   settings."${traitName}.playbackStateAttribute",
         commands:                 []
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_OccupancySensing(traitName) {
+    return [
+        occupancySensorType:                settings."${traitName}.occupancySensorType",
+        occupancyAttribute:                 settings."${traitName}.occupancyAttribute",
+        occupiedValue:                      settings."${traitName}.occupiedValue",
+        occupiedToUnoccupiedDelaySec:       settings."${traitName}.occupiedToUnoccupiedDelaySec",
+        unoccupiedToOccupiedDelaySec:       settings."${traitName}.unoccupiedToOccupiedDelaySec",
+        unoccupiedToOccupiedEventThreshold: settings."${traitName}.unoccupiedToOccupiedEventThreshold",
+        commands:                           []
     ]
 }
 
@@ -4716,6 +4808,16 @@ private deleteDeviceTrait_MediaState(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_OccupancySensing(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.occupancySensorType")
+    app.removeSetting("${deviceTrait.name}.occupancyAttribute")
+    app.removeSetting("${deviceTrait.name}.occupiedValue")
+    app.removeSetting("${deviceTrait.name}.occupiedToUnoccupiedDelaySec")
+    app.removeSetting("${deviceTrait.name}.unoccupiedToOccupiedDelaySec")
+    app.removeSetting("${deviceTrait.name}.unoccupiedToOccupiedEventThreshold")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_OnOff(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.onOffAttribute")
     app.removeSetting("${deviceTrait.name}.onValue")
@@ -5264,6 +5366,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     //Modes: "Modes",
     //NetworkControl: "Network Control",
     //ObjectDetection: "Object Detection",
+    OccupancySensing: "Occupancy Sensing",
     OnOff: "On/Off",
     OpenClose: "Open/Close",
     Reboot: "Reboot",
