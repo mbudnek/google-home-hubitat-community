@@ -79,6 +79,7 @@
 //   * May 20 2023 - Fix error in SensorState which prevented multiple trait types from being reported.
 //                   Allow for traits to support descriptive and/or numeric responses.
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
+//   * Jan 25 2024 - Fix the Volume trait when the device can't have its volume set directly
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -593,7 +594,7 @@ def deviceTraitPreferences(deviceTrait) {
         title: "Preferences For ${GOOGLE_DEVICE_TRAITS[deviceTrait.type]} Trait",
         nextPage: "deviceTypePreferences"
     ) {
-        "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
+        this."deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
 
         section {
             href(
@@ -2028,30 +2029,59 @@ private deviceTraitPreferences_Timer(deviceTrait) {
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Toggles(deviceTrait) {
-    section("Toggles") {
-        deviceTrait.toggles.each { toggle ->
+private multiEntryTraitPreferences(itemName, displayName, deviceTrait) {
+    section(display) {
+        deviceTrait[name].each { item ->
             href(
-                title: "${toggle.labels.join(",")}",
+                title: "${item.labels.join(",")}",
                 description: "Click to edit",
                 style: "page",
-                page: "togglePreferences",
-                params: toggle
+                page: "${name}Preferences",
+                params: item
             )
         }
         href(
-            title: "New Toggle",
+            title: "New ${display}",
             description: "",
             style: "page",
-            page: "togglePreferences",
+            page: "${name}Preferences",
             params: [
                 traitName: deviceTrait.name,
-                name: "${deviceTrait.name}.toggles.${UUID.randomUUID().toString()}"
+                name: "${deviceTrait.name}.${name}.${UUID.randomUUID().toString()}"
             ]
         )
     }
 }
+
+
+@SuppressWarnings("UnusedPrivateMethod")
+private deviceTraitPreferences_Toggles = (this.&multiEntryTraitPreferences).curry("toggles", "Toggles")
+
+
+//@SuppressWarnings('UnusedPrivateMethod')
+//private deviceTraitPreferences_Toggles(deviceTrait) {
+//    section("Toggles") {
+//        deviceTrait.toggles.each { toggle ->
+//            href(
+//                title: "${toggle.labels.join(",")}",
+//                description: "Click to edit",
+//                style: "page",
+//                page: "togglePreferences",
+//                params: toggle
+//            )
+//        }
+//        href(
+//            title: "New Toggle",
+//            description: "",
+//            style: "page",
+//            page: "togglePreferences",
+//            params: [
+//                traitName: deviceTrait.name,
+//                name: "${deviceTrait.name}.toggles.${UUID.randomUUID().toString()}"
+//            ]
+//        )
+//    }
+//}
 
 def togglePreferences(toggle) {
     def toggles = settings."${toggle.traitName}.toggles" ?: []
@@ -2154,7 +2184,7 @@ private deviceTraitPreferences_Volume(deviceTrait) {
         if (deviceTrait.canSetVolume) {
             input(
                 name: "${deviceTrait.name}.setVolumeCommand",
-                title: "Set Rotation Command",
+                title: "Set Volume Command",
                 type: "text",
                 required: true,
                 defaultValue: "setVolume"
@@ -2162,14 +2192,14 @@ private deviceTraitPreferences_Volume(deviceTrait) {
         } else {
             input(
                 name: "${deviceTrait.name}.volumeUpCommand",
-                title: "Set Increase Volume Command",
+                title: "Increase Volume Command",
                 type: "text",
                 required: true,
                 defaultValue: "volumeUp"
             )
             input(
                 name: "${deviceTrait.name}.volumeDownCommand",
-                title: "Set Decrease Volume Command",
+                title: "Decrease Volume Command",
                 type: "text",
                 required: true,
                 defaultValue: "volumeDown"
@@ -2890,18 +2920,77 @@ private executeCommand_SetToggles(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private adjustVolumeRelative(options) {
+    def allDevices = allKnownDevices()
+    def device = allDevices[options.deviceId].device
+
+    def volumeChangeCommand = options.volumeUpCommand
+    def volumeCompare =  { a, b -> a < b }
+    if (options.direction == "down") {
+        volumeChangeCommand = options.volumeDownCommand
+        volumeCompare =  { a, b -> a > b }
+    }
+
+    def currentVolume = { device.currentValue(options.volumeAttribute, true) }
+    // loopCount is a safety measure to prevent this from getting stuck in an infinite loop if something goes wrong
+    // adjusting the device volume
+    if (volumeCompare(currentVolume(), options.volumeLevel) && options.loopCount <= 200) {
+        LOGGER.info("Adjusting volume; current: ${currentVolume()}; desired: ${options.volumeLevel}")
+        device."${volumeChangeCommand}"()
+        ++options.loopCount
+        runInMillis(
+            100,
+            "adjustVolumeRelative",
+            [
+                overwrite: true,
+                data: options
+            ]
+        )
+    }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_setVolume(deviceInfo, command) {
     checkMfa(deviceInfo, "Set Volume", command)
+    def device = deviceInfo.device
     def volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeLevel = command.params.volumeLevel
-    deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
+    def newVolume = volumeLevel
+    if (volumeTrait.canSetVolume) {
+        device."${volumeTrait.setVolumeCommand}"(volumeLevel)
+    } else {
+        def direction = "up"
+        if (volumeLevel < device.currentValue(volumeTrait.volumeAttribute, true)) {
+            direction = "down"
+        }
+        // Use a scheduled job so that multiple instances of this command going in different directions
+        // don't end up fighting with each other
+        runInMillis(
+            0,
+            "adjustVolumeRelative",
+            [
+                overwrite: true,
+                data: [
+                    deviceId: device.id,
+                    volumeUpCommand: volumeTrait.volumeUpCommand,
+                    volumeDownCommand: volumeTrait.volumeDownCommand,
+                    volumeAttribute: volumeTrait.volumeAttribute,
+                    volumeLevel: volumeLevel,
+                    direction: direction,
+                    loopCount: 0,
+                ]
+            ]
+        )
+
+        newVolume = { true }
+    }
     states = [currentVolume: volumeLevel]
-    if (deviceInfo.deviceType.traits.canMuteUnmute) {
+    if (volumeTrait.canMuteUnmute) {
         states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
     }
     return [
         [
-            (volumeTrait.volumeAttribute): volumeLevel,
+            (volumeTrait.volumeAttribute): newVolume,
         ],
         states,
     ]
