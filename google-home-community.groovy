@@ -29,8 +29,8 @@
 //   * Mar 20 2020 - Add support for the Temperature Control trait
 //   * Mar 21 2020 - Change Temperature Setting trait to use different setpoint commands and attributes per mode
 //   * Mar 21 2020 - Sort device types by name on the main settings page
-//   * Mar 21 2020 - Don't configure setpoint attribute and command for the "off" thermostat mode
-//   * Mar 21 2020 - Fix some Temperture Setting and Temperature Control settings that were using the wrong input type
+//   * Mar 21 2020 - Don't configure setpoint attribute and command for the sOFF thermostat mode
+//   * Mar 21 2020 - Fix some Temperature Setting and Temperature Control settings that were using the wrong input type
 //   * Mar 21 2020 - Fix the Temperature Setting heat/cool buffer and Temperature Control temperature step conversions
 //                   from Fahrenheit to Celsius
 //   * Mar 29 2020 - Add support for the Humidity Setting trait
@@ -63,7 +63,7 @@
 //   * May 07 2022 - Add error handling so one bad device doesn't prevent reporting state of other devices
 //   * Jun 15 2022 - Fix a crash on trait configuration introduced by Hubitat 2.3.2.127
 //   * Jun 20 2022 - Fixed CameraStream trait to match the latest Google API.  Moved protocol support to the
-//                   driver level to accomodate different camera stream sources
+//                   driver level to accommodate different camera stream sources
 //                 - Added Arm/Disarm Trait
 //                 - Added ability for the app to use device level pin codes retrieved from the device driver
 //                 - Pincode challenge in the order device_driver -> device_GHC -> global_GHC -> null
@@ -79,10 +79,30 @@
 //   * May 20 2023 - Fix error in SensorState which prevented multiple trait types from being reported.
 //                   Allow for traits to support descriptive and/or numeric responses.
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
+//   * Apr 11 2024 - Many fixes, optimizations including asynchttp requests; reduce memory and cpu usage
+
+
+//file:noinspection GroovySillyAssignment
+//file:noinspection GrDeprecatedAPIUsage
+//file:noinspection GroovyDoubleNegation
+//file:noinspection GroovyUnusedAssignment
+//file:noinspection unused
+//file:noinspection SpellCheckingInspection
+//file:noinspection GroovyFallthrough
+//file:noinspection GrMethodMayBeStatic
+//file:noinspection GroovyAssignabilityCheck
+//file:noinspection UnnecessaryQualifiedReference
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
+import groovy.transform.CompileStatic
 import groovy.transform.Field
+
+//import java.security.*
+import java.security.KeyFactory
+import java.security.PrivateKey
+//import java.security.spec.KeySpec
+import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Duration
 import java.time.Instant
 
@@ -90,30 +110,32 @@ import com.nimbusds.jose.JOSEObjectType
 import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.RSASSASigner
-import com.nimbusds.jose.jwk.JWK
+//import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 
 definition(
-    name: "Google Home Community",
+    (sNM): "Google Home Community",
     namespace: "mbudnek",
     author: "Miles Budnek",
     description: "Community-maintained Google Home integration",
     category: "Integrations",
-    iconUrl: "",
-    iconX2Url: "",
-    iconX3Url: "",
+    iconUrl: sBLK,
+    iconX2Url: sBLK,
+    iconX3Url: sBLK,
     importUrl: "https://raw.githubusercontent.com/mbudnek/google-home-hubitat-community/master/google-home-community.groovy"  // IgnoreLineLength
 )
 
 preferences {
-    page(name: "mainPreferences")
-    page(name: "deviceTypePreferences")
-    page(name: "deviceTypeDelete")
-    page(name: "deviceTraitPreferences")
-    page(name: "deviceTraitDelete")
-    page(name: "togglePreferences")
-    page(name: "toggleDelete")
+    page((sNM): "mainPreferences")
+    page((sNM): "deviceTypePreferences")
+    page((sNM): "deviceTypeDelete")
+    page((sNM): "appInstructions")
+    page((sNM): "deviceTraitPreferences")
+    page((sNM): "deviceTraitDelete")
+    page((sNM): "togglePreferences")
+    page((sNM): "toggleDelete")
+    page((sNM): "pageDump")
 }
 
 mappings {
@@ -125,34 +147,36 @@ mappings {
 }
 
 def installed() {
-    LOGGER.debug("App installed, agentUserId=${agentUserId}")
-    updateDeviceEventSubscription()
+    //updateDeviceEventSubscription()
 }
 
 def updated() {
     LOGGER.debug("Preferences updated")
+    state.remove('oauthExpiryTimeMillis')
+    LOGGER.debug("App agentUserId=${agentUserId}")
     unsubscribe("handleDeviceEvent")
-    if (settings.googleServiceAccountJSON) {
+    if (gtSetStr('googleServiceAccountJSON')) {
         requestSync()
-        if (settings.reportState) {
-            allKnownDevices().each { entry ->
+        if (gtSetB('reportState')) {
+            Map<String,Map<String,Object>> akd = allKnownDevices()
+            akd.each { entry ->
                 subscribe(entry.value.device, "handleDeviceEvent", [filterEvents: true])
             }
-            reportStateForDevices(allKnownDevices())
+            reportStateForDevices(akd)
         }
     }
 }
 
 def handleDeviceEvent(event) {
-    LOGGER.debug("Handling device event, deviceId=${event.deviceId} device=${event.device}")
-    def deviceId = event.deviceId
-    def deviceInfo = allKnownDevices()."${deviceId}"
+    String deviceId = event.deviceId.toString()
+    LOGGER.debug("Handling device event, deviceId=${deviceId} device=${event.device}")
+    Map<String,Object> deviceInfo = allKnownDevices()[deviceId]
     reportStateForDevices([(deviceId): deviceInfo])
 }
 
-private reportStateForDevices(devices) {
-    def requestId = UUID.randomUUID().toString()
-    def req = [
+private void reportStateForDevices(Map<String,Map<String,Object>>devices) {
+    String requestId = UUID.randomUUID().toString()
+    Map req = [
         requestId: requestId,
         agentUserId: agentUserId,
         payload: [
@@ -162,13 +186,13 @@ private reportStateForDevices(devices) {
         ],
     ]
 
-    devices.each { deviceId, deviceInfo ->
-        def deviceState = [:]
-        deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
+    devices.each { String deviceId, Map<String,Object> deviceInfo ->
+        Map deviceState; deviceState = [:]
+        ((Map<String,Map>)deviceInfo.deviceType).traits.each { String traitType, Map deviceTrait ->
             deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
         }
         if (deviceState.size()) {
-            req.payload.devices.states."${deviceId}" = deviceState
+            req.payload.devices.states[deviceId] = deviceState
         } else {
             LOGGER.debug(
                 "Not reporting state for device ${deviceInfo.device} to Home Graph (no state -- maybe a scene?)"
@@ -177,20 +201,21 @@ private reportStateForDevices(devices) {
     }
 
     if (req.payload.devices.states.size()) {
-        def token = fetchOAuthToken()
-        params = [
+        String token = fetchOAuthToken()
+        Map param = [
             uri: "https://homegraph.googleapis.com/v1/devices:reportStateAndNotification",
             headers: [
                 Authorization: "Bearer REDACTED",
             ],
+            contentType: 'application/json',
+            requestContentType: 'application/json',
             body: req,
         ]
-        LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
-        params.headers.authorization = "Bearer ${token}"
+        LOGGER.debug("Posting device state requestId=${requestId}: ${param}")
+        param.headers.authorization = "Bearer ${token}"
         try {
-            httpPostJson(params) { resp ->
-                LOGGER.debug("Finished posting device state requestId=${requestId}")
-            }
+            asynchttpPost(handleDevResp, param, [id:requestId])
+            LOGGER.debug("Posted device state requestId=${requestId} ")
         } catch (Exception ex) {
             LOGGER.exception(
                 "Error posting device state:\nrequest=${req}\n",
@@ -202,19 +227,33 @@ private reportStateForDevices(devices) {
     }
 }
 
-def requestSync() {
-    LOGGER.info("Requesting Google sync devices")
-    params = [
+@SuppressWarnings('unused')
+def handleDevResp(resp,data){
+    if(!resp.hasError())
+        LOGGER.debug("COMPLETED requestId=${data.id}")
+   else
+        LOGGER.warn("ERROR Completing requestId=${data.id}")
+}
+
+void requestSync() {
+    Map param = [
         uri: "https://homegraph.googleapis.com/v1/devices:requestSync",
         headers: [
             Authorization: "Bearer ${fetchOAuthToken()}",
         ],
-        body: [
-            agentUserId: agentUserId,
-        ]
+        contentType: 'application/json',
+        requestContentType: 'application/json',
+        body: [ agentUserId: agentUserId ]
     ]
-    httpPostJson(params) { resp ->
+    LOGGER.debug("Requesting Google sync devices")
+    try {
+        asynchttpPost(handleDevResp, param, [id:'SYNC'])
         LOGGER.debug("Finished requesting Google sync devices")
+    } catch (Exception ex) {
+        LOGGER.exception(
+                "Error requesting sync:\nrequest=${param}\n",
+                ex
+        )
     }
 }
 
@@ -227,11 +266,11 @@ def uninstalled() {
 def appButtonHandler(buttonPressed) {
     def match
     if ((match = (buttonPressed =~ /^addPin:(.+)$/))) {
-        def deviceTypeName = match.group(1)
-        def deviceType = deviceTypeFromSettings(deviceTypeName)
+        String deviceTypeName = match.group(1)
+        Map deviceType = deviceTypeFromSettings(deviceTypeName)
         addDeviceTypePin(deviceType)
     } else if ((match = (buttonPressed =~ /^deletePin:(.+)\.pin\.(.+)$/))) {
-        def pinId = match.group(2)
+        String pinId = match.group(2)
         // If we actually delete the PIN here then it will get added back when the
         // device type settings page re-submits after the button handler finishes.
         // Instead just set a flag that we want to delete this PIN, and the settings
@@ -240,13 +279,14 @@ def appButtonHandler(buttonPressed) {
     }
 }
 
-private hubVersionLessThan(versionString) {
-    def hubVersion = location.hub.firmwareVersionString.split("\\.")
-    def targetVersion = versionString.split("\\.")
-    for (def i = 0; i < targetVersion.length; ++i) {
-        if ((hubVersion[i] as int) < (targetVersion[i] as int)) {
+private Boolean hubVersionLessThan(String versionString) {
+    String[] hubVersion = ((String)location.hub.firmwareVersionString).split("\\.")
+    String[] targetVersion = versionString.split("\\.")
+    Integer i
+    for (i = iZ; i < targetVersion.length; ++i) {
+        if ((hubVersion[i] as Integer) < (targetVersion[i] as Integer)) {
             return true
-        } else if ((hubVersion[i] as int) > (targetVersion[i] as int)) {
+        } else if ((hubVersion[i] as Integer) > (targetVersion[i] as Integer)) {
             return false
         }
     }
@@ -257,194 +297,228 @@ private hubVersionLessThan(versionString) {
 def mainPreferences() {
     // Make sure that the deviceTypeFromSettings returns by giving it a display name
     app.updateSetting("GlobalPinCodes.display", "Global PIN Codes")
-    def globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
-    if (state.pinToDelete) {
-        deleteDeviceTypePin(globalPinCodes, state.pinToDelete)
-        state.remove("pinToDelete")
+    Map globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
+    String pinDel= gtStStr('pinToDelete')
+    if (pinDel) {
+        deleteDeviceTypePin(globalPinCodes, pinDel)
+        state.remove('pinToDelete')
     }
-    if (settings.deviceTypeToEdit != null) {
-        def toEdit = settings.deviceTypeToEdit
+    String toEdit = gtSetStr('deviceTypeToEdit')
+    if (toEdit != sNL) {
         app.removeSetting("deviceTypeToEdit")
         return deviceTypePreferences(deviceTypeFromSettings(toEdit))
     }
-    if (settings.deviceTypeToDelete != null) {
-        def toDelete = settings.deviceTypeToDelete
+    String toDelete = gtSetStr('deviceTypeToDelete')
+    if (toDelete != sNL) {
         app.removeSetting("deviceTypeToDelete")
         return deviceTypeDelete(deviceTypeFromSettings(toDelete))
     }
 
-    state.remove("currentlyEditingDeviceType")
-    return dynamicPage(name: "mainPreferences", title: "Device Selection", install: true, uninstall: true) {
+    state.remove('currentlyEditingDeviceType')
+    return dynamicPage((sNM): "mainPreferences", (sTIT): "Device Selection", install: true, uninstall: true) {
         section {
             input(
-                name: "modesToExpose",
-                title: "Modes to expose",
-                type: "mode",
-                multiple: true
+                (sNM): "modesToExpose",
+                (sTIT): "Modes to expose",
+                (sTYPE): "mode",
+                (sMULTIPLE): true
             )
         }
-        def allDeviceTypes = deviceTypes().sort { it.display }
+        List<Map> allDeviceTypes = deviceTypes().sort { it.display }
         section {
             allDeviceTypes.each { deviceType ->
                 input(
                     // Note: This name _must_ be converted to a String.
                     //       If it isn't, then all devices will be removed when linking to Google Home
-                    name: "${deviceType.name}.devices" as String,
-                    type: "capability.${deviceType.type}",
-                    title: "${deviceType.display} devices",
-                    multiple: true
+                    (sNM): "${deviceType.name}.devices" as String,
+                    (sTYPE): "capability.${deviceType.type}",
+                    (sTIT): "${deviceType.display} devices",
+                    (sMULTIPLE): true
                 )
             }
         }
         section {
             if (allDeviceTypes) {
-                def deviceTypeOptions = allDeviceTypes.collectEntries { deviceType ->
+                Map<String,String> deviceTypeOptions = allDeviceTypes.collectEntries { deviceType ->
                     [deviceType.name, deviceType.display]
                 }
                 input(
-                    name: "deviceTypeToEdit",
-                    title: "Edit Device Type",
+                    (sNM): 'deviceTypeToEdit',
+                    (sTIT): "Edit Device Type",
                     description: "Select a device type to edit...",
                     width: 6,
-                    type: "enum",
-                    options: deviceTypeOptions,
-                    submitOnChange: true
+                    (sTYPE): sENUM,
+                    (sOPTIONS): deviceTypeOptions,
+                    (sSUBONCHG): true
                 )
                 input(
-                    name: "deviceTypeToDelete",
-                    title: "Delete Device Type",
+                    (sNM): 'deviceTypeToDelete',
+                    (sTIT): "Delete Device Type",
                     description: "Select a device type to delete...",
                     width: 6,
-                    type: "enum",
-                    options: deviceTypeOptions,
-                    submitOnChange: true
+                    (sTYPE): sENUM,
+                    (sOPTIONS): deviceTypeOptions,
+                    (sSUBONCHG): true
                 )
             }
-            href(title: "Define new device type", description: "", style: "page", page: "deviceTypePreferences")
+            href((sTIT): "Define new device type", description: sBLK, style: "page", page: "deviceTypePreferences")
         }
         if (!hubVersionLessThan("2.3.4.115")) {
             section("Home Graph Integration") {
-                paragraph(
-                    '''\
+                if (!gtSetStr('googleServiceAccountJSON')) {
+                    paragraph(
+                            '''\
                     Follow these steps to enable Google Home Graph Integration:
                       1) Enable Google Home Graph API at https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview
                       2) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey
                       3) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON and save to disk
                       4) Paste contents of the file in Google Service Account Authorization below\
                     '''.stripIndent()
-                )
+                    )
+                }
                 input(
-                    name: "googleServiceAccountJSON",
-                    title: "Google Service Account Authorization",
-                    type: "password",
-                    submitOnChange: true
+                    (sNM): 'googleServiceAccountJSON',
+                    (sTIT): "Google Service Account Authorization",
+                    (sTYPE): "password",
+                    (sSUBONCHG): true
                 )
 
-                if (settings.googleServiceAccountJSON) {
+                if (gtSetStr('googleServiceAccountJSON')) {
                     input(
-                        name: "reportState",
-                        title: "Push device events to Google",
-                        type: "bool",
-                        defaultValue: true
+                        (sNM): 'reportState',
+                        (sTIT): "Push device events to Google",
+                        (sTYPE): sBOOL,
+                        (sDEFVAL): true
                     )
+                    href(
+                        (sTIT): "Google Action setup details",
+                        description: sBLK,
+                        style: "page",
+                        page: "appInstructions")
                 }
             }
         }
         section("Global PIN Codes") {
             globalPinCodes?.pinCodes?.each { pinCode ->
                 input(
-                    name: "GlobalPinCodes.pin.${pinCode.id}.name",
-                    title: "PIN Code Name",
-                    type: "text",
-                    required: true,
+                    (sNM): "GlobalPinCodes.pin.${pinCode.id}.name",
+                    (sTIT): "PIN Code Name",
+                    (sTYPE): sTEXT,
+                    (sREQ): true,
                     width: 6
                 )
                 input(
-                    name: "GlobalPinCodes.pin.${pinCode.id}.value",
-                    title: "PIN Code Value",
-                    type: "password",
-                    required: true,
+                    (sNM): "GlobalPinCodes.pin.${pinCode.id}.value",
+                    (sTIT): "PIN Code Value",
+                    (sTYPE): "password",
+                    (sREQ): true,
                     width: 5
                 )
                 input(
-                    name: "deletePin:GlobalPinCodes.pin.${pinCode.id}",
-                    title: "X",
-                    type: "button",
-                    width: 1
+                    (sNM): "deletePin:GlobalPinCodes.pin.${pinCode.id}",
+                    (sTIT): "X",
+                    (sTYPE): "button",
+                    width: i1
                 )
             }
             input(
-                name: "addPin:GlobalPinCodes",
-                title: "Add PIN Code",
-                type: "button"
+                (sNM): "addPin:GlobalPinCodes",
+                (sTIT): "Add PIN Code",
+                (sTYPE): "button"
             )
 
         }
         section {
             input(
-                name: "debugLogging",
-                title: "Enable Debug Logging",
-                type: "bool",
-                defaultValue: false
+                (sNM): 'debugLogging',
+                (sTIT): "Enable Debug Logging",
+                (sTYPE): sBOOL,
+                (sDEFVAL): false,
+                (sSUBONCHG): true
             )
+
+            if (gtSetB('debugLogging')) {
+                href((sTIT): "Dump device map", description: sBLK, style: "page", page: "pageDump")
+            }
         }
     }
 }
 
 @SuppressWarnings('MethodSize')
-def deviceTypePreferences(deviceType) {
-    state.remove("currentlyEditingDeviceTrait")
+def deviceTypePreferences(Map ideviceType=null) {
+    state.remove('currentlyEditingDeviceTrait')
+    Map<String,Object> deviceType; deviceType= ideviceType
     if (deviceType == null) {
-        deviceType = deviceTypeFromSettings(state.currentlyEditingDeviceType)
+        deviceType = deviceTypeFromSettings(gtStStr('currentlyEditingDeviceType'))
     }
 
-    if (settings.deviceTraitToAdd != null) {
-        def toAdd = settings.deviceTraitToAdd
-        app.removeSetting("deviceTraitToAdd")
-        def traitName = "${deviceType.name}.traits.${toAdd}"
-        addTraitToDeviceTypeState(deviceType.name, toAdd)
-        return deviceTraitPreferences([name: traitName])
+    if(deviceType!=null){
+        String toAdd = gtSetStr('deviceTraitToAdd')
+        if (toAdd != sNL) {
+            app.removeSetting('deviceTraitToAdd')
+            String traitName = "${deviceType.name}.traits.${toAdd}"
+            addTraitToDeviceTypeState((String)deviceType.name, toAdd)
+            return deviceTraitPreferences([(sNM): traitName])
+        }
+
+        String pinDel= gtStStr('pinToDelete')
+        if (pinDel) {
+            deleteDeviceTypePin(deviceType, pinDel)
+            state.remove('pinToDelete')
+        }
+    } else {
+        app.removeSetting('deviceTraitToAdd')
+        state.remove('pinToDelete')
+        (iZ..<state.nextDeviceTypeIndex).each { i ->
+            deviceType = deviceTypeFromSettings("deviceTypes.${i}",true)
+            //LOGGER.debug("deviceTypePreferences() $i checking $deviceType")
+            if (deviceType != null && !deviceType.traits) {
+                deleteDeviceType(deviceType)
+            }
+        }
+        deviceType=null
     }
 
-    if (state.pinToDelete) {
-        deleteDeviceTypePin(deviceType, state.pinToDelete)
-        state.remove("pinToDelete")
-    }
-
-    return dynamicPage(name: "deviceTypePreferences", title: "Device Type Definition", nextPage: "mainPreferences") {
-        def devicePropertyName = deviceType != null ? deviceType.name : "deviceTypes.${state.nextDeviceTypeIndex++}"
+    return dynamicPage((sNM): "deviceTypePreferences", (sTIT): "Device Type Definition", nextPage: "mainPreferences") {
+        String devicePropertyName = deviceType != null ? deviceType.name : "deviceTypes.${state.nextDeviceTypeIndex++}"
         state.currentlyEditingDeviceType = devicePropertyName
         section {
             input(
-                name: "${devicePropertyName}.display",
-                title: "Device type name",
-                type: "text",
-                required: true
+                (sNM): "${devicePropertyName}.display",
+                (sTIT): "Device type name",
+                (sTYPE): sTEXT,
+                (sREQ): (!!gtSetStr("${devicePropertyName}.type") || !!gtSetStr("${devicePropertyName}.googleDeviceType"))
             )
             input(
-                name: "${devicePropertyName}.type",
-                title: "Device type",
-                type: "enum",
-                options: HUBITAT_DEVICE_TYPES,
-                required: true
+                (sNM): "${devicePropertyName}.type",
+                (sTIT): "Device type",
+                (sTYPE): sENUM,
+                (sOPTIONS): HUBITAT_DEVICE_TYPES,
+                (sREQ): !!gtSetStr("${devicePropertyName}.display")
             )
             input(
-                name: "${devicePropertyName}.googleDeviceType",
-                title: "Google Home device type",
+                (sNM): "${devicePropertyName}.googleDeviceType",
+                (sTIT): "Google Home device type",
                 description: "The device type to report to Google Home",
-                type: "enum",
-                options: GOOGLE_DEVICE_TYPES,
-                required: true
+                (sTYPE): sENUM,
+                (sOPTIONS): GOOGLE_DEVICE_TYPES,
+                (sREQ): !!gtSetStr("${devicePropertyName}.type")
             )
         }
 
-        def currentDeviceTraits = deviceType?.traits ?: [:]
+        // todo
+        /* section(sDBG +' deviceType: '+myObj(deviceType)){
+            String str=getMapDescStr(deviceType,false)
+            paragraph str
+        } */
+
+        Map<String,Map> currentDeviceTraits = (Map<String,Map>)deviceType?.traits ?: [:]
         section("Device Traits") {
             if (deviceType != null) {
-                deviceType.traits.each { traitType, deviceTrait ->
+                ((Map<String,Map>)deviceType.traits).each { String traitType, Map deviceTrait ->
                     href(
-                        title: GOOGLE_DEVICE_TRAITS[traitType],
-                        description: "",
+                        (sTIT): GOOGLE_DEVICE_TRAITS[traitType],
+                        description: sBLK,
                         style: "page",
                         page: "deviceTraitPreferences",
                         params: deviceTrait
@@ -452,50 +526,50 @@ def deviceTypePreferences(deviceType) {
                 }
             }
 
-            def deviceTraitOptions = GOOGLE_DEVICE_TRAITS.findAll { key, value ->
+            Map<String,String> deviceTraitOptions = GOOGLE_DEVICE_TRAITS.findAll { key, value ->
                 !(key in currentDeviceTraits.keySet())
             }
             input(
-                name: "deviceTraitToAdd",
-                title: "Add Trait",
+                (sNM): 'deviceTraitToAdd',
+                (sTIT): "Add Trait",
                 description: "Select a trait to add to this device...",
-                type: "enum",
-                options: deviceTraitOptions,
-                submitOnChange: true
+                (sTYPE): sENUM,
+                (sOPTIONS): deviceTraitOptions,
+                (sSUBONCHG): true
             )
         }
 
-        def deviceTypeCommands = []
+        List<String> deviceTypeCommands; deviceTypeCommands = []
         currentDeviceTraits.each { traitType, deviceTrait ->
-            deviceTypeCommands += deviceTrait.commands
+            deviceTypeCommands += (List<String>)deviceTrait.commands
         }
         if (deviceTypeCommands) {
             section {
                 input(
-                    name: "${devicePropertyName}.confirmCommands",
-                    title: "The Google Assistant will ask for confirmation before performing these actions",
-                    type: "enum",
-                    options: deviceTypeCommands,
-                    multiple: true
+                    (sNM): "${devicePropertyName}.confirmCommands",
+                    (sTIT): "The Google Assistant will ask for confirmation before performing these actions",
+                    (sTYPE): sENUM,
+                    (sOPTIONS): deviceTypeCommands,
+                    (sMULTIPLE): true
                 )
                 input(
-                    name: "${devicePropertyName}.secureCommands",
-                    title: "The Google Assistant will ask for a PIN code before performing these actions",
-                    type: "enum",
-                    options: deviceTypeCommands,
-                    multiple: true,
-                    submitOnChange: true
+                    (sNM): "${devicePropertyName}.secureCommands",
+                    (sTIT): "The Google Assistant will ask for a PIN code before performing these actions",
+                    (sTYPE): sENUM,
+                    (sOPTIONS): deviceTypeCommands,
+                    (sMULTIPLE): true,
+                    (sSUBONCHG): true
                 )
             }
 
             if (deviceType?.secureCommands || deviceType?.pinCodes) {
                 section {
                     input(
-                        name: "${devicePropertyName}.useDevicePinCodes",
-                        title: "Select to use device driver pincodes.  Deselect to use Google Home Community app pincodes.",
-                        type: "bool",
-                        defaultValue: "false",
-                        submitOnChange: true
+                        (sNM): "${devicePropertyName}.useDevicePinCodes",
+                        (sTIT): "Select to use device driver pincodes.  Deselect to use Google Home Community app pincodes.",
+                        (sTYPE): sBOOL,
+                        (sDEFVAL): false,
+                        (sSUBONCHG): true
                     )
                 }
 
@@ -503,51 +577,51 @@ def deviceTypePreferences(deviceType) {
                     // device attribute is set to use device driver pincodes
                     section("PIN Codes (Device Driver)") {
                         input(
-                            name: "${devicePropertyName}.pinCodeAttribute",
-                            title: "Device pin code attribute",
-                            type: "text",
-                            defaultValue: "lockCodes",
-                            required: true
+                            (sNM): "${devicePropertyName}.pinCodeAttribute",
+                            (sTIT): "Device pin code attribute",
+                            (sTYPE): sTEXT,
+                            (sDEFVAL): "lockCodes",
+                            (sREQ): true
                         )
 
                         input(
-                            name: "${devicePropertyName}.pinCodeValue",
-                            title: "Device pin code value",
-                            type: "text",
-                            defaultValue: "code",
-                            required: true
+                            (sNM): "${devicePropertyName}.pinCodeValue",
+                            (sTIT): "Device pin code value",
+                            (sTYPE): sTEXT,
+                            (sDEFVAL): "code",
+                            (sREQ): true
                         )
                     }
                 } else {
                     // device attribute is set to use app pincodes
                     section("PIN Codes (Google Home Community)") {
-                        deviceType.pinCodes.each { pinCode ->
+                        ((List<Map>)deviceType.pinCodes).each { pinCode ->
                             input(
-                                name: "${devicePropertyName}.pin.${pinCode.id}.name",
-                                title: "PIN Code Name",
-                                type: "text",
-                                required: true,
+                                (sNM): "${devicePropertyName}.pin.${pinCode.id}.name",
+                                (sTIT): "PIN Code Name",
+                                (sTYPE): sTEXT,
+                                (sREQ): true,
                                 width: 6
                             )
                             input(
-                                name: "${devicePropertyName}.pin.${pinCode.id}.value",
-                                title: "PIN Code Value",
-                                type: "password",
-                                required: true,
+                                (sNM): "${devicePropertyName}.pin.${pinCode.id}.value",
+                                (sTIT): "PIN Code Value",
+                                (sTYPE): "password",
+                                (sREQ): true,
                                 width: 5
                             )
                             input(
-                                name: "deletePin:${devicePropertyName}.pin.${pinCode.id}",
-                                title: "X",
-                                type: "button",
-                                width: 1
+                                (sNM): "deletePin:${devicePropertyName}.pin.${pinCode.id}",
+                                (sTIT): "X",
+                                (sTYPE): "button",
+                                width: i1
                             )
                         }
                         if (deviceType?.secureCommands) {
                             input(
-                                name: "addPin:${devicePropertyName}",
-                                title: "Add PIN Code",
-                                type: "button"
+                                (sNM): "addPin:${devicePropertyName}",
+                                (sTIT): "Add PIN Code",
+                                (sTYPE): "button"
                             )
                         }
                     }
@@ -557,48 +631,118 @@ def deviceTypePreferences(deviceType) {
     }
 }
 
-def deviceTypeDelete(deviceType) {
-    return dynamicPage(name: "deviceTypeDelete", title: "Device Type Deleted", nextPage: "mainPreferences") {
-        LOGGER.debug("Deleting device type ${deviceType.display}")
-        app.removeSetting("${deviceType.name}.display")
-        app.removeSetting("${deviceType.name}.type")
-        app.removeSetting("${deviceType.name}.googleDeviceType")
-        app.removeSetting("${deviceType.name}.devices")
-        app.removeSetting("${deviceType.name}.confirmCommands")
-        app.removeSetting("${deviceType.name}.secureCommands")
-        app.removeSetting("${deviceType.name}.useDevicePinCodes")
-        app.removeSetting("${deviceType.name}.pinCodeAttribute")
-        app.removeSetting("${deviceType.name}.pinCodeValue")
-        def pinCodeIds = deviceType.pinCodes*.id
-        pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
-        app.removeSetting("${deviceType.name}.pinCodes")
-        deviceType.traits.each { traitType, deviceTrait -> deleteDeviceTrait(deviceTrait) }
-        state.deviceTraits.remove(deviceType.name as String)
+void deleteDeviceType(Map deviceType){
+    LOGGER.debug("Deleting device type ${deviceType.display} ${deviceType.name}")
+    List<String> s
+    s=['display','type','googleDeviceType', 'devices',
+        'confirmCommands','secureCommands','useDevicePinCodes', 'pinCodeAttribute',
+        'picCodeValue']
+    rmSettingList((String)deviceType.name,s)
+
+    List<String> pinCodeIds = deviceType.pinCodes*.id
+    pinCodeIds.each { pinCodeId -> deleteDeviceTypePin(deviceType, pinCodeId) }
+    app.removeSetting("${deviceType.name}.pinCodes")
+    ((Map<String,Map>)deviceType.traits).each { String traitType, Map deviceTrait -> deleteDeviceTrait(deviceTrait) }
+    state.deviceTraits.remove(deviceType.name as String)
+}
+
+def deviceTypeDelete(Map deviceType) {
+    return dynamicPage((sNM): "deviceTypeDelete", (sTIT): "Device Type Deleted", nextPage: "mainPreferences") {
+        deleteDeviceType(deviceType)
         section {
             paragraph("The ${deviceType.display} device type was deleted")
         }
     }
 }
 
-def deviceTraitPreferences(deviceTrait) {
-    if (deviceTrait == null) {
-        deviceTrait = deviceTypeTraitFromSettings(state.currentlyEditingDeviceTrait)
-    } else {
-        // re-load in case individual trait preferences functions have traits with submitOnChange: true
-        deviceTrait = deviceTypeTraitFromSettings(deviceTrait.name)
+@SuppressWarnings('unused')
+def appInstructions(){
+    return dynamicPage((sNM): "appInstructions", (sTIT): "Google Action Setup Instructions", install: true, uninstall: true) {
+        section("Instructions") {
+            paragraph(
+                    '''\
+                    Follow these steps to enable Google Home Graph Integration:
+                        More instructions at: https://community.hubitat.com/t/alpha-community-maintained-google-home-integration/34957
+                        
+                      1) Install Hubitat Community-maintained App (should be done)
+                          a) create a device to share with Google Home (to complete linking in step 3)
+                              aa) Navigate to HE console -> Apps -> Google Home Community
+                              bb) Select "Define new device type"
+                              cc) Fill in "Device Type Definition"
+
+                      2) Setup Google Home Graph API (should be done)
+                          a) Enable Google Home Graph API at https://console.developers.google.com/apis/api/homegraph.googleapis.com/overview
+                          b) Create a Service Account with Role='Service Account Token Creator' at https://console.cloud.google.com/apis/credentials/serviceaccountkey
+                          c) From Service Accounts, go to Keys -> Add Key -> Create new key -> JSON and save to disk
+                          d) Paste contents of the file in Google Service Account Authorization into this app
+
+                      3) Create the Google smart home Action (these instructions)
+                          a) Navigate to https://console.actions.google.com 
+                              aa) Click "New project"
+                              bb) Enter name for project; click "Create Project"
+                              cc) Select "Smart Home" and click "Start Building"
+                              dd) Click the "Develop" tab.
+                              ee) On the "Invocation" screen, give your Action a name
+                              ff) Click "Actions" in the menu
+                              gg) Enter the Fulfillment URL (listed below)
+                              hh) Click "Account linking" in the menu
+                              ii) Enter the Client ID and Client Secret from Hubitat (see below)
+                              jj) Enter Authorization URL (listed below)
+                              kk) Enter Token URL (listed below)
+                              ll) Click "Next"
+                              mm) Leave everything unchecked in the "Use your app for account linking (optional)" section and click "Next"
+                              nn) In the "Configure your client (optional)" section, enter "app" in the Scopes box
+                              oo) Click "Save"
+
+                              pp) Click the "Test" tab
+                              qq) In the top-right of the page, click "Settings" and ensure "On device testing" is enabled
+                              
+                          b) In the Goggle Home app on your phone or tablet:
+                              
+                              a1) Select Devices, then Tap + Add 
+                              b1) Tap "Set up device"
+                              c1) tap "Works with Google"
+                              d1) In the list, select the entry: [test] {your action name}
+                              e1) Enter your Hubitat account credentials and click "Sign In"
+                              f1) Select your hub and tap "Select"
+                                  - Make sure at least one device is selected to expose to Google Home (Step 1a above)
+                              g1) Tap "Authorize"
+                              ...
+                    '''.stripIndent()
+            )
+        }
+        section("Hub details") {
+            paragraph "Fulfillment URL: ${getFullApiServerUrl()}/action - NOTE OTHERWISE DO NOT SHARE BEYOND setup"
+            paragraph "Client Id: See HE console -> Apps Code -> Google Home Community -> OAuth"
+            paragraph "Client Secret: See HE console -> Apps Code -> Google Home Community -> OAuth"
+            paragraph "Authorization URL: https://oauth.cloud.hubitat.com/oauth/authorize"
+            paragraph "Token URL: https://oauth.cloud.hubitat.com/oauth/token"
+
+        }
     }
-    state.currentlyEditingDeviceTrait = deviceTrait.name
+}
+
+def deviceTraitPreferences(Map ideviceTrait) {
+    Map deviceTrait; deviceTrait=ideviceTrait
+    if (deviceTrait == null) {
+        deviceTrait = deviceTypeTraitFromSettings(gtStStr('currentlyEditingDeviceTrait'))
+    } else {
+        // re-load in case individual trait preferences functions have traits with (sSUBONCHG): true
+        deviceTrait = deviceTypeTraitFromSettings((String)deviceTrait.name)
+    }
+    state.currentlyEditingDeviceTrait = (String)deviceTrait.name
     return dynamicPage(
-        name: "deviceTraitPreferences",
-        title: "Preferences For ${GOOGLE_DEVICE_TRAITS[deviceTrait.type]} Trait",
-        nextPage: "deviceTypePreferences"
-    ) {
+        (sNM): "deviceTraitPreferences",
+        (sTIT): "Preferences For ${GOOGLE_DEVICE_TRAITS[(String)deviceTrait.type]} Trait",
+        nextPage: "deviceTypePreferences" ) {
+
+        // get all the custom inputs
         "deviceTraitPreferences_${deviceTrait.type}"(deviceTrait)
 
         section {
             href(
-                title: "Remove Device Trait",
-                description: "",
+                (sTIT): "Remove Device Trait",
+                description: sBLK,
                 style: "page",
                 page: "deviceTraitDelete",
                 params: deviceTrait
@@ -607,411 +751,419 @@ def deviceTraitPreferences(deviceTrait) {
     }
 }
 
-def deviceTraitDelete(deviceTrait) {
-    return dynamicPage(name: "deviceTraitDelete", title: "Device Trait Deleted", nextPage: "deviceTypePreferences") {
+def deviceTraitDelete(Map deviceTrait) {
+    return dynamicPage((sNM): "deviceTraitDelete", (sTIT): "Device Trait Deleted", nextPage: "deviceTypePreferences") {
         deleteDeviceTrait(deviceTrait)
         section {
-            paragraph("The ${GOOGLE_DEVICE_TRAITS[deviceTrait.type]} trait was removed")
+            paragraph("The ${GOOGLE_DEVICE_TRAITS[(String)deviceTrait.type]} trait was removed")
         }
     }
 }
 
-@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
-private deviceTraitPreferences_ArmDisarm(deviceTrait) {
-    hubitatAlarmLevels = [
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_ArmDisarm(Map deviceTrait) {
+    Map<String,String> hubitatAlarmLevels = [
         "disarmed":              "Disarm",
         "armed home":            "Home",
         "armed night":           "Night",
         "armed away":            "Away",
     ]
-    hubitatAlarmCommands = [
+    Map<String,String> hubitatAlarmCommands = [
         "disarmed":              "disarm",
         "armed home":            "armHome",
         "armed night":           "armNight",
         "armed away":            "armAway",
     ]
-    hubitatAlarmValues = [
+    Map<String,String> hubitatAlarmValues = [
         "disarmed":              "disarmed",
         "armed home":            "armed home",
         "armed night":           "armed night",
         "armed away":            "armed away",
     ]
 
+    String tname= (String)deviceTrait.name
     section("Arm/Disarm Settings") {
         input(
-            name: "${deviceTrait.name}.armedAttribute",
-            title: "Armed/Disarmed Attribute",
-            type: "text",
-            defaultValue: "securityKeypad",
-            required: true
+            (sNM): tname + ".armedAttribute",
+            (sTIT): "Armed/Disarmed Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "securityKeypad",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.armLevelAttribute",
-            title: "Current Arm Level Attribute",
-            type: "text",
-            defaultValue: "securityKeypad",
-            required: true
+            (sNM): tname + ".armLevelAttribute",
+            (sTIT): "Current Arm Level Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "securityKeypad",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.exitAllowanceAttribute",
-            title: "Exit Delay Value Attribute",
-            type: "text",
-            defaultValue: "exitAllowance",
-            required: true
+            (sNM): tname + ".exitAllowanceAttribute",
+            (sTIT): "Exit Delay Value Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "exitAllowance",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.cancelCommand",
-            title: "Cancel Arming Command",
-            type: "text",
-            defaultValue: "disarm",
-            required: true
+            (sNM): tname + ".cancelCommand",
+            (sTIT): "Cancel Arming Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "disarm",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.armLevels",
-            title: "Supported Alarm Levels",
-            type: "enum",
-            options: hubitatAlarmLevels,
-            multiple: true,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".armLevels",
+            (sTIT): "Supported Alarm Levels",
+            (sTYPE): sENUM,
+            (sOPTIONS): hubitatAlarmLevels,
+            (sMULTIPLE): true,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
 
-        deviceTrait.armLevels.each { armLevel ->
+        ((Map<String,Object>)deviceTrait.armLevels).each { armLevel ->
+            String aname= armLevel.key
+            paragraph("A comma-separated list of names that the Google Assistant will " +
+                    "accept for this alarm setting")
             input(
-                name: "${deviceTrait.name}.armLevels.${armLevel.key}.googleNames",
-                title: "Google Home Level Names for ${hubitatAlarmLevels[armLevel.key]}",
+                (sNM): tname + ".armLevels.${aname}.googleNames",
+                (sTIT): "Google Home Level Names for ${hubitatAlarmLevels[aname]}",
                 description: "A comma-separated list of names that the Google Assistant will " +
                              "accept for this alarm setting",
-                type: "text",
-                required: "true",
-                defaultValue: hubitatAlarmLevels[armLevel.key]
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): hubitatAlarmLevels[aname]
             )
 
             input(
-                name: "${deviceTrait.name}.armCommands.${armLevel.key}.commandName",
-                title: "Hubitat Command for ${hubitatAlarmLevels[armLevel.key]}",
-                type: "text",
-                required: "true",
-                defaultValue: hubitatAlarmCommands[armLevel.key]
+                (sNM): tname + ".armCommands.${aname}.commandName",
+                (sTIT): "Hubitat Command for ${hubitatAlarmLevels[aname]}",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): hubitatAlarmCommands[aname]
             )
 
             input(
-                name: "${deviceTrait.name}.armValues.${armLevel.key}.value",
-                title: "Hubitat Value for ${hubitatAlarmLevels[armLevel.key]}",
-                type: "text",
-                required: "true",
-                defaultValue: hubitatAlarmValues[armLevel.key]
+                (sNM): tname + ".armValues.${aname}.value",
+                (sTIT): "Hubitat Value for ${hubitatAlarmLevels[aname]}",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): hubitatAlarmValues[aname]
             )
         }
         input(
-            name: "${deviceTrait.name}.returnUserIndexToDevice",
-            title: "Select to return the user index with the device command on a pincode match. " +
+            (sNM): tname + ".returnUserIndexToDevice",
+            (sTIT): "Select to return the user index with the device command on a pincode match. " +
                 "Not all device drivers support this operation.",
-            type: "bool",
-            defaultValue: false,
-            submitOnChange: true
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sSUBONCHG): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Brightness(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Brightness(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section ("Brightness Settings") {
         input(
-            name: "${deviceTrait.name}.brightnessAttribute",
-            title: "Current Brightness Attribute",
-            type: "text",
-            defaultValue: "level",
-            required: true
+            (sNM): tname + ".brightnessAttribute",
+            (sTIT): "Current Brightness Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "level",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.setBrightnessCommand",
-            title: "Set Brightness Command",
-            type: "text",
-            defaultValue: "setLevel",
-            required: true
+            (sNM): tname + ".setBrightnessCommand",
+            (sTIT): "Set Brightness Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "setLevel",
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_CameraStream(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_CameraStream(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Stream Camera") {
         input(
-            name: "${deviceTrait.name}.cameraStreamURLAttribute",
-            title: "Camera Stream URL Attribute",
-            type: "text",
-            defaultValue: "streamURL",
-            required: true
+            (sNM): tname + ".cameraStreamURLAttribute",
+            (sTIT): "Camera Stream URL Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "streamURL",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.cameraSupportedProtocolsAttribute",
-            title: "Camera Stream Supported Protocols Attribute",
-            type: "text",
-            defaultValue: "supportedProtocols",
-            required: true
+            (sNM): tname + ".cameraSupportedProtocolsAttribute",
+            (sTIT): "Camera Stream Supported Protocols Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "supportedProtocols",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.cameraStreamProtocolAttribute",
-            title: "Camera Stream Protocol Attribute",
-            type: "text",
-            defaultValue: "streamProtocol",
-            required: true
+            (sNM): tname + ".cameraStreamProtocolAttribute",
+            (sTIT): "Camera Stream Protocol Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "streamProtocol",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.cameraStreamCommand",
-            title: "Start Camera Stream Command",
-            type: "text",
-            defaultValue: "on",
-            required: true
+            (sNM): tname + ".cameraStreamCommand",
+            (sTIT): "Start Camera Stream Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): sON,
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
-private deviceTraitPreferences_ColorSetting(deviceTrait) {
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_ColorSetting(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section ("Color Setting Preferences") {
         input(
-            name: "${deviceTrait.name}.fullSpectrum",
-            title: "Full-Spectrum Color Control",
-            type: "bool",
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".fullSpectrum",
+            (sTIT): "Full-Spectrum Color Control",
+            (sTYPE): sBOOL,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.fullSpectrum) {
             input(
-                name: "${deviceTrait.name}.hueAttribute",
-                title: "Hue Attribute",
-                type: "text",
-                defaultValue: "hue",
-                required: true
+                (sNM): tname + ".hueAttribute",
+                (sTIT): "Hue Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "hue",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.saturationAttribute",
-                title: "Saturation Attribute",
-                type: "text",
-                defaultValue: "saturation",
-                required: true
+                (sNM): tname + ".saturationAttribute",
+                (sTIT): "Saturation Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "saturation",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.levelAttribute",
-                title: "Level Attribute",
-                type: "text",
-                defaultValue: "level",
-                required: true
+                (sNM): tname + ".levelAttribute",
+                (sTIT): "Level Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "level",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.setColorCommand",
-                title: "Set Color Command",
-                type: "text",
-                defaultValue: "setColor",
-                required: true
+                (sNM): tname + ".setColorCommand",
+                (sTIT): "Set Color Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "setColor",
+                (sREQ): true
             )
         }
         input(
-            name: "${deviceTrait.name}.colorTemperature",
-            title: "Color Temperature Control",
-            type: "bool",
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".colorTemperature",
+            (sTIT): "Color Temperature Control",
+            (sTYPE): sBOOL,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.colorTemperature) {
             input(
-                name: "${deviceTrait.name}.colorTemperature.min",
-                title: "Minimum Color Temperature",
-                type: "number",
-                defaultValue: 2200,
-                required: true
+                (sNM): tname + ".colorTemperature.min",
+                (sTIT): "Minimum Color Temperature",
+                (sTYPE): "number",
+                (sDEFVAL): 2200,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.colorTemperature.max",
-                title: "Maximum Color Temperature",
-                type: "number",
-                defaultValue: 6500,
-                required: true
+                (sNM): tname + ".colorTemperature.max",
+                (sTIT): "Maximum Color Temperature",
+                (sTYPE): "number",
+                (sDEFVAL): 6500,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.colorTemperatureAttribute",
-                title: "Color Temperature Attribute",
-                type: "text",
-                defaultValue: "colorTemperature",
-                required: true
+                (sNM): tname + ".colorTemperatureAttribute",
+                (sTIT): "Color Temperature Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "colorTemperature",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.setColorTemperatureCommand",
-                title: "Set Color Temperature Command",
-                type: "text",
-                defaultValue: "setColorTemperature",
-                required: true
+                (sNM): tname + ".setColorTemperatureCommand",
+                (sTIT): "Set Color Temperature Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "setColorTemperature",
+                (sREQ): true
             )
         }
         if (deviceTrait.fullSpectrum && deviceTrait.colorTemperature) {
             input(
-                name: "${deviceTrait.name}.colorModeAttribute",
-                title: "Color Mode Attribute",
-                type: "text",
-                defaultValue: "colorMode",
-                required: true
+                (sNM): tname + ".colorModeAttribute",
+                (sTIT): "Color Mode Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "colorMode",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.fullSpectrumModeValue",
-                title: "Full-Spectrum Mode Value",
-                type: "text",
-                defaultValue: "RGB",
-                required: true
+                (sNM): tname + ".fullSpectrumModeValue",
+                (sTIT): "Full-Spectrum Mode Value",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "RGB",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.temperatureModeValue",
-                title: "Color Temperature Mode Value",
-                type: "text",
-                defaultValue: "CT",
-                required: true
+                (sNM): tname + ".temperatureModeValue",
+                (sTIT): "Color Temperature Mode Value",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "CT",
+                (sREQ): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Dock(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Dock(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Dock Settings") {
         input(
-            name: "${deviceTrait.name}.dockAttribute",
-            title: "Dock Attribute",
-            type: "text",
-            defaultValue: "status",
-            required: true
+            (sNM): tname + ".dockAttribute",
+            (sTIT): "Dock Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "status",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.dockValue",
-            title: "Docked Value",
-            type: "text",
-            defaultValue: "docked",
-            required: true
+            (sNM): tname + ".dockValue",
+            (sTIT): "Docked Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "docked",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.dockCommand",
-            title: "Dock Command",
-            type: "text",
-            defaultValue: "returnToDock",
-            required: true
+            (sNM): tname + ".dockCommand",
+            (sTIT): "Dock Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "returnToDock",
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'MethodSize'])
-private deviceTraitPreferences_EnergyStorage(deviceTrait) {
-    googleEnergyStorageDistanceUnitForUX = [
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'MethodSize'])
+private deviceTraitPreferences_EnergyStorage(Map deviceTrait) {
+    Map<String,String> googleEnergyStorageDistanceUnitForUX = [
         "KILOMETERS":      "Kilometers",
         "MILES":           "Miles",
     ]
-    googleCapacityUnits = [
+    Map<String,String> googleCapacityUnits = [
         "SECONDS":         "Seconds",
         "MILES":           "Miles",
         "KILOMETERS":      "Kilometers",
         "PERCENTAGE":      "Percentage",
         "KILOWATT_HOURS":  "Kilowatt Hours",
     ]
+    String tname= (String)deviceTrait.name
     section("Energy Storage Settings") {
         input(
-            name: "${deviceTrait.name}.isRechargeable",
-            title: "Rechargeable",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".isRechargeable",
+            (sTIT): "Rechargeable",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         input(
-            name: "${deviceTrait.name}.capacityRemainingRawValue",
-            title: "Capacity Remaining Value",
-            type: "text",
-            defaultValue: "battery",
-            required: true
+            (sNM): tname + ".capacityRemainingRawValue",
+            (sTIT): "Capacity Remaining Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "battery",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.capacityRemainingUnit",
-            title: "Capacity Remaining Unit",
-            type: "enum",
-            options: googleCapacityUnits,
-            defaultValue: "PERCENTAGE",
-            multiple: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".capacityRemainingUnit",
+            (sTIT): "Capacity Remaining Unit",
+            (sTYPE): sENUM,
+            (sOPTIONS): googleCapacityUnits,
+            (sDEFVAL): "PERCENTAGE",
+            (sMULTIPLE): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
     }
     section(hideable: true, hidden: true, "Advanced Settings") {
         input(
-            name: "${deviceTrait.name}.queryOnlyEnergyStorage",
-            title: "Query Only Energy Storage",
-            type: "bool",
-            defaultValue: true,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".queryOnlyEnergyStorage",
+            (sTIT): "Query Only Energy Storage",
+            (sTYPE): sBOOL,
+            (sDEFVAL): true,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.queryOnlyEnergyStorage == false) {
             input(
-                name: "${deviceTrait.name}.chargeCommand",
-                title: "Charge Command",
-                type: "text",
-                required: true
+                (sNM): tname + ".chargeCommand",
+                (sTIT): "Charge Command",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
         }
         input(
-            name: "${deviceTrait.name}.capacityUntilFullRawValue",
-            title: "Capacity Until Full Value",
-            type: "text",
+            (sNM): tname + ".capacityUntilFullRawValue",
+            (sTIT): "Capacity Until Full Value",
+            (sTYPE): sTEXT,
         )
         input(
-            name: "${deviceTrait.name}.capacityUntilFullUnit",
-            title: "Capacity Until Full Unit",
-            type: "enum",
-            options: googleCapacityUnits,
-            multiple: false,
-            submitOnChange: true
+            (sNM): tname + ".capacityUntilFullUnit",
+            (sTIT): "Capacity Until Full Unit",
+            (sTYPE): sENUM,
+            (sOPTIONS): googleCapacityUnits,
+            (sMULTIPLE): false,
+            (sSUBONCHG): true
         )
         input(
-            name: "${deviceTrait.name}.descriptiveCapacityRemainingAttribute",
-            title: "Descriptive Capacity Remaining",
-            type: "text",
+            (sNM): tname + ".descriptiveCapacityRemainingAttribute",
+            (sTIT): "Descriptive Capacity Remaining",
+            (sTYPE): sTEXT,
         )
         input(
-            name: "${deviceTrait.name}.isChargingAttribute",
-            title: "Charging Attribute",
-            type: "text",
+            (sNM): tname + ".isChargingAttribute",
+            (sTIT): "Charging Attribute",
+            (sTYPE): sTEXT,
         )
         input(
-            name: "${deviceTrait.name}.chargingValue",
-            title: "Charging Value",
-            type: "text",
+            (sNM): tname + ".chargingValue",
+            (sTIT): "Charging Value",
+            (sTYPE): sTEXT,
         )
         input(
-            name: "${deviceTrait.name}.isPluggedInAttribute",
-            title: "Plugged in Attribute",
-            type: "text",
+            (sNM): tname + ".isPluggedInAttribute",
+            (sTIT): "Plugged in Attribute",
+            (sTYPE): sTEXT,
         )
         input(
-            name: "${deviceTrait.name}.pluggedInValue",
-            title: "Plugged in Value",
-            type: "text",
+            (sNM): tname + ".pluggedInValue",
+            (sTIT): "Plugged in Value",
+            (sTYPE): sTEXT,
         )
-        if ((deviceTrait.capacityRemainingUnit == "MILES")
-            || (deviceTrait.capacityRemainingUnit == "KILOMETERS")
-            || (deviceTrait.capacityUntilFullUnit == "MILES")
-            || (deviceTrait.capacityUntilFullUnit == "KILOMETERS")) {
+        List<String> mk = ["MILES","KILOMETERS"]
+        if ( ((String)deviceTrait.capacityRemainingUnit in mk)
+            || ((String)deviceTrait.capacityUntilFullUnit in mk) ) {
             input(
-                name: "${deviceTrait.name}.energyStorageDistanceUnitForUX",
-                title: "Supported Distance Units",
-                type: "enum",
-                options: googleEnergyStorageDistanceUnitForUX,
-                multiple: false,
-                submitOnChange: true
+                (sNM): tname + ".energyStorageDistanceUnitForUX",
+                (sTIT): "Supported Distance Units",
+                (sTYPE): sENUM,
+                (sOPTIONS): googleEnergyStorageDistanceUnitForUX,
+                (sMULTIPLE): false,
+                (sSUBONCHG): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_FanSpeed(deviceTrait) {
-    hubitatFanSpeeds = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_FanSpeed(Map deviceTrait) {
+    Map<String,String> hubitatFanSpeeds = [
         "low":         "Low",
         "medium-low":  "Medium-Low",
         "medium":      "Medium",
@@ -1019,587 +1171,608 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
         "high":        "High",
         "auto":        "Auto",
     ]
+    String tname= (String)deviceTrait.name
     section("Fan Speed Settings") {
         input(
-            name: "${deviceTrait.name}.currentSpeedAttribute",
-            title: "Current Speed Attribute",
-            type: "text",
-            defaultValue: "speed",
-            required: true
+            (sNM): tname + ".currentSpeedAttribute",
+            (sTIT): "Current Speed Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "speed",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.setFanSpeedCommand",
-            title: "Set Speed Command",
-            type: "text",
-            defaultValue: "setSpeed",
-            required: true
+            (sNM): tname + ".setFanSpeedCommand",
+            (sTIT): "Set Speed Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "setSpeed",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.fanSpeeds",
-            title: "Supported Fan Speeds",
-            type: "enum",
-            options: hubitatFanSpeeds,
-            multiple: true,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".fanSpeeds",
+            (sTIT): "Supported Fan Speeds",
+            (sTYPE): sENUM,
+            (sOPTIONS): hubitatFanSpeeds,
+            (sMULTIPLE): true,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
-        deviceTrait.fanSpeeds.each { fanSpeed ->
+        ((Map<String,Object>)deviceTrait.fanSpeeds).each { fanSpeed ->
+            paragraph("A comma-separated list of names that the Google Assistant will " +
+                    "accept for this speed setting")
             input(
-                name: "${deviceTrait.name}.speed.${fanSpeed.key}.googleNames",
-                title: "Google Home Level Names for ${hubitatFanSpeeds[fanSpeed.key]}",
+                (sNM): tname + ".speed.${fanSpeed.key}.googleNames",
+                (sTIT): "Google Home Level Names for ${hubitatFanSpeeds[fanSpeed.key]}",
                 description: "A comma-separated list of names that the Google Assistant will " +
                              "accept for this speed setting",
-                type: "text",
-                required: "true",
-                defaultValue: hubitatFanSpeeds[fanSpeed.key]
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): hubitatFanSpeeds[fanSpeed.key]
             )
         }
     }
 
     section("Reverse Settings") {
         input(
-            name: "${deviceTrait.name}.reversible",
-            title: "Reversible",
-            type: "bool",
-            defaultValue: false,
-            submitOnChange: true
+            (sNM): tname + ".reversible",
+            (sTIT): "Reversible",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sSUBONCHG): true
         )
 
         if (settings."${deviceTrait.name}.reversible") {
             input(
-                name: "${deviceTrait.name}.reverseCommand",
-                title: "Reverse Command",
-                type: "text",
-                required: true
+                (sNM): tname + ".reverseCommand",
+                (sTIT): "Reverse Command",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
         }
     }
 
     section("Supports Percentage Settings") {
         input(
-            name: "${deviceTrait.name}.supportsFanSpeedPercent",
-            title: "Supports Fan Speed Percent",
-            type: "bool",
-            defaultValue: false,
-            submitOnChange: true
+            (sNM): tname + ".supportsFanSpeedPercent",
+            (sTIT): "Supports Fan Speed Percent",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sSUBONCHG): true
         )
 
         if (settings."${deviceTrait.name}.supportsFanSpeedPercent") {
             input(
-                name: "${deviceTrait.name}.currentFanSpeedPercent",
-                title: "Current Fan Speed Percentage Attribute",
-                type: "text",
-                defaultValue: "level",
-                required: true
+                (sNM): tname + ".currentFanSpeedPercent",
+                (sTIT): "Current Fan Speed Percentage Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "level",
+                (sREQ): true
             )
 
             input(
-                name: "${deviceTrait.name}.setFanSpeedPercentCommand",
-                title: "Fan Speed Percent Command",
-                type: "text",
-                defaultValue: "setLevel",
-                required: true
+                (sNM): tname + ".setFanSpeedPercentCommand",
+                (sTIT): "Fan Speed Percent Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "setLevel",
+                (sREQ): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_HumiditySetting(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_HumiditySetting(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Humidity Setting Preferences") {
         input(
-            name: "${deviceTrait.name}.humidityAttribute",
-            title: "Humidity Attribute",
-            type: "text",
-            defaultValue: "humidity",
-            required: true
+            (sNM): tname + ".humidityAttribute",
+            (sTIT): "Humidity Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "humidity",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.queryOnly",
-            title: "Query Only Humidity",
-            type: "bool",
-            defaultValue: false,
+            (sNM): tname + ".queryOnly",
+            (sTIT): "Query Only Humidity",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
             require: true,
-            submitOnChange: true
+            (sSUBONCHG): true
         )
         if (!deviceTrait.queryOnly) {
             input(
-                name: "${deviceTrait.name}.humiditySetpointAttribute",
-                title: "Humidity Setpoint Attribute",
-                type: "text",
-                required: true
+                (sNM): tname + ".humiditySetpointAttribute",
+                (sTIT): "Humidity Setpoint Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.setHumidityCommand",
-                title: "Set Humidity Command",
-                type: "text",
-                required: true
+                (sNM): tname + ".setHumidityCommand",
+                (sTIT): "Set Humidity Command",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             paragraph("If either a minimum or maximum humidity setpoint is configured then the other must be as well")
             input(
-                name: "${deviceTrait.name}.humidityRange.min",
-                title: "Minimum Humidity Setpoint",
-                type: "number",
-                required: deviceTrait.humidityRange?.max != null,
-                submitOnChange: true
+                (sNM): tname + ".humidityRange.min",
+                (sTIT): "Minimum Humidity Setpoint",
+                (sTYPE): "number",
+                (sREQ): deviceTrait.humidityRange?.max != null,
+                (sSUBONCHG): true
             )
             input(
-                name: "${deviceTrait.name}.humidityRange.max",
-                title: "Maximum Humidity Setpoint",
-                type: "number",
-                required: deviceTrait.humidityRange?.min != null,
-                submitOnChange: true
+                (sNM): tname + ".humidityRange.max",
+                (sTIT): "Maximum Humidity Setpoint",
+                (sTYPE): "number",
+                (sREQ): deviceTrait.humidityRange?.min != null,
+                (sSUBONCHG): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Locator(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Locator(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Locator Settings") {
         input(
-            name: "${deviceTrait.name}.locatorCommand",
-            title: "Locator Command",
-            type: "text",
-            defaultValue: "locate",
-            required: true
+            (sNM): tname + ".locatorCommand",
+            (sTIT): "Locator Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "locate",
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_LockUnlock(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_LockUnlock(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Lock/Unlock Settings") {
         input(
-            name: "${deviceTrait.name}.lockedUnlockedAttribute",
-            title: "Locked/Unlocked Attribute",
-            type: "text",
-            defaultValue: "lock",
-            required: true
+            (sNM): tname + ".lockedUnlockedAttribute",
+            (sTIT): "Locked/Unlocked Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "lock",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.lockedValue",
-            title: "Locked Value",
-            type: "text",
-            defaultValue: "locked",
-            required: true
+            (sNM): tname + ".lockedValue",
+            (sTIT): "Locked Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "locked",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.lockCommand",
-            title: "Lock Command",
-            type: "text",
-            defaultValue: "lock",
-            required: true
+            (sNM): tname + ".lockCommand",
+            (sTIT): "Lock Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "lock",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.unlockCommand",
-            title: "Unlock Command",
-            type: "text",
-            defaultValue: "unlock",
-            required: true
+            (sNM): tname + ".unlockCommand",
+            (sTIT): "Unlock Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "unlock",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.returnUserIndexToDevice",
-            title: "Select to return the user index with the device command on a pincode match. " +
+            (sNM): tname + ".returnUserIndexToDevice",
+            (sTIT): "Select to return the user index with the device command on a pincode match. " +
                 "Not all device drivers support this operation.",
-            type: "bool",
-            defaultValue: false,
-            submitOnChange: true
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sSUBONCHG): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_MediaState(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_MediaState(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Media State Settings") {
         input(
-            name: "${deviceTrait.name}.supportActivityState",
-            title: "Support Activity State",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true,
+            (sNM): tname + ".supportActivityState",
+            (sTIT): "Support Activity State",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true,
         )
         if (deviceTrait.supportActivityState) {
             input(
-                name: "${deviceTrait.name}.activityStateAttribute",
-                title: "Activity State Attribute",
-                type: "text",
-                required: true
+                (sNM): tname + ".activityStateAttribute",
+                (sTIT): "Activity State Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
         }
         input(
-            name: "${deviceTrait.name}.supportPlaybackState",
-            title: "Support Playback State",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true,
+            (sNM): tname + ".supportPlaybackState",
+            (sTIT): "Support Playback State",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true,
         )
         if (deviceTrait.supportPlaybackState) {
             input(
-                name: "${deviceTrait.name}.playbackStateAttribute",
-                title: "Playback State Attribute",
-                type: "text",
-                defaultValue: "status",
-                required: true
+                (sNM): tname + ".playbackStateAttribute",
+                (sTIT): "Playback State Attribute",
+                (sTYPE): sTEXT,
+                (sDEFVAL): "status",
+                (sREQ): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_OccupancySensing(deviceTrait) {
-    def SENSOR_TYPES = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_OccupancySensing(Map deviceTrait) {
+    Map<String,String> SENSOR_TYPES = [
         PIR:              "Passive Infrared (PIR)",
         ULTRASONIC:       "Ultrasonic",
         PHYSICAL_CONTACT: "Physical Contact"
     ]
+    String tname= (String)deviceTrait.name
     section("Occupancy Sensing Settings") {
         input(
-            name: "${deviceTrait.name}.occupancySensorType",
-            title: "Sensor Type",
-            type: "enum",
-            options: SENSOR_TYPES,
-            required: true
+            (sNM): tname + ".occupancySensorType",
+            (sTIT): "Sensor Type",
+            (sTYPE): sENUM,
+            (sOPTIONS): SENSOR_TYPES,
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.occupancyAttribute",
-            title: "Occupancy Attribute",
-            type: "text",
-            defaultValue: "motion",
-            required: true
+            (sNM): tname + ".occupancyAttribute",
+            (sTIT): "Occupancy Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "motion",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.occupiedValue",
-            title: "Occupied Value",
-            type: "text",
-            defaultValue: "active",
-            required: true
+            (sNM): tname + ".occupiedValue",
+            (sTIT): "Occupied Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "active",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.occupiedToUnoccupiedDelaySec",
-            title: "Occupied to Unoccupied Delay (seconds)",
-            type: "number",
-            submitOnChange: true
+            (sNM): tname + ".occupiedToUnoccupiedDelaySec",
+            (sTIT): "Occupied to Unoccupied Delay (seconds)",
+            (sTYPE): "number",
+            (sSUBONCHG): true
         )
         input(
-            name: "${deviceTrait.name}.unoccupiedToOccupiedDelaySec",
-            title: "Unoccupied to Occupied Delay (seconds)",
-            type: "number",
-            submitOnChange: true,
-            required: deviceTrait.occupiedToUnoccupiedDelaySec != null
+            (sNM): tname + ".unoccupiedToOccupiedDelaySec",
+            (sTIT): "Unoccupied to Occupied Delay (seconds)",
+            (sTYPE): "number",
+            (sSUBONCHG): true,
+            (sREQ): deviceTrait.occupiedToUnoccupiedDelaySec != null
         )
         input(
-            name: "${deviceTrait.name}.unoccupiedToOccupiedEventThreshold",
-            title: "Unoccupied to Occupied Event Threshold",
-            type: "number",
-            submitOnChange: true,
-            required: deviceTrait.unoccupiedToOccupiedDelaySec != null,
+            (sNM): tname + ".unoccupiedToOccupiedEventThreshold",
+            (sTIT): "Unoccupied to Occupied Event Threshold",
+            (sTYPE): "number",
+            (sSUBONCHG): true,
+            (sREQ): deviceTrait.unoccupiedToOccupiedDelaySec != null,
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_OnOff(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_OnOff(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("On/Off Settings") {
         input(
-            name: "${deviceTrait.name}.onOffAttribute",
-            title: "On/Off Attribute",
-            type: "text",
-            defaultValue: "switch",
-            required: true
+            (sNM): tname + ".onOffAttribute",
+            (sTIT): "On/Off Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "switch",
+            (sREQ): true
         )
         paragraph("At least one of On Value or Off Value must be specified")
         input(
-            name: "${deviceTrait.name}.onValue",
-            title: "On Value",
-            type: "text",
-            defaultValue: deviceTrait.offValue ? "" : "on",
-            submitOnChange: true,
-            required: !deviceTrait.offValue
+            (sNM): tname + ".onValue",
+            (sTIT): "On Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): deviceTrait.offValue ? sBLK : sON,
+            (sSUBONCHG): true,
+            (sREQ): !deviceTrait.offValue
         )
         input(
-            name: "${deviceTrait.name}.offValue",
-            title: "Off Value",
-            type: "text",
-            defaultValue: deviceTrait.onValue ? "" : "off",
-            submitOnChange: true,
-            required: !deviceTrait.onValue
+            (sNM): tname + ".offValue",
+            (sTIT): "Off Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): deviceTrait.onValue ? sBLK : sOFF,
+            (sSUBONCHG): true,
+            (sREQ): !deviceTrait.onValue
         )
         input(
-            name: "${deviceTrait.name}.controlType",
-            title: "Control Type",
-            type: "enum",
-            options: [
+            (sNM): tname + ".controlType",
+            (sTIT): "Control Type",
+            (sTYPE): sENUM,
+            (sOPTIONS): [
                 "separate": "Separate On and Off commands",
                 "single": "Single On/Off command with parameter"
             ],
-            defaultValue: "separate",
-            required: true,
-            submitOnChange: true
+            (sDEFVAL): "separate",
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.controlType != "single") {
             input(
-                name: "${deviceTrait.name}.onCommand",
-                title: "On Command",
-                type: "text",
-                defaultValue: "on",
-                required: true
+                (sNM): tname + ".onCommand",
+                (sTIT): "On Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): sON,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.offCommand",
-                title: "Off Command",
-                type: "text",
-                defaultValue: "off",
-                required: true
+                (sNM): tname + ".offCommand",
+                (sTIT): "Off Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): sOFF,
+                (sREQ): true
             )
         } else {
             input(
-                name: "${deviceTrait.name}.onOffCommand",
-                title: "On/Off Command",
-                type: "text",
-                required: true
+                (sNM): tname + ".onOffCommand",
+                (sTIT): "On/Off Command",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.onParameter",
-                title: "On Parameter",
-                type: "text",
-                required: true
+                (sNM): tname + ".onParameter",
+                (sTIT): "On Parameter",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.offParameter",
-                title: "Off Parameter",
-                type: "text",
-                required: true
+                (sNM): tname + ".offParameter",
+                (sTIT): "Off Parameter",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_OpenClose(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_OpenClose(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Open/Close Settings") {
         paragraph("Can this device only be fully opened/closed, or can it be partially open?")
         input(
-            name: "${deviceTrait.name}.discreteOnlyOpenClose",
-            title: "Discrete Only Open/Close",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".discreteOnlyOpenClose",
+            (sTIT): "Discrete Only Open/Close",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
+        paragraph("Commonly door or valve")
         input(
-            name: "${deviceTrait.name}.openCloseAttribute",
-            title: "Open/Close Attribute",
-            type: "text",
-            required: true
+            (sNM): tname + ".openCloseAttribute",
+            (sTIT): "Open/Close Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "door",
+            (sREQ): true
         )
 
         if (deviceTrait.discreteOnlyOpenClose) {
+            paragraph("Values of the Open/Close Attribute that indicate this device is open.  " +
+                    "Separate multiple values with a comma")
             input(
-                name: "${deviceTrait.name}.openValue",
-                title: "Open Values",
+                (sNM): tname + ".openValue",
+                (sTIT): "Open Values",
                 description: "Values of the Open/Close Attribute that indicate this device is open.  " +
                              "Separate multiple values with a comma",
-                type: "text",
-                defaultValue: "open",
-                required: true
+                (sTYPE): sTEXT,
+                (sDEFVAL): "open",
+                (sREQ): true
             )
+            paragraph("Values of the Open/Close Attribute that indicate this device is closed.  " +
+                    "Separate multiple values with a comma")
             input(
-                name: "${deviceTrait.name}.closedValue",
-                title: "Closed Values",
+                (sNM): tname + ".closedValue",
+                (sTIT): "Closed Values",
                 description: "Values of the Open/Close Attribute that indicate this device is closed.  " +
                              "Separate multiple values with a comma",
-                type: "text",
-                defaultValue: "closed",
-                required: true
+                (sTYPE): sTEXT,
+                (sDEFVAL): "closed",
+                (sREQ): true
             )
         } else {
             paragraph("Set this if your device considers position 0 to be fully open")
             input(
-                name: "${deviceTrait.name}.reverseDirection",
-                title: "Reverse Direction",
-                type: "bool"
+                (sNM): tname + ".reverseDirection",
+                (sTIT): "Reverse Direction",
+                (sTYPE): sBOOL
             )
         }
         input(
-            name: "${deviceTrait.name}.queryOnly",
-            title: "Query Only Open/Close",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".queryOnly",
+            (sTIT): "Query Only Open/Close",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (!deviceTrait.queryOnly) {
             if (deviceTrait.discreteOnlyOpenClose) {
                 input(
-                    name: "${deviceTrait.name}.openCommand",
-                    title: "Open Command",
-                    type: "text",
-                    defaultValue: "open",
-                    required: true
+                    (sNM): tname + ".openCommand",
+                    (sTIT): "Open Command",
+                    (sTYPE): sTEXT,
+                    (sDEFVAL): "open",
+                    (sREQ): true
                 )
                 input(
-                    name: "${deviceTrait.name}.closeCommand",
-                    title: "Close Command",
-                    type: "text",
-                    defaultValue: "close",
-                    required: true
+                    (sNM): tname + ".closeCommand",
+                    (sTIT): "Close Command",
+                    (sTYPE): sTEXT,
+                    (sDEFVAL): "close",
+                    (sREQ): true
                 )
             } else {
                 input(
-                    name: "${deviceTrait.name}.openPositionCommand",
-                    title: "Open Position Command",
-                    type: "text",
-                    defaultValue: "setPosition",
-                    required: true
+                    (sNM): tname + ".openPositionCommand",
+                    (sTIT): "Open Position Command",
+                    (sTYPE): sTEXT,
+                    (sDEFVAL): "setPosition",
+                    (sREQ): true
                 )
             }
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_Reboot(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_Reboot(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Reboot Preferences") {
         input(
-            name: "${deviceTrait.name}.rebootCommand",
-            title: "Reboot Command",
-            type: "text",
-            required: true
+            (sNM): tname + ".rebootCommand",
+            (sTIT): "Reboot Command",
+            (sTYPE): sTEXT,
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_Rotation(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_Rotation(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Rotation Preferences") {
         input(
-            name: "${deviceTrait.name}.rotationAttribute",
-            title: "Current Rotation Attribute",
-            type: "text",
-            required: true
+            (sNM): tname + ".rotationAttribute",
+            (sTIT): "Current Rotation Attribute",
+            (sTYPE): sTEXT,
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.setRotationCommand",
-            title: "Set Rotation Command",
-            type: "text",
-            required: true
+            (sNM): tname + ".setRotationCommand",
+            (sTIT): "Set Rotation Command",
+            (sTYPE): sTEXT,
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.continuousRotation",
-            title: "Supports Continuous Rotation",
-            type: "bool",
-            defaultValue: false
+            (sNM): tname + ".continuousRotation",
+            (sTIT): "Supports Continuous Rotation",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_Scene(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_Scene(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Scene Preferences") {
         input(
-            name: "${deviceTrait.name}.activateCommand",
-            title: "Activate Command",
-            type: "text",
-            defaultValue: "on",
-            required: true
+            (sNM): tname + ".activateCommand",
+            (sTIT): "Activate Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): sON,
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.sceneReversible",
-            title: "Can this scene be deactivated?",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".sceneReversible",
+            (sTIT): "Can this scene be deactivated?",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (settings."${deviceTrait.name}.sceneReversible") {
             input(
-                name: "${deviceTrait.name}.deactivateCommand",
-                title: "Deactivate Command",
-                type: "text",
-                defaultValue: "off",
-                required: true
+                (sNM): tname + ".deactivateCommand",
+                (sTIT): "Deactivate Command",
+                (sTYPE): sTEXT,
+                (sDEFVAL): sOFF,
+                (sREQ): true
             )
         }
     }
 }
 
-@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod'])
-private deviceTraitPreferences_SensorState(deviceTrait) {
+@SuppressWarnings(['MethodSize', 'UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_SensorState(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Sensor State Settings") {
         input(
-            name: "${deviceTrait.name}.sensorTypes",
-            title: "Supported Sensor Types",
-            type: "enum",
-            options: GOOGLE_SENSOR_STATES.collectEntries {key, value ->
+            (sNM): tname + ".sensorTypes",
+            (sTIT): "Supported Sensor Types",
+            (sTYPE): sENUM,
+            (sOPTIONS): GOOGLE_SENSOR_STATES.collectEntries {key, value ->
                 [key, value.label]
             },
-            multiple: true,
-            required: true,
-            submitOnChange: true
+            (sMULTIPLE): true,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
 
-        deviceTrait.sensorTypes.each { sensorType ->
+        ((Map<String,Object>)deviceTrait.sensorTypes).each { sensorType ->
+            String sname= (String)sensorType.key
             // only display if the sensor has descriptive values
-            if (GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState) {
+            if (GOOGLE_SENSOR_STATES[sname].descriptiveState) {
                 // if the sensor does not have a numeric state, do not allow the user to disable the descriptive state
-                if (GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute != "") {
+                if (GOOGLE_SENSOR_STATES[sname].numericAttribute != sBLK) {
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.reportsDescriptiveState",
-                        title: "${sensorType.key} reports descriptive state",
-                        type: "bool",
-                        defaultValue: true,
-                        required: true,
-                        submitOnChange: true
+                        (sNM): tname + ".sensorTypes.${sname}.reportsDescriptiveState",
+                        (sTIT): "${sname} reports descriptive state",
+                        (sTYPE): sBOOL,
+                        (sDEFVAL): true,
+                        (sREQ): true,
+                        (sSUBONCHG): true
                     )
                 }
-                if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
+                if (deviceTrait.sensorTypes[sname].reportsDescriptiveState) {
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.availableStates",
-                        title: "Google Home Available States for ${sensorType.key}",
-                        type: "enum",
-                        multiple: true,
-                        required: true,
-                        options: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState,
+                        (sNM): tname + ".sensorTypes.${sname}.availableStates",
+                        (sTIT): "Google Home Available States for ${sname}",
+                        (sTYPE): sENUM,
+                        (sMULTIPLE): true,
+                        (sREQ): true,
+                        (sOPTIONS): GOOGLE_SENSOR_STATES[sname].descriptiveState,
                     )
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.descriptiveAttribute",
-                        title: "Hubitat Descriptive State Attribute for ${sensorType.key}",
-                        type: "text",
-                        required: true,
-                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].descriptiveAttribute
+                        (sNM): tname + ".sensorTypes.${sname}.descriptiveAttribute",
+                        (sTIT): "Hubitat Descriptive State Attribute for ${sname}",
+                        (sTYPE): sTEXT,
+                        (sREQ): true,
+                        (sDEFVAL): GOOGLE_SENSOR_STATES[sname].descriptiveAttribute
                     )
                 }
             }
             // only display if the sensor has numerical values
-            if (GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute) {
+            if (GOOGLE_SENSOR_STATES[sname].numericAttribute) {
                 // if the sensor does not have a descriptive state, do not allow the user to disable the numeric state
-                if (GOOGLE_SENSOR_STATES[sensorType.key].descriptiveState != "") {
+                if (GOOGLE_SENSOR_STATES[sname].descriptiveState != sBLK) {
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.reportsNumericState",
-                        title: "${sensorType.key} reports numeric values",
-                        type: "bool",
-                        defaultValue: true,
-                        required: true,
-                        submitOnChange: true
+                        (sNM): tname + ".sensorTypes.${sname}.reportsNumericState",
+                        (sTIT): "${sname} reports numeric values",
+                        (sTYPE): sBOOL,
+                        (sDEFVAL): true,
+                        (sREQ): true,
+                        (sSUBONCHG): true
                     )
                 }
-                if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
+                if (deviceTrait.sensorTypes[sname].reportsNumericState) {
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericAttribute",
-                        title: "Hubitat Numeric Attribute for ${sensorType.key} with units ${GOOGLE_SENSOR_STATES[sensorType.key].numericUnits}",
-                        type: "text",
-                        required: true,
-                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericAttribute
+                        (sNM): tname + ".sensorTypes.${sname}.numericAttribute",
+                        (sTIT): "Hubitat Numeric Attribute for ${sname} with units ${GOOGLE_SENSOR_STATES[sname].numericUnits}",
+                        (sTYPE): sTEXT,
+                        (sREQ): true,
+                        (sDEFVAL): GOOGLE_SENSOR_STATES[sname].numericAttribute
                     )
                     input(
-                        name: "${deviceTrait.name}.sensorTypes.${sensorType.key}.numericUnits",
-                        title: "Google Numeric Units for ${sensorType.key}",
-                        type: "text",
-                        required: true,
-                        defaultValue: GOOGLE_SENSOR_STATES[sensorType.key].numericUnits
+                        (sNM): tname + ".sensorTypes.${sname}.numericUnits",
+                        (sTIT): "Google Numeric Units for ${sname}",
+                        (sTYPE): sTEXT,
+                        (sREQ): true,
+                        (sDEFVAL): GOOGLE_SENSOR_STATES[sname].numericUnits
                     )
                 }
             }
@@ -1607,186 +1780,190 @@ private deviceTraitPreferences_SensorState(deviceTrait) {
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_SoftwareUpdate(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_SoftwareUpdate(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Software Update Settings") {
         input(
-            name: "${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute",
-            title: "Last Software Update Unix Timestamp in Seconds Attribute",
-            type: "text",
-            required: true
+            (sNM): tname + ".lastSoftwareUpdateUnixTimestampSecAttribute",
+            (sTIT): "Last Software Update Unix Timestamp in Seconds Attribute",
+            (sTYPE): sTEXT,
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.softwareUpdateCommand",
-            title: "Software Update Command",
-            type: "text",
-            required: true
+            (sNM): tname + ".softwareUpdateCommand",
+            (sTIT): "Software Update Command",
+            (sTYPE): sTEXT,
+            (sREQ): true
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_StartStop(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_StartStop(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Start/Stop Settings") {
         input(
-            name: "${deviceTrait.name}.startStopAttribute",
-            title: "Start/Stop Attribute",
-            type: "text",
-            defaultValue: "status",
-            required: true
+            (sNM): tname + ".startStopAttribute",
+            (sTIT): "Start/Stop Attribute",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "status",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.startValue",
-            title: "Start Value",
-            type: "text",
-            defaultValue: "running",
-            required: true
+            (sNM): tname + ".startValue",
+            (sTIT): "Start Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "running",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.stopValue",
-            title: "Stop Value",
-            type: "text",
-            defaultValue: "returning to dock",
-            required: true
+            (sNM): tname + ".stopValue",
+            (sTIT): "Stop Value",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "returning to dock",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.startCommand",
-            title: "Start Command",
-            type: "text",
-            defaultValue: "start",
-            required: true
+            (sNM): tname + ".startCommand",
+            (sTIT): "Start Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "start",
+            (sREQ): true
         )
         input(
-            name: "${deviceTrait.name}.stopCommand",
-            title: "Stop Command",
-            type: "text",
-            defaultValue: "returnToDock",
-            required: true
+            (sNM): tname + ".stopCommand",
+            (sTIT): "Stop Command",
+            (sTYPE): sTEXT,
+            (sDEFVAL): "returnToDock",
+            (sREQ): true
         )
         input(
-            name:"${deviceTrait.name}.canPause",
-            type: "bool",
-            title: "Is this device pausable? disable this option if not pausable",
-            defaultValue: true,
-            submitOnChange: true
+            (sNM):tname + ".canPause",
+            (sTYPE): sBOOL,
+            (sTIT): "Is this device pausable? disable this option if not pausable",
+            (sDEFVAL): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.canPause) {
             input(
-                name: "${deviceTrait.name}.pauseUnPauseAttribute",
-                title: "Pause/UnPause Attribute",
-                type: "text",
-                required: true,
-                defaultValue: "status"
+                (sNM): tname + ".pauseUnPauseAttribute",
+                (sTIT): "Pause/UnPause Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "status"
             )
             input(
-                name: "${deviceTrait.name}.pauseValue",
-                title: "Pause Value",
-                type: "text",
-                required: true,
-                defaultValue: "paused",
+                (sNM): tname + ".pauseValue",
+                (sTIT): "Pause Value",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "paused",
             )
             input(
-                name: "${deviceTrait.name}.pauseCommand",
-                title: "Pause Command",
-                type: "text",
-                required: true,
-                defaultValue: "pause"
+                (sNM): tname + ".pauseCommand",
+                (sTIT): "Pause Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "pause"
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_TemperatureControl(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_TemperatureControl(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section ("Temperature Control Preferences") {
         input(
-            name: "${deviceTrait.name}.temperatureUnit",
-            title: "Temperature Unit",
-            type: "enum",
-            options: [
+            (sNM): tname + ".temperatureUnit",
+            (sTIT): "Temperature Unit",
+            (sTYPE): sENUM,
+            (sOPTIONS): [
                 "C": "Celsius",
                 "F": "Fahrenheit"
             ],
-            required: true,
-            defaultValue: temperatureScale
+            (sREQ): true,
+            (sDEFVAL): temperatureScale
         )
         input(
-            name: "${deviceTrait.name}.currentTemperatureAttribute",
-            title: "Current Temperature Attribute",
-            type: "text",
-            required: true,
-            defaultValue: "temperature"
+            (sNM): tname + ".currentTemperatureAttribute",
+            (sTIT): "Current Temperature Attribute",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "temperature"
         )
         input(
-            name: "${deviceTrait.name}.queryOnly",
-            title: "Query Only Temperature Control",
-            type: "bool",
-            defaultValue: false,
-            required: true,
-            submitOnChange: true
+            (sNM): tname + ".queryOnly",
+            (sTIT): "Query Only Temperature Control",
+            (sTYPE): sBOOL,
+            (sDEFVAL): false,
+            (sREQ): true,
+            (sSUBONCHG): true
         )
         if (!deviceTrait.queryOnly) {
             input(
-                name: "${deviceTrait.name}.setpointAttribute",
-                title: "Current Temperature Setpoint Attribute",
-                type: "text",
-                required: true
+                (sNM): tname + ".setpointAttribute",
+                (sTIT): "Current Temperature Setpoint Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.setTemperatureCommand",
-                title: "Set Temperature Command",
-                type: "text",
-                required: true
+                (sNM): tname + ".setTemperatureCommand",
+                (sTIT): "Set Temperature Command",
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.minTemperature",
-                title: "Minimum Temperature Setting",
-                type: "decimal",
-                required: true
+                (sNM): tname + ".minTemperature",
+                (sTIT): "Minimum Temperature Setting",
+                (sTYPE): "decimal",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.maxTemperature",
-                title: "Maximum Temperature Setting",
-                type: "decimal",
-                required: true
+                (sNM): tname + ".maxTemperature",
+                (sTIT): "Maximum Temperature Setting",
+                (sTYPE): "decimal",
+                (sREQ): true
             )
             input(
-                name: "${deviceTrait.name}.temperatureStep",
-                title: "Temperature Step",
-                type: "decimal"
+                (sNM): tname + ".temperatureStep",
+                (sTIT): "Temperature Step",
+                (sTYPE): "decimal"
             )
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+def deviceTraitPreferences_TemperatureSetting(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section ("Temperature Setting Preferences") {
         input(
-            name: "${deviceTrait.name}.temperatureUnit",
-            title: "Temperature Unit",
-            type: "enum",
-            options: [
+            (sNM): tname + ".temperatureUnit",
+            (sTIT): "Temperature Unit",
+            (sTYPE): sENUM,
+            (sOPTIONS): [
                 "C": "Celsius",
                 "F": "Fahrenheit"
             ],
-            required: true,
-            defaultValue: temperatureScale
+            (sREQ): true,
+            (sDEFVAL): temperatureScale
         )
         input(
-            name: "${deviceTrait.name}.currentTemperatureAttribute",
-            title: "Current Temperature Attribute",
-            type: "text",
-            required: true,
-            defaultValue: "temperature"
+            (sNM): tname + ".currentTemperatureAttribute",
+            (sTIT): "Current Temperature Attribute",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "temperature"
         )
         input(
-            name: "${deviceTrait.name}.queryOnly",
-            title: "Query Only Temperature Setting",
-            type: "bool",
-            required: true,
-            defaultValue: false,
-            submitOnChange: true
+            (sNM): tname + ".queryOnly",
+            (sTIT): "Query Only Temperature Setting",
+            (sTYPE): sBOOL,
+            (sREQ): true,
+            (sDEFVAL): false,
+            (sSUBONCHG): true
         )
         if (!deviceTrait.queryOnly) {
             temperatureSettingControlPreferences(deviceTrait)
@@ -1794,38 +1971,40 @@ def deviceTraitPreferences_TemperatureSetting(deviceTrait) {
     }
 }
 
-private thermostatSetpointAttributePreferenceForModes(modes) {
+private static List<Map> thermostatSetpointAttributePreferenceForModes(List<String> modes) {
     def setpointAttributeDefaults = [
         "heatingSetpointAttribute": "heatingSetpoint",
         "coolingSetpointAttribute": "coolingSetpoint"
     ]
-    def prefs = []
-    modes.each { mode ->
-        def pref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
+    List<Map> prefs = []
+    modes.each { String mode ->
+        Map pref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
         if (pref) {
+            String s= (String)pref.name
             prefs << [
-                name:         pref.name,
-                title:        pref.title,
-                defaultValue: setpointAttributeDefaults[pref.name]
+                (sNM):         s,
+                (sTIT):        pref.title,
+                (sDEFVAL): setpointAttributeDefaults[s]
             ]
         }
     }
     return prefs
 }
 
-private thermostatSetpointCommandPreferenceForModes(modes) {
-    def setpointCommandDefaults = [
+private static List<Map> thermostatSetpointCommandPreferenceForModes(List<String> modes) {
+    Map<String,String> setpointCommandDefaults = [
         "setHeatingSetpointCommand": "setHeatingSetpoint",
         "setCoolingSetpointCommand": "setCoolingSetpoint"
     ]
-    def prefs = []
-    modes.each { mode ->
-        def pref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
+    List<Map> prefs = []
+    modes.each { String mode ->
+        Map pref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
         if (pref) {
+            String s= (String)pref.name
             prefs << [
-                name:         pref.name,
-                title:        pref.title,
-                defaultValue: setpointCommandDefaults[pref.name]
+                (sNM):         s,
+                (sTIT):        pref.title,
+                (sDEFVAL): setpointCommandDefaults[s]
             ]
         }
     }
@@ -1833,23 +2012,24 @@ private thermostatSetpointCommandPreferenceForModes(modes) {
 }
 
 @SuppressWarnings('MethodSize')
-private temperatureSettingControlPreferences(deviceTrait) {
+private temperatureSettingControlPreferences(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     input(
-        name: "${deviceTrait.name}.modes",
-        title: "Supported Modes",
-        type: "enum",
-        options: GOOGLE_THERMOSTAT_MODES,
-        multiple: true,
-        required: true,
-        submitOnChange: true
+        (sNM): tname + ".modes",
+        (sTIT): "Supported Modes",
+        (sTYPE): sENUM,
+        (sOPTIONS): GOOGLE_THERMOSTAT_MODES,
+        (sMULTIPLE): true,
+        (sREQ): true,
+        (sSUBONCHG): true
     )
 
-    def supportedModes = settings."${deviceTrait.name}.modes"
-    def attributePreferences = []
-    def commandPreferences = []
+    List<String> supportedModes = (List<String>)settings."${deviceTrait.name}.modes"
+    List attributePreferences = []
+    List commandPreferences = []
     supportedModes.each { mode ->
-        def attrPrefs
-        def commandPrefs
+        List<Map> attrPrefs
+        List<Map> commandPrefs
         if (mode == "heatcool") {
             attrPrefs = thermostatSetpointAttributePreferenceForModes(["heat", "cool"])
             commandPrefs = thermostatSetpointCommandPreferenceForModes(["heat", "cool"])
@@ -1868,172 +2048,176 @@ private temperatureSettingControlPreferences(deviceTrait) {
             }
         }
     }
-    def attributeCommandPairs = [attributePreferences, commandPreferences].transpose()
+    List attributeCommandPairs = [attributePreferences, commandPreferences].transpose()
     attributeCommandPairs.each { attributePreference, commandPreference ->
         input(
-            name: "${deviceTrait.name}.${attributePreference.name}",
-            title: attributePreference.title,
-            type: "text",
-            required: true,
-            defaultValue: attributePreference.defaultValue
+            (sNM): tname + ".${attributePreference.name}",
+            (sTIT): attributePreference.title,
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): attributePreference.defaultValue
         )
         input(
-            name: "${deviceTrait.name}.${commandPreference.name}",
-            title: commandPreference.title,
-            type: "text",
-            required: true,
-            defaultValue: commandPreference.defaultValue
+            (sNM): tname + ".${commandPreference.name}",
+            (sTIT): commandPreference.title,
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): commandPreference.defaultValue
         )
     }
 
     if (supportedModes) {
         if ("heatcool" in supportedModes) {
+            paragraph("The minimum offset between the heat and cool setpoints when operating in heat/cool mode")
             input(
-                name: "${deviceTrait.name}.heatcoolBuffer",
-                title: "Temperature Buffer",
+                (sNM): tname + ".heatcoolBuffer",
+                (sTIT): "Temperature Buffer",
                 description: "The minimum offset between the heat and cool setpoints when operating in heat/cool mode",
-                type: "decimal"
+                (sTYPE): "decimal"
             )
         }
         def defaultModeMapping = [
-            "off":      "off",
-            "on":       "",
+            (sOFF):      sOFF,
+            (sON):       sBLK,
             "heat":     "heat",
             "cool":     "cool",
             "heatcool": "auto",
-            "auto":     "",
-            "fan-only": "",
-            "purifier": "",
-            "eco":      "",
-            "dry":      ""
+            "auto":     sBLK,
+            "fan-only": sBLK,
+            "purifier": sBLK,
+            "eco":      sBLK,
+            "dry":      sBLK
         ]
         supportedModes.each { mode ->
+            paragraph("The mode name used by hubitat for the ${GOOGLE_THERMOSTAT_MODES[mode]} mode")
             input(
-                name: "${deviceTrait.name}.mode.${mode}.hubitatMode",
-                title: "${GOOGLE_THERMOSTAT_MODES[mode]} Hubitat Mode",
+                (sNM): tname + ".mode.${mode}.hubitatMode",
+                (sTIT): "${GOOGLE_THERMOSTAT_MODES[mode]} Hubitat Mode",
                 description: "The mode name used by hubitat for the ${GOOGLE_THERMOSTAT_MODES[mode]} mode",
-                type: "text",
-                required: true,
-                defaultValue: defaultModeMapping[mode]
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): defaultModeMapping[mode]
             )
         }
     }
     input(
-        name: "${deviceTrait.name}.setModeCommand",
-        title: "Set Mode Command",
-        type: "text",
-        required: true,
-        defaultValue: "setThermostatMode"
+        (sNM): tname + ".setModeCommand",
+        (sTIT): "Set Mode Command",
+        (sTYPE): sTEXT,
+        (sREQ): true,
+        (sDEFVAL): "setThermostatMode"
     )
     input(
-        name: "${deviceTrait.name}.currentModeAttribute",
-        title: "Current Mode Attribute",
-        type: "text",
-        required: true,
-        defaultValue: "thermostatMode"
+        (sNM): tname + ".currentModeAttribute",
+        (sTIT): "Current Mode Attribute",
+        (sTYPE): sTEXT,
+        (sREQ): true,
+        (sDEFVAL): "thermostatMode"
     )
     paragraph("If either the minimum setpoint or maximum setpoint is given then both must be given")
     input(
-        name: "${deviceTrait.name}.range.min",
-        title: "Minimum Set Point",
-        type: "decimal",
-        required: settings."${deviceTrait.name}.range.max" != null,
-        submitOnChange: true
+        (sNM): tname + ".range.min",
+        (sTIT): "Minimum Set Point",
+        (sTYPE): "decimal",
+        (sREQ): settings."${deviceTrait.name}.range.max" != null,
+        (sSUBONCHG): true
     )
     input(
-        name: "${deviceTrait.name}.range.max",
-        title: "Maximum Set Point",
-        type: "decimal",
-        required: settings."${deviceTrait.name}.range.min" != null,
-        submitOnChange: true
+        (sNM): tname + ".range.max",
+        (sTIT): "Maximum Set Point",
+        (sTYPE): "decimal",
+        (sREQ): settings."${deviceTrait.name}.range.min" != null,
+        (sSUBONCHG): true
     )
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Timer(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Timer(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Timer Settings") {
         input(
-            name: "${deviceTrait.name}.commandOnlyTimer",
-            title: "Command Only (No Query)",
-            type: "bool",
-            required: true,
-            defaultValue: false,
-            submitOnChange: true,
+            (sNM): tname + ".commandOnlyTimer",
+            (sTIT): "Command Only (No Query)",
+            (sTYPE): sBOOL,
+            (sREQ): true,
+            (sDEFVAL): false,
+            (sSUBONCHG): true,
         )
         input(
-            name: "${deviceTrait.name}.maxTimerLimitSec",
-            title: "Maximum Timer Duration (seconds)",
-            type: "integer",
-            required: true,
-            defaultValue: "86400"
+            (sNM): tname + ".maxTimerLimitSec",
+            (sTIT): "Maximum Timer Duration (seconds)",
+            (sTYPE): "integer",
+            (sREQ): true,
+            (sDEFVAL): "86400"
         )
         if (deviceTrait.commandOnlyTimer == false) {
             input(
-                name: "${deviceTrait.name}.timerRemainingSecAttribute",
-                title: "Time Remaining Attribute",
-                type: "text",
-                required: true,
-                defaultValue: "timeRemaining"
+                (sNM): tname + ".timerRemainingSecAttribute",
+                (sTIT): "Time Remaining Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "timeRemaining"
             )
             input(
-                name: "${deviceTrait.name}.timerPausedAttribute",
-                title: "Timer Paused Attribute",
-                type: "text",
-                required: true,
-                defaultValue: "sessionStatus"
+                (sNM): tname + ".timerPausedAttribute",
+                (sTIT): "Timer Paused Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "sessionStatus"
             )
             input(
-                name: "${deviceTrait.name}.timerPausedValue",
-                title: "Timer Paused Value",
-                type: "text",
-                required: true,
-                defaultValue: "paused"
+                (sNM): tname + ".timerPausedValue",
+                (sTIT): "Timer Paused Value",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "paused"
             )
         }
         input(
-            name: "${deviceTrait.name}.timerStartCommand",
-            title: "Timer Start Command",
-            type: "text",
-            required: true,
-            defaultValue: "startTimer"
+            (sNM): tname + ".timerStartCommand",
+            (sTIT): "Timer Start Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "startTimer"
         )
         input(
-            name: "${deviceTrait.name}.timerAdjustCommand",
-            title: "Timer Adjust Command",
-            type: "text",
-            required: true,
-            defaultValue: "setTimeRemaining"
+            (sNM): tname + ".timerAdjustCommand",
+            (sTIT): "Timer Adjust Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "setTimeRemaining"
         )
         input(
-            name: "${deviceTrait.name}.timerCancelCommand",
-            title: "Timer Cancel Command",
-            type: "text",
-            required: true,
-            defaultValue: "cancel"
+            (sNM): tname + ".timerCancelCommand",
+            (sTIT): "Timer Cancel Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "cancel"
         )
         input(
-            name: "${deviceTrait.name}.timerPauseCommand",
-            title: "Timer Pause Command",
-            type: "text",
-            required: true,
-            defaultValue: "pause"
+            (sNM): tname + ".timerPauseCommand",
+            (sTIT): "Timer Pause Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "pause"
         )
         input(
-            name: "${deviceTrait.name}.timerResumeCommand",
-            title: "Timer Resume Command",
-            type: "text",
-            required: true,
-            defaultValue: "start"
+            (sNM): tname + ".timerResumeCommand",
+            (sTIT): "Timer Resume Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "start"
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Toggles(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Toggles(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Toggles") {
-        deviceTrait.toggles.each { toggle ->
+        ((List<Map>)deviceTrait.toggles).each { toggle ->
             href(
-                title: "${toggle.labels.join(",")}",
+                (sTIT): "${((List)toggle.labels).join(",")}",
                 description: "Click to edit",
                 style: "page",
                 page: "togglePreferences",
@@ -2041,32 +2225,33 @@ private deviceTraitPreferences_Toggles(deviceTrait) {
             )
         }
         href(
-            title: "New Toggle",
-            description: "",
+            (sTIT): "New Toggle",
+            description: sBLK,
             style: "page",
             page: "togglePreferences",
             params: [
-                traitName: deviceTrait.name,
-                name: "${deviceTrait.name}.toggles.${UUID.randomUUID().toString()}"
+                traitName: tname,
+                (sNM): tname + ".toggles.${UUID.randomUUID().toString()}"
             ]
         )
     }
 }
 
-def togglePreferences(toggle) {
-    def toggles = settings."${toggle.traitName}.toggles" ?: []
+def togglePreferences(Map toggle) {
+    List<String> toggles = settings."${toggle.traitName}.toggles" ?: []
     if (!(toggle.name in toggles)) {
         toggles << toggle.name
         app.updateSetting("${toggle.traitName}.toggles", toggles)
     }
-    return dynamicPage(name: "togglePreferences", title: "Toggle Preferences", nextPage: "deviceTraitPreferences") {
+    return dynamicPage((sNM): "togglePreferences", (sTIT): "Toggle Preferences", nextPage: "deviceTraitPreferences") {
         section {
+            paragraph("A comma-separated list of names for this toggle")
             input(
-                name: "${toggle.name}.labels",
-                title: "Toggle Names",
+                (sNM): "${toggle.name}.labels",
+                (sTIT): "Toggle Names",
                 description: "A comma-separated list of names for this toggle",
-                type: "text",
-                required: true
+                (sTYPE): sTEXT,
+                (sREQ): true
             )
         }
 
@@ -2074,8 +2259,8 @@ def togglePreferences(toggle) {
 
         section {
             href(
-                title: "Remove Toggle",
-                description: "",
+                (sTIT): "Remove Toggle",
+                description: sBLK,
                 style: "page",
                 page: "toggleDelete",
                 params: toggle
@@ -2084,155 +2269,163 @@ def togglePreferences(toggle) {
     }
 }
 
-def toggleDelete(toggle) {
-    return dynamicPage(name: "toggleDelete", title: "Toggle Deleted", nextPage: "deviceTraitPreferences") {
+def toggleDelete(Map toggle) {
+    return dynamicPage((sNM): "toggleDelete", (sTIT): "Toggle Deleted", nextPage: "deviceTraitPreferences") {
         deleteToggle(toggle)
         section {
-            paragraph("The ${toggle.labels ? toggle.labels.join(",") : "new"} toggle has been removed")
+            paragraph("The ${toggle.labels ? ((List)toggle.labels).join(",") : "new"} toggle has been removed")
         }
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_TransportControl(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_TransportControl(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Transport Control Preferences") {
         input(
-            name: "${deviceTrait.name}.nextCommand",
-            title: "Next Command",
-            type: "text",
-            required: true,
-            defaultValue: "nextTrack"
+            (sNM): tname + ".nextCommand",
+            (sTIT): "Next Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "nextTrack"
         )
         input(
-            name: "${deviceTrait.name}.pauseCommand",
-            title: "Pause Command",
-            type: "text",
-            required: true,
-            defaultValue: "pause"
+            (sNM): tname + ".pauseCommand",
+            (sTIT): "Pause Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "pause"
         )
         input(
-            name: "${deviceTrait.name}.previousCommand",
-            title: "Previous Command",
-            type: "text",
-            required: true,
-            defaultValue: "previousTrack"
+            (sNM): tname + ".previousCommand",
+            (sTIT): "Previous Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "previousTrack"
         )
         input(
-            name: "${deviceTrait.name}.resumeCommand",
-            title: "Resume Command",
-            type: "text",
-            required: true,
-            defaultValue: "play"
+            (sNM): tname + ".resumeCommand",
+            (sTIT): "Resume Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "play"
         )
         input(
-            name: "${deviceTrait.name}.stopCommand",
-            title: "Stop Command",
-            type: "text",
-            required: true,
-            defaultValue: "stop"
+            (sNM): tname + ".stopCommand",
+            (sTIT): "Stop Command",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "stop"
         )
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceTraitPreferences_Volume(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private deviceTraitPreferences_Volume(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     section("Volume Preferences") {
         input(
-            name: "${deviceTrait.name}.volumeAttribute",
-            title: "Current Volume Attribute",
-            type: "text",
-            required: true,
-            defaultValue: "volume"
+            (sNM): tname + ".volumeAttribute",
+            (sTIT): "Current Volume Attribute",
+            (sTYPE): sTEXT,
+            (sREQ): true,
+            (sDEFVAL): "volume"
         )
         input(
-            name: "${deviceTrait.name}.canSetVolume",
-            title: "Use `setVolume` command (otherwise will use Volume Up/Down instead)",
-            type: "bool",
-            defaultValue: true,
-            submitOnChange: true
+            (sNM): tname + ".canSetVolume",
+            (sTIT): "Use `setVolume` command (otherwise will use Volume Up/Down instead)",
+            (sTYPE): sBOOL,
+            (sDEFVAL): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.canSetVolume) {
             input(
-                name: "${deviceTrait.name}.setVolumeCommand",
-                title: "Set Rotation Command",
-                type: "text",
-                required: true,
-                defaultValue: "setVolume"
+                (sNM): tname + ".setVolumeCommand",
+                (sTIT): "Set Rotation Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "setVolume"
             )
         } else {
             input(
-                name: "${deviceTrait.name}.volumeUpCommand",
-                title: "Set Increase Volume Command",
-                type: "text",
-                required: true,
-                defaultValue: "volumeUp"
+                (sNM): tname + ".volumeUpCommand",
+                (sTIT): "Set Increase Volume Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "volumeUp"
             )
             input(
-                name: "${deviceTrait.name}.volumeDownCommand",
-                title: "Set Decrease Volume Command",
-                type: "text",
-                required: true,
-                defaultValue: "volumeDown"
+                (sNM): tname + ".volumeDownCommand",
+                (sTIT): "Set Decrease Volume Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "volumeDown"
             )
         }
         input(
-            name: "${deviceTrait.name}.volumeStep",
-            title: "Volume Level Step",
-            type: "number",
-            required: true,
-            defaultValue: 1
+            (sNM): tname + ".volumeStep",
+            (sTIT): "Volume Level Step",
+            (sTYPE): "number",
+            (sREQ): true,
+            (sDEFVAL): i1
         )
         input(
-            name: "${deviceTrait.name}.canMuteUnmute",
-            title: "Supports Mute And Unmute",
-            type: "bool",
-            defaultValue: true,
-            submitOnChange: true
+            (sNM): tname + ".canMuteUnmute",
+            (sTIT): "Supports Mute And Unmute",
+            (sTYPE): sBOOL,
+            (sDEFVAL): true,
+            (sSUBONCHG): true
         )
         if (deviceTrait.canMuteUnmute) {
             input(
-                name: "${deviceTrait.name}.muteAttribute",
-                title: "Mute State Attribute",
-                type: "text",
-                required: true,
-                defaultValue: "mute"
+                (sNM): tname + ".muteAttribute",
+                (sTIT): "Mute State Attribute",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "mute"
             )
             input(
-                name: "${deviceTrait.name}.mutedValue",
-                title: "Muted Value",
-                type: "text",
-                required: true,
-                defaultValue: "muted"
+                (sNM): tname + ".mutedValue",
+                (sTIT): "Muted Value",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "muted"
             )
             input(
-                name: "${deviceTrait.name}.unmutedValue",
-                title: "Unmuted Value",
-                type: "text",
-                required: true,
-                defaultValue: "unmuted"
+                (sNM): tname + ".unmutedValue",
+                (sTIT): "Unmuted Value",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "unmuted"
             )
             input(
-                name: "${deviceTrait.name}.muteCommand",
-                title: "Mute Command",
-                type: "text",
-                required: true,
-                defaultValue: "mute"
+                (sNM): tname + ".muteCommand",
+                (sTIT): "Mute Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "mute"
             )
             input(
-                name: "${deviceTrait.name}.unmuteCommand",
-                title: "Unmute Command",
-                type: "text",
-                required: true,
-                defaultValue: "unmute"
+                (sNM): tname + ".unmuteCommand",
+                (sTIT): "Unmute Command",
+                (sTYPE): sTEXT,
+                (sREQ): true,
+                (sDEFVAL): "unmute"
             )
         }
     }
 }
 
 def handleAction() {
-    LOGGER.debug(request.body)
-    def requestType = request.JSON.inputs[0].intent
-    def response
+    LOGGER.debug('handleAction() '+request.body)
+    // todo
+    /*
+    doLog(sWARN, "request is: ${myObj(request)}")
+    doLog(sWARN, "request : ${getMapDescStr(request,false)}")
+	*/
+
+    def requestType = ((List<Map>)request.JSON.inputs)[0].intent
+    def response; response=[:]
     if (requestType == "action.devices.SYNC") {
         response = handleSyncRequest(request)
     } else if (requestType == "action.devices.QUERY") {
@@ -2242,11 +2435,11 @@ def handleAction() {
     } else if (requestType == "action.devices.DISCONNECT") {
         response = [:]
     }
-    LOGGER.debug(JsonOutput.toJson(response))
+    LOGGER.debug('handleAction() '+JsonOutput.toJson(response))
     return response
 }
 
-private attributeHasExpectedValue(device, attrName, attrValue) {
+private Boolean attributeHasExpectedValue(device, String attrName, attrValue) {
     def currentValue = device.currentValue(attrName, true)
     if (attrValue instanceof Closure) {
         if (!attrValue(currentValue)) {
@@ -2262,86 +2455,87 @@ private attributeHasExpectedValue(device, attrName, attrValue) {
     return true
 }
 
-private handleExecuteRequest(request) {
-    def resp = [
+private Map handleExecuteRequest(request) {
+    Map resp = [
         requestId: request.JSON.requestId,
         payload: [
             commands: []
         ]
     ]
 
-    def knownDevices = allKnownDevices()
-    def commands = request.JSON.inputs[0].payload.commands
+    Map<String, Map<String,Object>> knownDevices = allKnownDevices()
+    List<Map> commands = ((List<Map>)request.JSON.inputs)[0].payload.commands
 
     commands.each { command ->
-        def devices = command.devices.collect { device -> knownDevices."${device.id}" }
-        def attrsToAwait = [:].withDefault { [:] }
-        def states = [:].withDefault { [:] }
-        def results = [:]
+        List<Map> devices = command.devices.collect { device -> knownDevices."${device.id}" }
+        Map<String,Map<String,Object>> attrsToAwait = [:].withDefault { [:] }
+        Map<String,Object> states = [:].withDefault { [:] }
+        Map<String,Map> results = [:]
         // Send appropriate commands to devices
         devices.each { device ->
-            command.execution.each { execution ->
-                def commandName = execution.command.split("\\.").last()
+            doLog(sWARN, "device : ${getMapDescStr(device,false)}")
+            String dname= device.device.id.toString()
+            command.execution.each { Map execution ->
+                String commandName = ((String)execution.command).split("\\.").last()
                 try {
                     def (resultAttrsToAwait, resultStates) = "executeCommand_${commandName}"(device, execution)
-                    attrsToAwait[device.device] += resultAttrsToAwait
-                    states[device.device] += resultStates
-                    results[device.device] = [
-                        status: "SUCCESS"
-                    ]
+                    attrsToAwait[dname] += resultAttrsToAwait
+                    states[dname] += resultStates
+                    results[dname] = [ status: "SUCCESS" ]
                 } catch (Exception ex) {
-                    results[device.device] = [
-                        status: "ERROR"
-                    ]
+                    results[dname] = [ status: "ERROR" ]
                     try {
-                        results[device.device] << parseJson(ex.message)
+                        results[dname] << parseJson(ex.message)
                     } catch (JsonException jex) {
                         LOGGER.exception(
-                            "Error executing command ${commandName} on device ${device.device.name}",
+                            "Error executing command ${commandName} on device ${gtLbl(device.device)}",
                             ex
                         )
-                        results[device.device] << [
+                        results[dname] << [
                             errorCode: "hardError"
                         ]
                     }
                 }
             }
         }
+        doLog(sWARN, "results : ${getMapDescStr(results,false)}")
         // Wait up to 1 second for all devices to settle to the desired states.
-        def pollTimeoutMs = 1000
-        def singlePollTimeMs = 100
-        def numLoops = pollTimeoutMs / singlePollTimeMs
-        LOGGER.debug("Polling device attributes for ${pollTimeoutMs} ms")
-        def deviceReadyStates = [:]
-        for (def i = 0; i < numLoops; ++i) {
-            deviceReadyStates = attrsToAwait.collectEntries { device, attributes ->
-                [device, attributes.every { attrName, attrValue ->
-                    attributeHasExpectedValue(device, attrName, attrValue)
+        Long pollTimeoutMs = 1000L
+        Long singlePollTimeMs = 100L
+        Long numLoops = Math.round(pollTimeoutMs / singlePollTimeMs)
+        Map<String,Boolean> deviceReadyStates; deviceReadyStates = [:]
+        Integer i
+        for (i = iZ; i < numLoops; ++i) {
+            deviceReadyStates = attrsToAwait.collectEntries { String dname, Map<String,Object> attributes ->
+                [dname, attributes.every { String attrName, attrValue ->
+                    def dev = knownDevices[dname].device
+                    attributeHasExpectedValue(dev, attrName, attrValue)
                 }]
-            }
-            def ready = deviceReadyStates.every { device, deviceReady -> deviceReady }
+            } as Map<String, Boolean>
+            Boolean ready = deviceReadyStates.every { dname, deviceReady -> deviceReady }
             if (ready) {
                 LOGGER.debug("All devices reached expected state and are ready.")
                 break
             } else {
                 pauseExecution(singlePollTimeMs)
+                LOGGER.debug("Polling device attributes for ${(i+i1)*singlePollTimeMs} ms")
             }
         }
 
         // Now build our response message
-        devices.each { device ->
-            def result = results[device.device]
-            def deviceReady = deviceReadyStates[device.device]
+        devices.each { Map device ->
+            String dname= device.device.id.toString()
+            Map result = results[dname]
+            Boolean deviceReady = deviceReadyStates[dname]
             result.ids = [device.device.id]
             if (result.status == "SUCCESS") {
                 if (!deviceReady) {
-                    LOGGER.debug("Device ${device.device} not ready, moving to PENDING")
+                    LOGGER.debug("Device ${gtLbl(device.device)} not ready, moving to PENDING")
                     result.status = "PENDING"
                 }
-                def deviceState = [
-                    online: true
-                ]
-                deviceState += states[device.device]
+                Map<String,Object> deviceState
+                deviceState = [ online: true ]
+                deviceState += states[dname]
                 result.states = deviceState
             }
             resp.payload.commands << result
@@ -2350,22 +2544,29 @@ private handleExecuteRequest(request) {
     return resp
 }
 
-private checkDevicePinMatch(deviceInfo, command) {
-    def matchPosition = null
+private deviceCurrentValue(Map deviceInfo, String attr){
+    com.hubitat.app.DeviceWrapper device = deviceInfo.device as com.hubitat.app.DeviceWrapper
+    device.currentValue(attr,true)
+}
+
+private Integer checkDevicePinMatch(Map deviceInfo, Map command) {
+    Integer matchPosition
+    matchPosition = null
 
     if (deviceInfo.deviceType.useDevicePinCodes == true) {
+        Map lockCodeMap
         // grab the lock code map and decrypt if necessary
-        def jsonLockCodeMap = deviceInfo.device.currentValue(deviceInfo.deviceType.pinCodeAttribute)
-        if (jsonLockCodeMap[0] == "{") {
+        String jsonLockCodeMap = deviceCurrentValue(deviceInfo,(String)deviceInfo.deviceType.pinCodeAttribute)
+        if (jsonLockCodeMap[iZ] == '{') {
             lockCodeMap = parseJson(jsonLockCodeMap)
         } else {
             lockCodeMap = parseJson(decrypt(jsonLockCodeMap))
         }
         // check all users for a pin code match
         lockCodeMap.each { position, user ->
-            if (user.(deviceInfo.deviceType?.pinCodeValue) == command.challenge.pin) {
+            if (user.((String)deviceInfo.deviceType?.pinCodeValue) == command.challenge.pin) {
                 // grab the code position in the JSON map
-                matchPosition = position
+                matchPosition = position as Integer
             }
         }
     }
@@ -2373,48 +2574,49 @@ private checkDevicePinMatch(deviceInfo, command) {
 }
 
 @SuppressWarnings(['InvertedIfElse', 'NestedBlockDepth'])
-private checkMfa(deviceInfo, commandType, command) {
-    def matchPosition = null
-    commandType = commandType as String
+private Integer checkMfa(Map<String,Map> deviceInfo, icommandType, Map<String,Map> command) {
+    Integer matchPosition
+    matchPosition = null
+    String commandType = icommandType as String
     LOGGER.debug("Checking MFA for ${commandType} command")
-    if (commandType in deviceInfo.deviceType.confirmCommands && !command.challenge?.ack) {
+    if (commandType in (List)deviceInfo.deviceType.confirmCommands && !command.challenge?.ack) {
         throw new Exception(JsonOutput.toJson([
             errorCode: "challengeNeeded",
             challengeNeeded: [
-                type: "ackNeeded"
+                (sTYPE): "ackNeeded"
             ]
         ]))
     }
-    if (commandType in deviceInfo.deviceType.secureCommands) {
-        def globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
+    if (commandType in (List)deviceInfo.deviceType.secureCommands) {
+        Map globalPinCodes = deviceTypeFromSettings('GlobalPinCodes')
         if (!command.challenge?.pin) {
             throw new Exception(JsonOutput.toJson([
                 errorCode: "challengeNeeded",
                 challengeNeeded: [
-                    type: "pinNeeded"
+                    (sTYPE): "pinNeeded"
                 ]
             ]))
         } else {
             // check for a match in the global and device level pincodes and return the position if found, 0 otherwise
-            def positionMatchGlobal =
-                (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-            def positionMatchDevice =
-                (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + 1
-            def positionMatchTrait = checkDevicePinMatch(deviceInfo, command)
+            Integer positionMatchGlobal =
+                (globalPinCodes.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + i1
+            Integer positionMatchDevice =
+                (deviceInfo.deviceType.pinCodes*.value.findIndexOf { it ==~ command.challenge.pin }) + i1
+            Integer positionMatchTrait = checkDevicePinMatch(deviceInfo, command)
 
             // return pincode matches in the order of trait -> device -> global -> null
             if (positionMatchTrait != null) {
                 matchPosition = positionMatchTrait
-            } else if (positionMatchDevice != 0) {
+            } else if (positionMatchDevice != iZ) {
                 matchPosition = positionMatchDevice
-            } else if (positionMatchGlobal != 0) {
+            } else if (positionMatchGlobal != iZ) {
                 matchPosition = positionMatchGlobal
             } else {
                 // no matching pins
                 throw new Exception(JsonOutput.toJson([
                     errorCode: "challengeNeeded",
                     challengeNeeded: [
-                        type: "challengeFailedPinNeeded"
+                        (sTYPE): "challengeFailedPinNeeded"
                     ]
                 ]))
             }
@@ -2424,14 +2626,14 @@ private checkMfa(deviceInfo, commandType, command) {
     return matchPosition
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private controlScene(options) {
-    def allDevices = allKnownDevices()
-    def device = allDevices[options.deviceId].device
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private controlScene(Map options) {
+    Map<String,Map<String,Object>> allDevices = allKnownDevices()
+    def device = allDevices[(String)options.deviceId].device
     device."${options.command}"()
 }
 
-private issueCommandWithCodePosition(deviceInfo, command, codePosition, returnIndex) {
+private issueCommandWithCodePosition(Map deviceInfo, String command, Integer codePosition, Boolean returnIndex) {
     if (returnIndex) {
         deviceInfo.device."${command}"(codePosition)
     } else {
@@ -2439,9 +2641,9 @@ private issueCommandWithCodePosition(deviceInfo, command, codePosition, returnIn
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ActivateScene(deviceInfo, command) {
-    def sceneTrait = deviceInfo.deviceType.traits.Scene
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ActivateScene(Map deviceInfo, Map command) {
+    Map sceneTrait = deviceInfo.deviceType.traits.Scene
     if (sceneTrait.name == "hubitat_mode") {
         location.mode = deviceInfo.device.name
     } else {
@@ -2474,27 +2676,28 @@ private executeCommand_ActivateScene(deviceInfo, command) {
     return [[:], [:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ArmDisarm(deviceInfo, command) {
-    def armDisarmTrait = deviceInfo.deviceType.traits.ArmDisarm
-    def checkValue = "${armDisarmTrait.armValues["disarmed"]}"
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ArmDisarm(Map deviceInfo, Map command) {
+    Map armDisarmTrait = deviceInfo.deviceType.traits.ArmDisarm
+    String checkValue; checkValue = "${armDisarmTrait.armValues["disarmed"]}"
 
     // if the user canceled arming, issue the cancel command
     if (command.params.cancel) {
-        def codePosition = checkMfa(deviceInfo, "Cancel", command)
-        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.cancelCommand, codePosition,
-                     armDisarmTrait.returnUserIndexToDevice)
+        Integer codePosition = checkMfa(deviceInfo, "Cancel", command)
+        issueCommandWithCodePosition(deviceInfo, (String)armDisarmTrait.cancelCommand, codePosition,
+                (Boolean)armDisarmTrait.returnUserIndexToDevice)
     } else if (command.params.arm) {
         // Google sent back an alarm level, execute the matching alarm level command
-        def codePosition = checkMfa(deviceInfo, "${armDisarmTrait.armLevels[command.params.armLevel]}", command)
-        checkValue = "${armDisarmTrait.armValues[command.params.armLevel]}"
-        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands[command.params.armLevel], codePosition,
-                                     armDisarmTrait.returnUserIndexToDevice)
+        String armval= command.params.armLevel
+        Integer codePosition = checkMfa(deviceInfo, (String)armDisarmTrait.armLevels[armval], command)
+        checkValue = "${armDisarmTrait.armValues[armval]}"
+        issueCommandWithCodePosition(deviceInfo, (String)armDisarmTrait.armCommands[armval], codePosition,
+                (Boolean)armDisarmTrait.returnUserIndexToDevice)
     } else {
         // if Google returns arm=false, that indicates disarm
-        def codePosition = checkMfa(deviceInfo, "Disarm", command)
-        issueCommandWithCodePosition(deviceInfo, armDisarmTrait.armCommands["disarmed"], codePosition,
-                                     armDisarmTrait.returnUserIndexToDevice)
+        Integer codePosition = checkMfa(deviceInfo, "Disarm", command)
+        issueCommandWithCodePosition(deviceInfo, (String)armDisarmTrait.armCommands["disarmed"], codePosition,
+                (Boolean)armDisarmTrait.returnUserIndexToDevice)
     }
 
     return [
@@ -2509,14 +2712,14 @@ private executeCommand_ArmDisarm(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_BrightnessAbsolute(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_BrightnessAbsolute(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Brightness", command)
-    def brightnessTrait = deviceInfo.deviceType.traits.Brightness
-    def brightnessToSet = googlePercentageToHubitat(command.params.brightness)
+    Map brightnessTrait = deviceInfo.deviceType.traits.Brightness
+    Integer brightnessToSet = googlePercentageToHubitat(command.params.brightness)
     deviceInfo.device."${brightnessTrait.setBrightnessCommand}"(brightnessToSet)
     def checkValue = { value ->
-        if (brightnessToSet == 100) {
+        if (brightnessToSet == i100) {
             // Handle Z-Wave dimmers which only go to 99.
             return value >= 99
         }
@@ -2532,10 +2735,10 @@ private executeCommand_BrightnessAbsolute(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private executeCommand_GetCameraStream(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private List<Map> executeCommand_GetCameraStream(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Display", command)
-    def cameraStreamTrait = deviceInfo.deviceType.traits.CameraStream
+    Map cameraStreamTrait = deviceInfo.deviceType.traits.CameraStream
     def supportedStreamProtocols = command.params.SupportedStreamProtocols
 
     deviceInfo.device."${cameraStreamTrait.cameraStreamCommand}"(supportedStreamProtocols)
@@ -2543,20 +2746,20 @@ private executeCommand_GetCameraStream(deviceInfo, command) {
         [:],
         [
             cameraStreamAccessUrl:
-                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
+                deviceCurrentValue(deviceInfo, (String)deviceInfo.deviceType.traits.CameraStream.cameraStreamURLAttribute),
             cameraStreamProtocol:
-                deviceInfo.device.currentValue(deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute),
+                deviceCurrentValue(deviceInfo, (String)deviceInfo.deviceType.traits.CameraStream.cameraStreamProtocolAttribute)
         ],
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ColorAbsolute(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ColorAbsolute(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Color", command)
-    def colorTrait = deviceInfo.deviceType.traits.ColorSetting
+    Map colorTrait = deviceInfo.deviceType.traits.ColorSetting
 
-    def checkAttrs = [:]
-    def states = [color: command.params.color]
+    Map checkAttrs = [:]
+    Map states = [color: command.params.color]
     if (command.params.color.temperature) {
         def temperature = command.params.color.temperature
         deviceInfo.device."${colorTrait.setColorTemperatureCommand}"(temperature)
@@ -2571,11 +2774,11 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
     } else if (command.params.color.spectrumHSV) {
         def hsv = command.params.color.spectrumHSV
         // Google sends hue in degrees (0...360), but hubitat wants it in the range 0...100
-        def hue = Math.round(hsv.hue * 100 / 360)
+        def hue = Math.round(hsv.hue * i100 / 360)
         // Google sends saturation and value as floats in the range 0...1,
         // but Hubitat wants them in the range 0...100
-        def saturation = Math.round(hsv.saturation * 100)
-        def value = Math.round(hsv.value * 100)
+        def saturation = Math.round(hsv.saturation * i100)
+        def value = Math.round(hsv.value * i100)
 
         deviceInfo.device."${colorTrait.setColorCommand}"([
             hue:        hue,
@@ -2596,8 +2799,8 @@ private executeCommand_ColorAbsolute(deviceInfo, command) {
     return [checkAttrs, states]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_Dock(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_Dock(Map deviceInfo, Map command) {
     def dockTrait = deviceInfo.deviceType.traits.Dock
     def checkValue
     checkMfa(deviceInfo, "Dock", command)
@@ -2613,43 +2816,43 @@ private executeCommand_Dock(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_Charge(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_Charge(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Charge", command)
-    def energyStorageTrait = deviceInfo.deviceType.traits.EnergyStorage
+    Map energyStorageTrait = deviceInfo.deviceType.traits.EnergyStorage
     deviceInfo.device."${energyStorageTrait.chargeCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_Reverse(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_Reverse(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Reverse", command)
-    def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
+    Map fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
     deviceInfo.device."${fanSpeedTrait.reverseCommand}"()
     return [[:], [:]]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private executeCommand_Locate(deviceInfo, command) {
-    def locatorTrait = deviceInfo.deviceType.traits.Locator
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_Locate(Map deviceInfo, Map command) {
+    Map locatorTrait = deviceInfo.deviceType.traits.Locator
     checkMfa(deviceInfo, "Locate", command)
     deviceInfo.device."${locatorTrait.locatorCommand}"()
     return [[:], [:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_LockUnlock(deviceInfo, command) {
-    def lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_LockUnlock(Map deviceInfo, Map command) {
+    Map lockUnlockTrait = deviceInfo.deviceType.traits.LockUnlock
     def checkValue
     def codePosition
     if (command.params.lock) {
         codePosition = checkMfa(deviceInfo, "Lock", command)
         checkValue = lockUnlockTrait.lockedValue
-        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.lockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
+        issueCommandWithCodePosition(deviceInfo, (String)lockUnlockTrait.lockCommand, codePosition, (Boolean)lockUnlockTrait.returnUserIndexToDevice)
     } else {
         codePosition = checkMfa(deviceInfo, "Unlock", command)
         checkValue = { it != lockUnlockTrait.lockedValue }
-        issueCommandWithCodePosition(deviceInfo, lockUnlockTrait.unlockCommand, codePosition, lockUnlockTrait.returnUserIndexToDevice)
+        issueCommandWithCodePosition(deviceInfo, (String)lockUnlockTrait.unlockCommand, codePosition, (Boolean)lockUnlockTrait.returnUserIndexToDevice)
     }
 
     return [
@@ -2663,9 +2866,9 @@ private executeCommand_LockUnlock(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mute(deviceInfo, command) {
-    def volumeTrait = deviceInfo.deviceType.traits.Volume
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mute(Map deviceInfo, Map command) {
+    Map volumeTrait = deviceInfo.deviceType.traits.Volume
     def checkValue
     if (command.params.mute) {
         checkMfa(deviceInfo, "Mute", command)
@@ -2687,12 +2890,12 @@ private executeCommand_mute(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_OnOff(deviceInfo, command) {
-    def onOffTrait = deviceInfo.deviceType.traits.OnOff
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_OnOff(Map deviceInfo, Map command) {
+    Map onOffTrait = deviceInfo.deviceType.traits.OnOff
 
-    def on
-    def off
+    Closure on
+    Closure off
     if (onOffTrait.controlType == "single") {
         on = { device -> device."${onOffTrait.onOffCommand}"(onOffTrait.onParam) }
         off = { device -> device."${onOffTrait.onOffCommand}"(onOffTrait.offParam) }
@@ -2729,28 +2932,29 @@ private executeCommand_OnOff(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_OpenClose(deviceInfo, command) {
-    def openCloseTrait = deviceInfo.deviceType.traits.OpenClose
-    def openPercent = googlePercentageToHubitat(command.params.openPercent)
-    def checkValue
-    if (openCloseTrait.discreteOnlyOpenClose && openPercent == 100) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_OpenClose(Map deviceInfo, Map command) {
+    Map openCloseTrait = deviceInfo.deviceType.traits.OpenClose
+    Integer openPercent = googlePercentageToHubitat(command.params.openPercent)
+    Closure checkValue
+    if (openCloseTrait.discreteOnlyOpenClose && openPercent == i100) {
         checkMfa(deviceInfo, "Open", command)
         deviceInfo.device."${openCloseTrait.openCommand}"()
-        checkValue = { it in openCloseTrait.openValue.split(",") }
-    } else if (openCloseTrait.discreteOnlyOpenClose && openPercent == 0) {
+        checkValue = { it in ((String)openCloseTrait.openValue).split(",") }
+    } else if (openCloseTrait.discreteOnlyOpenClose && openPercent == iZ) {
         checkMfa(deviceInfo, "Close", command)
         deviceInfo.device."${openCloseTrait.closeCommand}"()
-        checkValue = { it in openCloseTrait.closedValue.split(",") }
+        checkValue = { it in ((String)openCloseTrait.closedValue).split(",") }
     } else {
         checkMfa(deviceInfo, "Set Position", command)
-        def hubitatOpenPercent = openPercent
+        Integer hubitatOpenPercent
+        hubitatOpenPercent = openPercent
         if (openCloseTrait.reverseDirection) {
-            hubitatOpenPercent = 100 - openPercent
+            hubitatOpenPercent = i100 - openPercent
         }
         deviceInfo.device."${openCloseTrait.openPositionCommand}"(hubitatOpenPercent)
         checkValue = { value ->
-            if (hubitatOpenPercent == 100) {
+            if (hubitatOpenPercent == i100) {
                 // Handle Z-Wave shades which only go to 99.
                 return value >= 99
             }
@@ -2767,18 +2971,18 @@ private executeCommand_OpenClose(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_Reboot(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_Reboot(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Reboot", command)
-    def rebootTrait = deviceInfo.deviceType.traits.Reboot
+    Map rebootTrait = deviceInfo.deviceType.traits.Reboot
     deviceInfo.device."${rebootTrait.rebootCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_RotateAbsolute(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_RotateAbsolute(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Rotate", command)
-    def rotationTrait = deviceInfo.deviceType.traits.Rotation
+    Map rotationTrait = deviceInfo.deviceType.traits.Rotation
     def position = command.params.rotationPercent
 
     deviceInfo.device."${rotationTrait.setRotationCommand}"(position)
@@ -2792,10 +2996,10 @@ private executeCommand_RotateAbsolute(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_SetFanSpeed(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_SetFanSpeed(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Fan Speed", command)
-    def fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
+    Map fanSpeedTrait = deviceInfo.deviceType.traits.FanSpeed
 
     if (fanSpeedTrait.supportsFanSpeedPercent && command.params.fanSpeedPercent) {
         def fanSpeedPercent = command.params.fanSpeedPercent
@@ -2823,10 +3027,10 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
     }
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_SetHumidity(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_SetHumidity(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Humidity", command)
-    def humiditySettingTrait = deviceInfo.deviceType.traits.HumiditySetting
+    Map humiditySettingTrait = deviceInfo.deviceType.traits.HumiditySetting
     def humiditySetpoint = command.params.humidity
 
     deviceInfo.device."${humiditySettingTrait.setHumidityCommand}"(humiditySetpoint)
@@ -2840,15 +3044,16 @@ private executeCommand_SetHumidity(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_SetTemperature(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_SetTemperature(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Temperature", command)
-    def temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
-    def setpoint = command.params.temperature
+    Map temperatureControlTrait = deviceInfo.deviceType.traits.TemperatureControl
+    def setpoint
+    setpoint = command.params.temperature
     if (temperatureControlTrait.temperatureUnit == "F") {
         setpoint = celsiusToFahrenheit(setpoint)
     }
-    setpoint = roundTo(setpoint, 1)
+    setpoint = roundTo(setpoint, i1)
 
     deviceInfo.device."${temperatureControlTrait.setTemperatureCommand}"(setpoint)
 
@@ -2862,16 +3067,16 @@ private executeCommand_SetTemperature(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_SetToggles(deviceInfo, command) {
-    def togglesTrait = deviceInfo.deviceType.traits.Toggles
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_SetToggles(Map deviceInfo, Map command) {
+    Map togglesTrait = deviceInfo.deviceType.traits.Toggles
     def togglesToSet = command.params.updateToggleSettings
 
-    def attrsToCheck = [:]
-    def states = [currentToggleSettings: togglesToSet]
+    Map attrsToCheck = [:]
+    Map states = [currentToggleSettings: togglesToSet]
     togglesToSet.each { toggleName, toggleValue ->
-        def toggle = togglesTrait.toggles.find { it.name == toggleName }
-        def fakeDeviceInfo = [
+        Map toggle = ((List<Map>)togglesTrait.toggles).find { it.name == toggleName }
+        Map fakeDeviceInfo = [
             deviceType: [
                 traits: [
                     // We're delegating to the OnOff handler, so we need
@@ -2881,23 +3086,23 @@ private executeCommand_SetToggles(deviceInfo, command) {
             ],
             device: deviceInfo.device
         ]
-        checkMfa(deviceInfo, "${toggle.labels[0]} ${toggleValue ? "On" : "Off"}", command)
-        def onOffResponse = executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
-        attrsToCheck << onOffResponse[0]
-        states << onOffResponse[1]
+        checkMfa(deviceInfo, "${((List)toggle.labels)[iZ]} ${toggleValue ? "On" : "Off"}", command)
+        List<Map> onOffResponse = executeCommand_OnOff(fakeDeviceInfo, [params: [on: toggleValue]])
+        attrsToCheck << onOffResponse[iZ]
+        states << onOffResponse[i1]
     }
     return [attrsToCheck, states]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_setVolume(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_setVolume(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Volume", command)
-    def volumeTrait = deviceInfo.deviceType.traits.Volume
+    Map volumeTrait = deviceInfo.deviceType.traits.Volume
     def volumeLevel = command.params.volumeLevel
     deviceInfo.device."${volumeTrait.setVolumeCommand}"(volumeLevel)
-    states = [currentVolume: volumeLevel]
+    Map states = [currentVolume: volumeLevel]
     if (deviceInfo.deviceType.traits.canMuteUnmute) {
-        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+        states.isMuted = deviceCurrentValue(deviceInfo, (String)volumeTrait.muteAttribute) == volumeTrait.mutedValue
     }
     return [
         [
@@ -2907,17 +3112,17 @@ private executeCommand_setVolume(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_SoftwareUpdate(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_SoftwareUpdate(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Software Update", command)
-    def softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
+    Map softwareUpdateTrait = deviceInfo.deviceType.traits.SoftwareUpdate
     deviceInfo.device."${softwareUpdateTrait.softwareUpdateCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_StartStop(deviceInfo, command) {
-    def startStopTrait = deviceInfo.deviceType.traits.StartStop
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_StartStop(Map deviceInfo, Map command) {
+    Map startStopTrait = deviceInfo.deviceType.traits.StartStop
     def checkValue
     if (command.params.start) {
         checkMfa(deviceInfo, "Start", command)
@@ -2938,10 +3143,10 @@ private executeCommand_StartStop(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_PauseUnpause(deviceInfo, command) {
-    def startStopTrait = deviceInfo.deviceType.traits.StartStop
-    def checkValue
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_PauseUnpause(Map deviceInfo, Map command) {
+    Map startStopTrait = deviceInfo.deviceType.traits.StartStop
+    def checkValue; checkValue = null
     if (command.params.pause) {
         checkMfa(deviceInfo, "Pause", command)
         deviceInfo.device."${startStopTrait.pauseCommand}"()
@@ -2957,20 +3162,21 @@ private executeCommand_PauseUnpause(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ThermostatTemperatureSetpoint(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Setpoint", command)
-    def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
-    def setpoint = command.params.thermostatTemperatureSetpoint
+    Map temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
+    def setpoint
+    setpoint = command.params.thermostatTemperatureSetpoint
     if (temperatureSettingTrait.temperatureUnit == "F") {
         setpoint = celsiusToFahrenheit(setpoint)
     }
 
-    setpoint = roundTo(setpoint, 1)
+    setpoint = roundTo(setpoint, i1)
 
-    def hubitatMode = deviceInfo.device.currentValue(temperatureSettingTrait.currentModeAttribute)
-    def googleMode = temperatureSettingTrait.hubitatToGoogleModeMap[hubitatMode]
-    def setSetpointCommand = temperatureSettingTrait.modeSetSetpointCommands[googleMode]
+    String hubitatMode = deviceCurrentValue(deviceInfo, (String)temperatureSettingTrait.currentModeAttribute)
+    String googleMode = temperatureSettingTrait.hubitatToGoogleModeMap[hubitatMode]
+    String setSetpointCommand = temperatureSettingTrait.modeSetSetpointCommands[googleMode]
     deviceInfo.device."${setSetpointCommand}"(setpoint)
 
     return [
@@ -2983,19 +3189,20 @@ private executeCommand_ThermostatTemperatureSetpoint(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ThermostatTemperatureSetRange(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Setpoint", command)
-    def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
-    def coolSetpoint = command.params.thermostatTemperatureSetpointHigh
-    def heatSetpoint = command.params.thermostatTemperatureSetpointLow
+    Map temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
+    def coolSetpoint, heatSetpoint
+    coolSetpoint = command.params.thermostatTemperatureSetpointHigh
+    heatSetpoint = command.params.thermostatTemperatureSetpointLow
     if (temperatureSettingTrait.temperatureUnit == "F") {
         coolSetpoint = celsiusToFahrenheit(coolSetpoint)
         heatSetpoint = celsiusToFahrenheit(heatSetpoint)
     }
-    coolSetpoint = roundTo(coolSetpoint, 1)
-    heatSetpoint = roundTo(heatSetpoint, 1)
-    def setRangeCommands = temperatureSettingTrait.modeSetSetpointCommands["heatcool"]
+    coolSetpoint = roundTo(coolSetpoint, i1)
+    heatSetpoint = roundTo(heatSetpoint, i1)
+    Map setRangeCommands = (Map)temperatureSettingTrait.modeSetSetpointCommands["heatcool"]
     deviceInfo.device."${setRangeCommands.setCoolingSetpointCommand}"(coolSetpoint)
     deviceInfo.device."${setRangeCommands.setHeatingSetpointCommand}"(heatSetpoint)
 
@@ -3012,12 +3219,12 @@ private executeCommand_ThermostatTemperatureSetRange(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_ThermostatSetMode(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_ThermostatSetMode(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Mode", command)
-    def temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
-    def googleMode = command.params.thermostatMode
-    def hubitatMode = temperatureSettingTrait.googleToHubitatModeMap[googleMode]
+    Map temperatureSettingTrait = deviceInfo.deviceType.traits.TemperatureSetting
+    String googleMode = command.params.thermostatMode
+    String hubitatMode = temperatureSettingTrait.googleToHubitatModeMap[googleMode]
     deviceInfo.device."${temperatureSettingTrait.setModeCommand}"(hubitatMode)
 
     return [
@@ -3030,130 +3237,133 @@ private executeCommand_ThermostatSetMode(deviceInfo, command) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_TimerAdjust(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_TimerAdjust(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Adjust", command)
-    def timerTrait = deviceInfo.deviceType.traits.Timer
+    Map timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerAdjustCommand}"()
-    def retVal = [:]
-    if (!deviceTrait.commandOnlyTimer) {
+    Map retVal; retVal = [:]
+    if (!timerTrait.commandOnlyTimer) {
         retVal = [
-            timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
+            timerTimeSec: deviceCurrentValue(deviceInfo, (String)timerTrait.timerRemainingSecAttribute)
         ]
     }
     return retVal
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_TimerCancel(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_TimerCancel(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Cancel", command)
-    def timerTrait = deviceInfo.deviceType.traits.Timer
+    Map timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerCancelCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_TimerPause(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_TimerPause(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Pause", command)
-    def timerTrait = deviceInfo.deviceType.traits.Timer
+    Map timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerPauseCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_TimerResume(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_TimerResume(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Resume", command)
-    def timerTrait = deviceInfo.deviceType.traits.Timer
+    Map timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerResumeCommand}"()
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_TimerStart(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map executeCommand_TimerStart(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Start", command)
-    def timerTrait = deviceInfo.deviceType.traits.Timer
+    Map timerTrait = deviceInfo.deviceType.traits.Timer
     deviceInfo.device."${timerTrait.timerStartCommand}"()
-    def retVal = [:]
-    if (!deviceTrait.commandOnlyTimer) {
+    Map retVal; retVal = [:]
+    if (!timerTrait.commandOnlyTimer) {
         retVal = [
-            timerTimeSec: device.currentValue(timerTrait.timerRemainingSecAttribute)
+            timerTimeSec: deviceCurrentValue(deviceInfo, (String)timerTrait.timerRemainingSecAttribute)
         ]
     }
     return retVal
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mediaNext(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mediaNext(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Next", command)
-    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    Map transportControlTrait = deviceInfo.deviceType.traits.TransportControl
     deviceInfo.device."${transportControlTrait.nextCommand}"()
     return [[:],[:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mediaPause(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mediaPause(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Pause", command)
-    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    Map transportControlTrait = deviceInfo.deviceType.traits.TransportControl
     deviceInfo.device."${transportControlTrait.pauseCommand}"()
     return [[:],[:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mediaPrevious(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mediaPrevious(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Previous", command)
-    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    Map transportControlTrait = deviceInfo.deviceType.traits.TransportControl
     deviceInfo.device."${transportControlTrait.previousCommand}"()
     return [[:],[:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mediaResume(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mediaResume(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Resume", command)
-    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    Map transportControlTrait = deviceInfo.deviceType.traits.TransportControl
     deviceInfo.device."${transportControlTrait.resumeCommand}"()
     return [[:],[:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_mediaStop(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_mediaStop(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Stop", command)
-    def transportControlTrait = deviceInfo.deviceType.traits.TransportControl
+    Map transportControlTrait = deviceInfo.deviceType.traits.TransportControl
     deviceInfo.device."${transportControlTrait.stopCommand}"()
     return [[:],[:]]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private executeCommand_volumeRelative(deviceInfo, command) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private List<Map> executeCommand_volumeRelative(Map deviceInfo, Map command) {
     checkMfa(deviceInfo, "Set Volume", command)
-    def volumeTrait = deviceInfo.deviceType.traits.Volume
-    def volumeChange = command.params.relativeSteps
+    Map volumeTrait = deviceInfo.deviceType.traits.Volume
+    Integer volumeChange = (Integer)command.params.relativeSteps
     def device = deviceInfo.device
 
-    def newVolume
+    Integer newVolume
 
     if (volumeTrait.canSetVolume) {
-        def currentVolume = device.currentValue(volumeTrait.volumeAttribute)
+        Integer currentVolume = (Integer)deviceCurrentValue(deviceInfo, (String)volumeTrait.volumeAttribute)
         // volumeChange will be negative when decreasing volume
         newVolume = currentVolume + volumeChange
         device."${volumeTrait.setVolumeCommand}"(newVolume)
     } else {
-        def volumeChangeCommand = volumeTrait.volumeUpCommand
+        def volumeChangeCommand
+        volumeChangeCommand = volumeTrait.volumeUpCommand
         if (volumeChange < 0) {
             volumeChangeCommand = volumeTrait.volumeDownCommand
         }
 
         device."${volumeChangeCommand}"()
-        for (int i = 1; i < Math.abs(volumeChange); i++) {
-            pauseExecution(100)
+        Integer i
+        for (i = i1; i < Math.abs(volumeChange); i++) {
+            pauseExecution(i100)
             device."${volumeChangeCommand}"()
         }
 
-        newVolume = device.currentValue(volumeTrait.volumeAttribute)
+        newVolume = (Integer)deviceCurrentValue(deviceInfo, (String)volumeTrait.volumeAttribute)
     }
 
-    states = [currentVolume: newVolume]
+    Map states; states = [:]
+    states += [currentVolume: newVolume]
     if (volumeTrait.canMuteUnmute) {
-        states.isMuted = deviceInfo.device.currentValue(volumeTrait.muteAttribute) == volumeTrait.mutedValue
+        states.isMuted = deviceCurrentValue(deviceInfo, (String)volumeTrait.muteAttribute) == volumeTrait.mutedValue
     }
 
     return [
@@ -3164,27 +3374,27 @@ private executeCommand_volumeRelative(deviceInfo, command) {
     ]
 }
 
-private handleQueryRequest(request) {
-    def resp = [
+private Map handleQueryRequest(request) {
+    Map resp = [
         requestId: request.JSON.requestId,
         payload: [
             devices: [:]
         ]
     ]
-    def requestedDevices = request.JSON.inputs[0].payload.devices
-    def knownDevices = allKnownDevices()
+    List<Map> requestedDevices = ((List<Map>)request.JSON.inputs)[0].payload.devices
+    Map knownDevices = allKnownDevices()
 
     requestedDevices.each { requestedDevice ->
-        def deviceInfo = knownDevices."${requestedDevice.id}"
-        def deviceState = [:]
+        Map deviceInfo = knownDevices."${requestedDevice.id}"
+        Map deviceState; deviceState = [:]
         if (deviceInfo != null) {
             try {
-                deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
+                deviceInfo.deviceType.traits.each { String traitType, Map deviceTrait ->
                     deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
                 }
                 deviceState.status = "SUCCESS"
             } catch (Exception ex) {
-                def deviceName = deviceInfo.device.label ?: deviceInfo.device.name
+                String deviceName = gtLbl(deviceInfo.device)
                 LOGGER.exception("Error retreiving state for device ${deviceName}", ex)
                 deviceState.status = "ERROR"
             }
@@ -3196,9 +3406,9 @@ private handleQueryRequest(request) {
     return resp
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_ArmDisarm(deviceTrait, device) {
-    def isArmed = device.currentValue(deviceTrait.armedAttribute) != deviceTrait.disarmedValue
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_ArmDisarm(Map deviceTrait, device) {
+    Boolean isArmed = device.currentValue(deviceTrait.armedAttribute) != deviceTrait.disarmedValue
     return [
         isArmed: isArmed,
         currentArmLevel: device.currentValue(deviceTrait.armLevelAttribute),
@@ -3206,22 +3416,22 @@ private deviceStateForTrait_ArmDisarm(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Brightness(deviceTrait, device) {
-    def brightness = hubitatPercentageToGoogle(device.currentValue(deviceTrait.brightnessAttribute))
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Brightness(Map deviceTrait, device) {
+    Integer brightness = hubitatPercentageToGoogle(device.currentValue(deviceTrait.brightnessAttribute))
     return [
         brightness: brightness,
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_CameraStream(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_CameraStream(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_ColorSetting(deviceTrait, device) {
-    def colorMode
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_ColorSetting(Map deviceTrait, device) {
+    String colorMode
     if (deviceTrait.fullSpectrum && deviceTrait.colorTemperature) {
         if (device.currentValue(deviceTrait.colorModeAttribute) == deviceTrait.fullSpectrumModeValue) {
             colorMode = "spectrum"
@@ -3234,27 +3444,28 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
         colorMode = "temperature"
     }
 
-    def deviceState = [
+    Map deviceState = [
         color: [:]
     ]
 
     if (colorMode == "spectrum") {
-        def hue = device.currentValue(deviceTrait.hueAttribute)
-        def saturation = device.currentValue(deviceTrait.saturationAttribute)
-        def value = device.currentValue(deviceTrait.levelAttribute)
+        def hue, saturation, value
+        hue = device.currentValue(deviceTrait.hueAttribute)
+        saturation = device.currentValue(deviceTrait.saturationAttribute)
+        value = device.currentValue(deviceTrait.levelAttribute)
 
         // Hubitat reports hue in the range 0...100, but Google wants it in degrees (0...360)
-        hue = Math.round(hue * 360 / 100)
+        hue = Math.round(hue * 360 / i100)
         // Hubitat reports saturation and value in the range 0...100 but
         // Google wants them as floats in the range 0...1
-        saturation = saturation / 100
-        value = value / 100
+        saturation = saturation / i100
+        value = value / i100
 
         deviceState.color = [
             spectrumHsv: [
                 hue: hue,
                 saturation: saturation,
-                value: value
+                (sVAL): value
             ]
         ]
     } else {
@@ -3266,16 +3477,16 @@ private deviceStateForTrait_ColorSetting(deviceTrait, device) {
     return deviceState
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Dock(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Dock(Map deviceTrait, device) {
     def isDocked = device.currentValue(deviceTrait.dockAttribute) == deviceTrait.dockValue
     return [
         isDocked:isDocked
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_EnergyStorage(Map deviceTrait, device) {
     def deviceState = [:]
     if (deviceTrait.descriptiveCapacityRemainingAttribute != null) {
         deviceState.descriptiveCapacityRemaining =
@@ -3309,11 +3520,11 @@ private deviceStateForTrait_EnergyStorage(deviceTrait, device) {
     return deviceState
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_FanSpeed(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_FanSpeed(Map deviceTrait, device) {
     def currentSpeedSetting = device.currentValue(deviceTrait.currentSpeedAttribute)
 
-    def fanSpeedState = [
+    Map fanSpeedState = [
         currentFanSpeedSetting: currentSpeedSetting
     ]
 
@@ -3325,42 +3536,42 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
     return fanSpeedState
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_HumiditySetting(deviceTrait, device) {
-    def deviceState = [
-        humidityAmbientPercent: Math.round(device.currentValue(deviceTrait.humidityAttribute))
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_HumiditySetting(Map deviceTrait, device) {
+    Map deviceState = [
+        humidityAmbientPercent: Math.round((Integer)device.currentValue(deviceTrait.humidityAttribute))
     ]
     if (!deviceTrait.queryOnly) {
-        deviceState.humiditySetpointPercent = Math.round(device.currentValue(deviceTrait.humiditySetpointAttribute))
+        deviceState.humiditySetpointPercent = Math.round((Integer)device.currentValue(deviceTrait.humiditySetpointAttribute))
     }
     return deviceState
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_Locator(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_Locator(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_LockUnlock(deviceTrait, device) {
-    def isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_LockUnlock(Map deviceTrait, device) {
+    Boolean isLocked = device.currentValue(deviceTrait.lockedUnlockedAttribute) == deviceTrait.lockedValue
     return [
         isLocked: isLocked,
         isJammed: false
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_MediaState(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_MediaState(Map deviceTrait, device) {
     return [
         activityState: device.currentValue(deviceTrait.activityStateAttribute)?.toUpperCase(),
         playbackState: device.currentValue(deviceTrait.playbackStateAttribute)?.toUpperCase()
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_OccupancySensing(deviceTrait, device) {
-    def occupancy = "UNOCCUPIED"
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_OccupancySensing(Map deviceTrait, device) {
+    String occupancy; occupancy = "UNOCCUPIED"
     if (device.currentValue(deviceTrait.occupancyAttribute) == deviceTrait.occupiedValue) {
         occupancy = "OCCUPIED"
     }
@@ -3369,9 +3580,9 @@ private deviceStateForTrait_OccupancySensing(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_OnOff(deviceTrait, device) {
-    def isOn
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_OnOff(Map deviceTrait, device) {
+    Boolean isOn
     if (deviceTrait.onValue) {
         isOn = device.currentValue(deviceTrait.onOffAttribute) == deviceTrait.onValue
     } else {
@@ -3382,20 +3593,20 @@ private deviceStateForTrait_OnOff(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_OpenClose(deviceTrait, device) {
-    def openPercent
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_OpenClose(Map deviceTrait, device) {
+    Integer openPercent
     if (deviceTrait.discreteOnlyOpenClose) {
-        def openValues = deviceTrait.openValue.split(",")
+        String[] openValues = ((String)deviceTrait.openValue).split(",")
         if (device.currentValue(deviceTrait.openCloseAttribute) in openValues) {
-            openPercent = 100
+            openPercent = i100
         } else {
-            openPercent = 0
+            openPercent = iZ
         }
     } else {
         openPercent = hubitatPercentageToGoogle(device.currentValue(deviceTrait.openCloseAttribute))
         if (deviceTrait.reverseDirection) {
-            openPercent = 100 - openPercent
+            openPercent = i100 - openPercent
         }
     }
     return [
@@ -3403,35 +3614,37 @@ private deviceStateForTrait_OpenClose(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_Reboot(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_Reboot(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Rotation(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Rotation(Map deviceTrait, device) {
     return [
         rotationPercent: device.currentValue(deviceTrait.rotationAttribute)
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_Scene(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_Scene(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_SensorState(deviceTrait, device) {
-    def deviceState = []
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_SensorState(Map deviceTrait, device) {
+    List deviceState = []
 
-    deviceTrait.sensorTypes.collect { sensorType ->
-        def deviceStateMapping = [:]
-        deviceStateMapping << [ name: sensorType.key ]
-        if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
-            deviceStateMapping << [ currentSensorState: device.currentValue(deviceTrait.sensorTypes[sensorType.key].descriptiveAttribute) ]
+    ((Map<String,Object>)deviceTrait.sensorTypes).collect { sensorType ->
+        String sname= (String)sensorType.key
+        Map deviceStateMapping = [:]
+        deviceStateMapping << [ (sNM): sname ]
+        Map dTSensorT= (Map)deviceTrait.sensorTypes[sname]
+        if (dTSensorT.reportsDescriptiveState) {
+            deviceStateMapping << [ currentSensorState: device.currentValue(dTSensorT.descriptiveAttribute) ]
         }
-        if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
-            deviceStateMapping << [ rawValue: device.currentValue(deviceTrait.sensorTypes[sensorType.key].numericAttribute) ]
+        if (dTSensorT.reportsNumericState) {
+            deviceStateMapping << [ rawValue: device.currentValue(dTSensorT.numericAttribute) ]
         }
         deviceState << deviceStateMapping
     }
@@ -3441,17 +3654,17 @@ private deviceStateForTrait_SensorState(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_SoftwareUpdate(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_SoftwareUpdate(Map deviceTrait, device) {
     return [
         lastSoftwareUpdateUnixTimestampSec:
             device.currentValue(deviceTrait.lastSoftwareUpdateUnixTimestampSecAttribute).toInteger()
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_StartStop(deviceTrait, device) {
-    def deviceState = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_StartStop(Map deviceTrait, device) {
+    Map deviceState = [
         isRunning: device.currentValue(deviceTrait.startStopAttribute) == deviceTrait.startValue
     ]
     if (deviceTrait.canPause) {
@@ -3460,75 +3673,82 @@ private deviceStateForTrait_StartStop(deviceTrait, device) {
     return deviceState
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_TemperatureControl(deviceTrait, device) {
-    def currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_TemperatureControl(Map deviceTrait, device) {
+    def currentTemperature
+    currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
     if (deviceTrait.temperatureUnit == "F") {
         currentTemperature = fahrenheitToCelsius(currentTemperature)
     }
-    def state = [
-        temperatureAmbientCelsius: roundTo(currentTemperature, 1)
+    Map states; states = [:]
+    states += [
+        temperatureAmbientCelsius: roundTo(currentTemperature, i1)
     ]
 
     if (deviceTrait.queryOnly) {
-        state.temperatureSetpointCelsius = currentTemperature
+        states.temperatureSetpointCelsius = currentTemperature
     } else {
-        def setpoint = device.currentValue(deviceTrait.currentSetpointAttribute)
+        def setpoint
+        setpoint = device.currentValue(deviceTrait.currentSetpointAttribute)
         if (deviceTrait.temperatureUnit == "F") {
             setpoint = fahrenheitToCelsius(setpoint)
         }
-        state.temperatureSetpointCelsius = roundTo(setpoint, 1)
+        states.temperatureSetpointCelsius = roundTo(setpoint, i1)
     }
 
-    return state
+    return states
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_TemperatureSetting(deviceTrait, device) {
-    def state = [:]
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_TemperatureSetting(Map deviceTrait, device) {
+    Map states
+    states = [:]
 
-    def currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
+    def currentTemperature
+    currentTemperature = device.currentValue(deviceTrait.currentTemperatureAttribute)
     if (deviceTrait.temperatureUnit == "F") {
         currentTemperature = fahrenheitToCelsius(currentTemperature)
     }
-    state.thermostatTemperatureAmbient = roundTo(currentTemperature, 1)
+    states.thermostatTemperatureAmbient = roundTo(currentTemperature, i1)
 
     if (deviceTrait.queryOnly) {
-        state.thermostatMode = "on"
-        state.thermostatTemperatureSetpoint = currentTemperature
+        states.thermostatMode = sON
+        states.thermostatTemperatureSetpoint = currentTemperature
     } else {
-        def hubitatMode = device.currentValue(deviceTrait.currentModeAttribute)
-        def googleMode = deviceTrait.hubitatToGoogleModeMap[hubitatMode]
-        state.thermostatMode = googleMode
+        String hubitatMode = device.currentValue(deviceTrait.currentModeAttribute)
+        String googleMode = deviceTrait.hubitatToGoogleModeMap[hubitatMode]
+        states.thermostatMode = googleMode
 
         if (googleMode == "heatcool") {
-            def heatingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].heatingSetpointAttribute
-            def coolingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].coolingSetpointAttribute
-            def heatSetpoint = device.currentValue(heatingSetpointAttr)
-            def coolSetpoint = device.currentValue(coolingSetpointAttr)
+            String heatingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].heatingSetpointAttribute
+            String coolingSetpointAttr = deviceTrait.modeSetpointAttributes[googleMode].coolingSetpointAttribute
+            def heatSetpoint, coolSetpoint
+            heatSetpoint = device.currentValue(heatingSetpointAttr)
+            coolSetpoint = device.currentValue(coolingSetpointAttr)
             if (deviceTrait.temperatureUnit == "F") {
                 heatSetpoint = fahrenheitToCelsius(heatSetpoint)
                 coolSetpoint = fahrenheitToCelsius(coolSetpoint)
             }
-            state.thermostatTemperatureSetpointHigh = roundTo(coolSetpoint, 1)
-            state.thermostatTemperatureSetpointLow = roundTo(heatSetpoint, 1)
+            states.thermostatTemperatureSetpointHigh = roundTo(coolSetpoint, i1)
+            states.thermostatTemperatureSetpointLow = roundTo(heatSetpoint, i1)
         } else {
-            def setpointAttr = deviceTrait.modeSetpointAttributes[googleMode]
+            String setpointAttr = deviceTrait.modeSetpointAttributes[googleMode]
             if (setpointAttr) {
-                def setpoint = device.currentValue(setpointAttr)
+                def setpoint
+                setpoint = device.currentValue(setpointAttr)
                 if (deviceTrait.temperatureUnit == "F") {
                     setpoint = fahrenheitToCelsius(setpoint)
                 }
-                state.thermostatTemperatureSetpoint = roundTo(setpoint, 1)
+                states.thermostatTemperatureSetpoint = roundTo(setpoint, i1)
             }
         }
     }
-    return state
+    return states
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Timer(deviceTrait, device) {
-    def deviceState = [:]
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Timer(Map deviceTrait, device) {
+    Map deviceState
     if (deviceTrait.commandOnlyTimer) {
         // report no running timers
         deviceState = [
@@ -3543,23 +3763,23 @@ private deviceStateForTrait_Timer(deviceTrait, device) {
     return deviceState
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Toggles(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Toggles(Map deviceTrait, device) {
     return [
-        currentToggleSettings: deviceTrait.toggles.collectEntries { toggle ->
+        currentToggleSettings: ((List<Map>)deviceTrait.toggles).collectEntries { Map toggle ->
             [toggle.name, deviceStateForTrait_OnOff(toggle, device).on]
         }
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private deviceStateForTrait_TransportControl(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map deviceStateForTrait_TransportControl(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deviceStateForTrait_Volume(deviceTrait, device) {
-    def deviceState = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map deviceStateForTrait_Volume(Map deviceTrait, device) {
+    Map deviceState = [
         currentVolume: device.currentValue(deviceTrait.volumeAttribute)
     ]
     if (deviceTrait.canMuteUnmute) {
@@ -3568,11 +3788,11 @@ private deviceStateForTrait_Volume(deviceTrait, device) {
     return deviceState
 }
 
-private parsePemPrivateKey(pem) {
+private PrivateKey parsePemPrivateKey(pem) {
     // Dynamically load these classes and use them via reflection because they weren't available prior
     // to Hubitat version 2.3.4.115 and so I can't import them at the top level and maintain any sort
     // of compatibility with older Hubitat versions
-    def KeyFactory
+    /* def KeyFactory
     def PKCS8EncodedKeySpec
     try {
         KeyFactory = "java.security.KeyFactory" as Class
@@ -3582,66 +3802,71 @@ private parsePemPrivateKey(pem) {
             "Unable to load required java.security classes.  Hub version is likely older than 2.3.4.115",
              ex
         )
-    }
+    } */
 
-    def rawB64 = pem
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replaceAll("\n", "")
-        .replace("-----END PRIVATE KEY-----", "")
+    def rawB64
+    try {
+        rawB64 = pem
+            .replace("-----BEGIN PRIVATE KEY-----", sBLK)
+            .replaceAll("\n", sBLK)
+            .replace("-----END PRIVATE KEY-----", sBLK)
+    } catch (ignored) {
+        throw new Exception("Invalid Google Service Account JSON and JWK JSON in Preferences")
+    }
 
     byte[] decoded = rawB64.decodeBase64()
 
-    def keyFactory = KeyFactory.getInstance("RSA")
+    KeyFactory keyFactory = KeyFactory.getInstance("RSA")
     return keyFactory.generatePrivate(PKCS8EncodedKeySpec.newInstance(decoded))
 }
 
-private generateSignedJWT() {
-    if (!settings.googleServiceAccountJSON) {
+private List generateSignedJWT() {
+    if (!gtSetStr('googleServiceAccountJSON')) {
         throw new Exception("Must generate and paste Google Service Account JSON and JWK JSON into Preferences")
     }
-    def keyJson = parseJson(settings.googleServiceAccountJSON)
+    Map keyJson = parseJson(gtSetStr('googleServiceAccountJSON'))
 
-    def header = new JWSHeader.Builder(JWSAlgorithm.RS256)
-        .keyID(keyJson.private_key_id)
+    JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
+        .keyID((String)keyJson.private_key_id)
         .type(JOSEObjectType.JWT)
         .build()
 
     // Must be in the past, so start 30 seconds ago.
-    def issueTime = Instant.now() - Duration.ofSeconds(30)
+    Instant issueTime = Instant.now() - Duration.ofSeconds(30)
 
     // Must be no more than 60 minutes in the future.
-    def expirationTime = issueTime + Duration.ofMinutes(60)
-    def payload = new JWTClaimsSet.Builder()
+    Instant expirationTime = issueTime + Duration.ofMinutes(60)
+    JWTClaimsSet payload = new JWTClaimsSet.Builder()
         .audience("https://oauth2.googleapis.com/token")
         .issueTime(Date.from(issueTime))
         .expirationTime(Date.from(expirationTime))
-        .issuer(keyJson.client_email)
+        .issuer((String)keyJson.client_email)
         .claim("scope", "https://www.googleapis.com/auth/homegraph")
         .build()
 
-    def signedJWT = new SignedJWT(header, payload)
-    def signer = new RSASSASigner(parsePemPrivateKey(keyJson.private_key))
+    SignedJWT signedJWT = new SignedJWT(header, payload)
+    RSASSASigner signer = new RSASSASigner(parsePemPrivateKey(keyJson.private_key))
     signedJWT.sign(signer)
 
-    return [signedJWT.serialize(), expiryTime]
+    return [signedJWT.serialize(), expirationTime]
 }
 
-private fetchOAuthToken() {
-    if (!settings.googleServiceAccountJSON) {
+private String fetchOAuthToken() {
+    if (!gtSetStr('googleServiceAccountJSON')) {
         LOGGER.debug("Can't refresh Report State auth without Google Service Account JSON")
-        return
+        return sNL
     }
-    def refreshAfterMillis = (new Date().toInstant() + Duration.ofMinutes(10)).toEpochMilli()
+    Long refreshAfterMillis = (new Date().toInstant() + Duration.ofMinutes(10)).toEpochMilli()
     if (state.oauthAccessToken &&
         state.oauthExpiryTimeMillis &&
         state.oauthExpiryTimeMillis >= refreshAfterMillis) {
-        LOGGER.debug("Re-using existing OAuth token (expires ${state.oauthExpiryTimeMillis})")
-        return state.oauthAccessToken
+        LOGGER.debug("Re-using existing OAuth token (expires ${state.oauthExpiryTimeMillis-now()})")
+        return (String)state.oauthAccessToken
     }
     LOGGER.debug("Generating JWT to exchange for OAuth token")
     def (signedJWT, signedJWTExpiryTime) = generateSignedJWT()
     LOGGER.debug("Generated signed JWT: ${signedJWT}")
-    params = [
+    Map params = [
         uri: "https://accounts.google.com/o/oauth2/token",
         body: [
             grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -3649,24 +3874,29 @@ private fetchOAuthToken() {
         ],
         requestContentType: "application/x-www-form-urlencoded",
     ]
-    LOGGER.debug("Fetching OAuth token with signed JWT: ${params}")
+    //LOGGER.debug("Fetching OAuth token with signed JWT: ${params}")
+    LOGGER.debug("Fetching OAuth token with signed JWT")
+    String token; token=sNL
     httpPost(params) { resp ->
+        token= resp.data.access_token
+        //LOGGER.debug("Got OAuth token response $resp.data")
         LOGGER.debug("Got OAuth token response")
-        state.oauthAccessToken = resp.data.access_token
-        def oauthExpiryTimeMillis = (Instant.now() + Duration.ofSeconds(resp.data.expires_in)).toEpochMilli()
+        atomicState.oauthAccessToken = token
+        state.oauthAccessToken = token
+        Long oauthExpiryTimeMillis = (Instant.now() + Duration.ofSeconds((Long)resp.data.expires_in)).toEpochMilli()
         LOGGER.debug("oauthExpiryTimeMillis: ${oauthExpiryTimeMillis}")
+        atomicState.oauthExpiryTimeMillis = oauthExpiryTimeMillis
         state.oauthExpiryTimeMillis = oauthExpiryTimeMillis
     }
-    return state.oauthAccessToken
+    return token
 }
 
-private getAgentUserId() {
-    return "${hubUID}_${app?.id}"
+private String getAgentUserId() {
+    return "${hubUID}_${app?.id}".toString()
 }
 
-private handleSyncRequest(request) {
-    def rooms = this.rooms?.collectEntries { [(it.id): it] } ?: [:]
-    def resp = [
+private Map handleSyncRequest(request) {
+    Map resp = [
         requestId: request.JSON.requestId,
         payload: [
             agentUserId: agentUserId,
@@ -3674,29 +3904,30 @@ private handleSyncRequest(request) {
         ]
     ]
 
-    def willReportState = settings.reportState && settings.googleServiceAccountJSON != null
+    Boolean willReportState = gtSetB('reportState') && gtSetStr('googleServiceAccountJSON') != sNL
+    Map<String,Map> rooms = ((List<Map>)app.getRooms()).collectEntries { [(it.id): it] } ?: [:]
 
-    def deviceIdsEncountered = [] as Set
-    (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
-        def traits = deviceType.traits.collect { traitType, deviceTrait ->
-            "action.devices.traits.${traitType}"
+    Set deviceIdsEncountered = [] as Set
+    (deviceTypes() + [modeSceneDeviceType()] as List<Map>).each { Map deviceType ->
+        List<String> traits = deviceType.traits.collect { traitType, deviceTrait ->
+            "action.devices.traits.${traitType}".toString()
         }
         deviceType.devices.each { device ->
-            def attributes = [:]
-            deviceType.traits.each { traitType, deviceTrait ->
+            Map attributes; attributes = [:]
+            ((Map<String,Map>)deviceType.traits).each { String traitType, Map deviceTrait ->
                 attributes += "attributesForTrait_${traitType}"(deviceTrait, device)
             }
-            def deviceName = device.label ?: device.name
+            String deviceName = gtLbl(device)
             if (deviceIdsEncountered.contains(device.id)) {
                 LOGGER.warn(
                     "The device ${deviceName} with ID ${device.id} is selected as multiple device types. " +
                     "Ignoring configuration from the device type ${deviceType.display}!"
                 )
             } else {
-                def roomName = null
+                String roomName; roomName = sNL
                 try {
-                    def roomId = device.device?.roomId
-                    roomName = rooms[roomId]?.name
+                    String roomId = device.getRoomId()?.toString()
+                    roomName = roomId ? rooms[roomId]?.name : sBLK
                 } catch (MissingPropertyException) {
                     // The roomId property isn't defined prior to Hubitat 2.2.7,
                     // so ignore the error; we just can't report a room on this
@@ -3705,11 +3936,11 @@ private handleSyncRequest(request) {
                 deviceIdsEncountered.add(device.id)
                 resp.payload.devices << [
                     id: device.id,
-                    type: "action.devices.types.${deviceType.googleDeviceType}",
+                    (sTYPE): "action.devices.types.${deviceType.googleDeviceType}",
                     traits: traits,
-                    name: [
+                    (sNM): [
                         defaultNames: [device.name],
-                        name: device.label ?: device.name
+                        (sNM): gtLbl(device)
                     ],
                     willReportState: willReportState,
                     attributes: attributes,
@@ -3722,12 +3953,12 @@ private handleSyncRequest(request) {
     return resp
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_ArmDisarm(deviceTrait, device) {
-    def armDisarmAttrs = [
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_ArmDisarm(Map deviceTrait, device) {
+    Map armDisarmAttrs = [
         availableArmLevels: [
-            levels: deviceTrait.armLevels.collect { hubitatLevelName, googleLevelNames ->
-                def levels = googleLevelNames.split(",")
+            levels: ((Map<String,String>)deviceTrait.armLevels).collect { String hubitatLevelName, String googleLevelNames ->
+                String[] levels = googleLevelNames.split(",")
                 [
                     level_name: hubitatLevelName,
                     level_values: [
@@ -3744,22 +3975,22 @@ private attributesForTrait_ArmDisarm(deviceTrait, device) {
     return armDisarmAttrs
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Brightness(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_Brightness(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_CameraStream(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_CameraStream(Map deviceTrait, device) {
     return [
         cameraStreamSupportedProtocols: device.currentValue(deviceTrait.cameraSupportedProtocolsAttribute).tokenize(','),
         cameraStreamNeedAuthToken:      false,
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_ColorSetting(deviceTrait, device) {
-    def colorAttrs = [:]
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_ColorSetting(Map deviceTrait, device) {
+    Map colorAttrs = [:]
     if (deviceTrait.fullSpectrum) {
         colorAttrs << [
             colorModel: "hsv"
@@ -3776,13 +4007,13 @@ private attributesForTrait_ColorSetting(deviceTrait, device) {
     return colorAttrs
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Dock(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_Dock(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_EnergyStorage(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_EnergyStorage(Map deviceTrait, device) {
     return [
         queryOnlyEnergyStorage:         deviceTrait.queryOnlyEnergyStorage,
         energyStorageDistanceUnitForUX: deviceTrait.energyStorageDistanceUnitForUX,
@@ -3790,12 +4021,12 @@ private attributesForTrait_EnergyStorage(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_FanSpeed(deviceTrait, device) {
-    def fanSpeedAttrs = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_FanSpeed(Map deviceTrait, device) {
+    Map fanSpeedAttrs = [
         availableFanSpeeds: [
-            speeds: deviceTrait.fanSpeeds.collect { hubitatLevelName, googleLevelNames ->
-                def speeds = googleLevelNames.split(",")
+            speeds: ((Map<String,String>)deviceTrait.fanSpeeds).collect { String hubitatLevelName, String googleLevelNames ->
+                String[] speeds = googleLevelNames.split(",")
                 [
                     speed_name: hubitatLevelName,
                     speed_values: [
@@ -3815,9 +4046,9 @@ private attributesForTrait_FanSpeed(deviceTrait, device) {
     return fanSpeedAttrs
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_HumiditySetting(deviceTrait, device) {
-    def attrs = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_HumiditySetting(Map deviceTrait, device) {
+    Map attrs = [
         queryOnlyHumiditySetting: deviceTrait.queryOnly
     ]
     if (deviceTrait.humidityRange) {
@@ -3829,26 +4060,26 @@ private attributesForTrait_HumiditySetting(deviceTrait, device) {
     return attrs
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Locator(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_Locator(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_LockUnlock(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_LockUnlock(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_MediaState(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_MediaState(Map deviceTrait, device) {
     return [
         supportActivityState: deviceTrait.supportActivityState,
         supportPlaybackState: deviceTrait.supportPlaybackState
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_OccupancySensing(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_OccupancySensing(Map deviceTrait, device) {
     return [
         occupancySensorConfiguration: [
             [
@@ -3861,26 +4092,26 @@ private attributesForTrait_OccupancySensing(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_OnOff(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_OnOff(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_OpenClose(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_OpenClose(Map deviceTrait, device) {
     return [
         discreteOnlyOpenClose: deviceTrait.discreteOnlyOpenClose,
         queryOnlyOpenClose: deviceTrait.queryOnly
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_Reboot(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_Reboot(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Rotation(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_Rotation(Map deviceTrait, device) {
     return [
         supportsContinuousRotation: deviceTrait.continuousRotation,
         supportsPercent:            true,
@@ -3888,31 +4119,32 @@ private attributesForTrait_Rotation(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Scene(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_Scene(Map deviceTrait, device) {
     return [
         sceneReversible: deviceTrait.sceneReversible
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_SensorState(deviceTrait, device) {
-    def sensorStateAttrs = []
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_SensorState(Map deviceTrait, device) {
+    List sensorStateAttrs = []
 
-    deviceTrait.sensorTypes.collect { sensorType ->
-        def supportedStateAttrs = [:]
-        supportedStateAttrs << [ name: sensorType.key ]
-        if (deviceTrait.sensorTypes[sensorType.key].reportsDescriptiveState) {
+    ((Map)deviceTrait.sensorTypes).collect { sensorType ->
+        Map supportedStateAttrs = [:]
+        String sname= sensorType.key
+        supportedStateAttrs << [ (sNM): sname ]
+        if (deviceTrait.sensorTypes[sname].reportsDescriptiveState) {
             supportedStateAttrs << [
                 descriptiveCapabilities: [
-                    availableStates: deviceTrait.sensorTypes[sensorType.key].descriptiveState,
+                    availableStates: deviceTrait.sensorTypes[sname].descriptiveState,
                 ]
             ]
         }
-        if (deviceTrait.sensorTypes[sensorType.key].reportsNumericState) {
+        if (deviceTrait.sensorTypes[sname].reportsNumericState) {
             supportedStateAttrs << [
                 numericCapabilities: [
-                    rawValueUnit: deviceTrait.sensorTypes[sensorType.key].numericUnits,
+                    rawValueUnit: deviceTrait.sensorTypes[sname].numericUnits,
                 ]
             ]
         }
@@ -3924,21 +4156,21 @@ private attributesForTrait_SensorState(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_SoftwareUpdate(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_SoftwareUpdate(Map deviceTrait, device) {
     return [:]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_StartStop(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_StartStop(Map deviceTrait, device) {
     return [
         pausable: deviceTrait.canPause
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureControl(deviceTrait, device) {
-    def attrs = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_TemperatureControl(Map deviceTrait, device) {
+    Map attrs = [
         temperatureUnitForUX:        deviceTrait.temperatureUnit,
         queryOnlyTemperatureControl: deviceTrait.queryOnly
     ]
@@ -3953,26 +4185,27 @@ private attributesForTrait_TemperatureControl(deviceTrait, device) {
             ]
         }
         attrs.temperatureRange = [
-            minThresholdCelsius: roundTo(minTemperature, 1),
-            maxThresholdCelsius: roundTo(maxTemperature, 1)
+            minThresholdCelsius: roundTo(minTemperature, i1),
+            maxThresholdCelsius: roundTo(maxTemperature, i1)
         ]
 
         if (deviceTrait.temperatureStep) {
-            def temperatureStep = deviceTrait.temperatureStep
+            def temperatureStep
+            temperatureStep = deviceTrait.temperatureStep
             if (deviceTrait.temperatureUnit == "F") {
                 // 5/9 is the scale factor for converting from F to C
                 temperatureStep = temperatureStep * (5 / 9)
             }
-            attrs.temperatureStepCelsius = roundTo(temperatureStep, 1)
+            attrs.temperatureStepCelsius = roundTo(temperatureStep, i1)
         }
     }
 
     return attrs
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_TemperatureSetting(deviceTrait, device) {
-    def attrs = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_TemperatureSetting(Map deviceTrait, device) {
+    Map attrs = [
         thermostatTemperatureUnit:   deviceTrait.temperatureUnit,
         queryOnlyTemperatureSetting: deviceTrait.queryOnly
     ]
@@ -3981,15 +4214,16 @@ private attributesForTrait_TemperatureSetting(deviceTrait, device) {
         attrs.availableThermostatModes = deviceTrait.modes
 
         if (deviceTrait.setRangeMin != null) {
-            def minSetpoint = deviceTrait.setRangeMin
-            def maxSetpoint = deviceTrait.setRangeMax
+            def minSetpoint, maxSetpoint
+            minSetpoint = deviceTrait.setRangeMin
+            maxSetpoint = deviceTrait.setRangeMax
             if (deviceTrait.temperatureUnit == "F") {
                 minSetpoint = fahrenheitToCelsius(minSetpoint)
                 maxSetpoint = fahrenheitToCelsius(maxSetpoint)
             }
             attrs.thermostatTemperatureRange = [
-                minThresholdCelsius: roundTo(minSetpoint, 1),
-                maxThresholdCelsius: roundTo(maxSetpoint, 1)
+                minThresholdCelsius: roundTo(minSetpoint, i1),
+                maxThresholdCelsius: roundTo(maxSetpoint, i1)
             ]
         }
 
@@ -4004,20 +4238,20 @@ private attributesForTrait_TemperatureSetting(deviceTrait, device) {
     return attrs
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Timer(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_Timer(Map deviceTrait, device) {
     return [
         maxTimerLimitSec:    deviceTrait.maxTimerLimitSec,
         commandOnlyTimer:    deviceTrait.commandOnlyTimer,
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Toggles(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_Toggles(Map deviceTrait, device) {
     return [
-        availableToggles: deviceTrait.toggles.collect { toggle ->
+        availableToggles: ((List<Map>)deviceTrait.toggles).collect { toggle ->
             [
-                name: toggle.name,
+                (sNM): toggle.name,
                 name_values: [
                     [
                         name_synonym: toggle.labels,
@@ -4029,26 +4263,26 @@ private attributesForTrait_Toggles(deviceTrait, device) {
     ]
 }
 
-@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
-private attributesForTrait_TransportControl(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused', 'UnusedPrivateMethodParameter'])
+private Map attributesForTrait_TransportControl(Map deviceTrait, device) {
     return [
         transportControlSupportedCommands: ["NEXT", "PAUSE", "PREVIOUS", "RESUME", "STOP"]
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private attributesForTrait_Volume(deviceTrait, device) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map attributesForTrait_Volume(Map deviceTrait, device) {
     return [
-        volumeMaxLevel:         100,
+        volumeMaxLevel:         i100,
         volumeCanMuteAndUnmute: deviceTrait.canMuteUnmute,
         levelStepSize:          deviceTrait.volumeStep
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_ArmDisarm(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_ArmDisarm(String traitName) {
 
-    def armDisarmMapping = [
+    Map armDisarmMapping = [
         armedAttribute:                 settings."${traitName}.armedAttribute",
         armLevelAttribute:              settings."${traitName}.armLevelAttribute",
         exitAllowanceAttribute:         settings."${traitName}.exitAllowanceAttribute",
@@ -4061,7 +4295,7 @@ private traitFromSettings_ArmDisarm(traitName) {
         commands:                       ["Cancel", "Disarm", "Arm Home", "Arm Night", "Arm Away"]
     ]
 
-    settings."${traitName}.armLevels"?.each { armLevel ->
+    settings."${traitName}.armLevels"?.each { String armLevel ->
         armDisarmMapping.armLevels[armLevel] = settings."${traitName}.armLevels.${armLevel}.googleNames"
         armDisarmMapping.armCommands[armLevel] = settings."${traitName}.armCommands.${armLevel}.commandName"
         armDisarmMapping.armValues[armLevel] = settings."${traitName}.armValues.${armLevel}.value"
@@ -4070,8 +4304,8 @@ private traitFromSettings_ArmDisarm(traitName) {
     return armDisarmMapping
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Brightness(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Brightness(String traitName) {
     return [
         brightnessAttribute:  settings."${traitName}.brightnessAttribute",
         setBrightnessCommand: settings."${traitName}.setBrightnessCommand",
@@ -4079,8 +4313,8 @@ private traitFromSettings_Brightness(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_CameraStream(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_CameraStream(String traitName) {
     return [
         cameraStreamURLAttribute:           settings."${traitName}.cameraStreamURLAttribute",
         cameraSupportedProtocolsAttribute:  settings."${traitName}.cameraSupportedProtocolsAttribute",
@@ -4090,9 +4324,9 @@ private traitFromSettings_CameraStream(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_ColorSetting(traitName) {
-    def deviceTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_ColorSetting(String traitName) {
+    Map deviceTrait = [
         fullSpectrum:     settings."${traitName}.fullSpectrum",
         colorTemperature: settings."${traitName}.colorTemperature",
         commands:         ["Set Color"]
@@ -4125,8 +4359,8 @@ private traitFromSettings_ColorSetting(traitName) {
     return deviceTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Dock(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Dock(String traitName) {
     return [
         dockAttribute: settings."${traitName}.dockAttribute",
         dockValue:     settings."${traitName}.dockValue",
@@ -4135,9 +4369,9 @@ private traitFromSettings_Dock(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_EnergyStorage(traitName) {
-    def energyStorageTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_EnergyStorage(String traitName) {
+    Map energyStorageTrait = [
         energyStorageDistanceUnitForUX:           settings."${traitName}.energyStorageDistanceUnitForUX",
         isRechargeable:                           settings."${traitName}.isRechargeable",
         queryOnlyEnergyStorage:                   settings."${traitName}.queryOnlyEnergyStorage",
@@ -4160,9 +4394,9 @@ private traitFromSettings_EnergyStorage(traitName) {
     return energyStorageTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_FanSpeed(traitName) {
-    def fanSpeedMapping = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_FanSpeed(String traitName) {
+    Map fanSpeedMapping = [
         currentSpeedAttribute: settings."${traitName}.currentSpeedAttribute",
         setFanSpeedCommand:    settings."${traitName}.setFanSpeedCommand",
         fanSpeeds:             [:],
@@ -4178,16 +4412,16 @@ private traitFromSettings_FanSpeed(traitName) {
         fanSpeedMapping.setFanSpeedPercentCommand = settings."${traitName}.setFanSpeedPercentCommand"
         fanSpeedMapping.currentFanSpeedPercent = settings."${traitName}.currentFanSpeedPercent"
     }
-    settings."${traitName}.fanSpeeds"?.each { fanSpeed ->
+    settings."${traitName}.fanSpeeds"?.each { String fanSpeed ->
         fanSpeedMapping.fanSpeeds[fanSpeed] = settings."${traitName}.speed.${fanSpeed}.googleNames"
     }
 
     return fanSpeedMapping
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_HumiditySetting(traitName) {
-    def humidityTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_HumiditySetting(String traitName) {
+    Map humidityTrait = [
         humidityAttribute: settings."${traitName}.humidityAttribute",
         queryOnly:         settings."${traitName}.queryOnly",
         commands:          []
@@ -4199,7 +4433,7 @@ private traitFromSettings_HumiditySetting(traitName) {
         ]
         humidityTrait.commands << "Set Humidity"
 
-        def humidityRange = [
+        Map humidityRange = [
             min: settings."${traitName}.humidityRange.min",
             max: settings."${traitName}.humidityRange.max"
         ]
@@ -4212,16 +4446,16 @@ private traitFromSettings_HumiditySetting(traitName) {
     return humidityTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Locator(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Locator(String traitName) {
     return [
         locatorCommand:   settings."${traitName}.locatorCommand",
         commands:         ["Locate"]
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_LockUnlock(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_LockUnlock(String traitName) {
     return [
         lockedUnlockedAttribute: settings."${traitName}.lockedUnlockedAttribute",
         lockedValue:             settings."${traitName}.lockedValue",
@@ -4232,8 +4466,8 @@ private traitFromSettings_LockUnlock(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_MediaState(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_MediaState(String traitName) {
     return [
         supportActivityState:     settings."${traitName}.supportActivityState",
         supportPlaybackState:     settings."${traitName}.supportPlaybackState",
@@ -4243,8 +4477,8 @@ private traitFromSettings_MediaState(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_OccupancySensing(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_OccupancySensing(String traitName) {
     return [
         occupancySensorType:                settings."${traitName}.occupancySensorType",
         occupancyAttribute:                 settings."${traitName}.occupancyAttribute",
@@ -4256,9 +4490,9 @@ private traitFromSettings_OccupancySensing(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_OnOff(traitName) {
-    def deviceTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_OnOff(String traitName) {
+    Map<String,Object> deviceTrait = [
         onOffAttribute: settings."${traitName}.onOffAttribute",
         onValue:        settings."${traitName}.onValue",
         offValue:       settings."${traitName}.offValue",
@@ -4266,7 +4500,7 @@ private traitFromSettings_OnOff(traitName) {
         commands:       ["On", "Off"]
     ]
 
-    if (deviceTrait.controlType == "single") {
+    if ((String)deviceTrait.controlType == "single") {
         deviceTrait.onOffCommand = settings."${traitName}.onOffCommand"
         deviceTrait.onParam = settings."${traitName}.onParameter"
         deviceTrait.offParam = settings."${traitName}.offParameter"
@@ -4277,21 +4511,21 @@ private traitFromSettings_OnOff(traitName) {
     return deviceTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_OpenClose(traitName) {
-    def openCloseTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_OpenClose(String traitName) {
+    Map openCloseTrait = [
         discreteOnlyOpenClose: settings."${traitName}.discreteOnlyOpenClose",
         openCloseAttribute:    settings."${traitName}.openCloseAttribute",
         // queryOnly may be null for device traits defined with older versions,
         // so coerce it to a boolean
-        queryOnly:             settings."${traitName}.queryOnly" as boolean,
+        queryOnly:             settings."${traitName}.queryOnly" as Boolean,
         commands:              []
     ]
     if (openCloseTrait.discreteOnlyOpenClose) {
         openCloseTrait.openValue = settings."${traitName}.openValue"
         openCloseTrait.closedValue = settings."${traitName}.closedValue"
     } else {
-        openCloseTrait.reverseDirection = settings."${traitName}.reverseDirection" as boolean
+        openCloseTrait.reverseDirection = settings."${traitName}.reverseDirection" as Boolean
     }
 
     if (!openCloseTrait.queryOnly) {
@@ -4308,16 +4542,16 @@ private traitFromSettings_OpenClose(traitName) {
     return openCloseTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Reboot(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Reboot(String traitName) {
     return [
         rebootCommand:      settings."${traitName}.rebootCommand",
         commands:           ["Reboot"]
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Rotation(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Rotation(String traitName) {
     return [
         rotationAttribute:  settings."${traitName}.rotationAttribute",
         setRotationCommand: settings."${traitName}.setRotationCommand",
@@ -4326,9 +4560,9 @@ private traitFromSettings_Rotation(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Scene(traitName) {
-    def sceneTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Scene(String traitName) {
+    Map sceneTrait = [
         activateCommand: settings."${traitName}.activateCommand",
         sceneReversible: settings."${traitName}.sceneReversible",
         commands:        ["Activate Scene"]
@@ -4340,23 +4574,23 @@ private traitFromSettings_Scene(traitName) {
     return sceneTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_SensorState(traitName) {
-    def sensorStateMapping = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_SensorState(String traitName) {
+    Map sensorStateMapping = [
         sensorTypes:                    [:],
         commands:                       []
     ]
 
-    settings."${traitName}.sensorTypes"?.each { sensorType ->
+    settings."${traitName}.sensorTypes"?.each { String sensorType ->
         // default to true
-        def sensorMapping = [
+        Map sensorMapping = [
              reportsDescriptiveState:            true,
              reportsNumericState:                true,
         ]
 
         // build the descriptive traits
         if (GOOGLE_SENSOR_STATES[sensorType].descriptiveState) {
-             if (GOOGLE_SENSOR_STATES[sensorType].numericAttribute != "") {
+             if (GOOGLE_SENSOR_STATES[sensorType].numericAttribute != sBLK) {
                   sensorMapping.reportsDescriptiveState = settings."${traitName}.sensorTypes.${sensorType}.reportsDescriptiveState"
              }
              // assign a default if undefined
@@ -4375,7 +4609,7 @@ private traitFromSettings_SensorState(traitName) {
         }
         // build the numeric traits
         if (GOOGLE_SENSOR_STATES[sensorType].numericAttribute) {
-             if (GOOGLE_SENSOR_STATES[sensorType].descriptiveState != "") {
+             if (GOOGLE_SENSOR_STATES[sensorType].descriptiveState != sBLK) {
                   sensorMapping.reportsNumericState = settings."${traitName}.sensorTypes.${sensorType}.reportsNumericState"
              }
              // assign a default if undefined
@@ -4398,8 +4632,8 @@ private traitFromSettings_SensorState(traitName) {
     return sensorStateMapping
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_SoftwareUpdate(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_SoftwareUpdate(String traitName) {
     return [
         lastSoftwareUpdateUnixTimestampSecAttribute:
                                   settings."${traitName}.lastSoftwareUpdateUnixTimestampSecAttribute",
@@ -4408,13 +4642,14 @@ private traitFromSettings_SoftwareUpdate(traitName) {
     ]
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_StartStop(traitName) {
-    def canPause = settings."${traitName}.canPause"
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_StartStop(String traitName) {
+    Boolean canPause
+    canPause = settings."${traitName}.canPause"
     if (canPause == null) {
         canPause = true
     }
-    def  startStopTrait = [
+    Map  startStopTrait = [
          startStopAttribute: settings."${traitName}.startStopAttribute",
          startValue:         settings."${traitName}.startValue",
          stopValue:          settings."${traitName}.stopValue",
@@ -4434,9 +4669,9 @@ private traitFromSettings_StartStop(traitName) {
     return startStopTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_TemperatureControl(traitName) {
-    def tempControlTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_TemperatureControl(String traitName) {
+    Map<String,Object> tempControlTrait = [
         temperatureUnit:             settings."${traitName}.temperatureUnit",
         currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute",
         queryOnly:                   settings."${traitName}.queryOnly",
@@ -4465,38 +4700,40 @@ private traitFromSettings_TemperatureControl(traitName) {
     return tempControlTrait
 }
 
-private thermostatSetpointAttributeForMode(traitName, mode) {
-    def attrPref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
+private thermostatSetpointAttributeForMode(String traitName, String mode) {
+    Map attrPref = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]
     if (!attrPref) {
         return null
     }
-    def value = settings."${traitName}.${attrPref.name}"
+    def value
+    value = settings."${traitName}.${attrPref.name}"
     // Device types created with older versions of the app may not have this set,
     // so fall back if the mode-based setting isn't set
     value = value ?: settings."${traitName}.setpointAttribute"
     return value
 }
 
-private thermostatSetpointCommandForMode(traitName, mode) {
-    def commandPref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
+private thermostatSetpointCommandForMode(String traitName, String mode) {
+    Map commandPref = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]
     if (!commandPref) {
         return null
     }
-    def value = settings."${traitName}.${commandPref.name}"
+    def value
+    value = settings."${traitName}.${commandPref.name}"
     // Device types created with older versions of the app may not have this set,
     // so fall back if the mode-based setting isn't set
     value = value ?: settings."${traitName}.setSetpointCommand"
     return value
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_TemperatureSetting(traitName) {
-    def tempSettingTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_TemperatureSetting(String traitName) {
+    Map tempSettingTrait = [
         temperatureUnit:             settings."${traitName}.temperatureUnit",
         currentTemperatureAttribute: settings."${traitName}.currentTemperatureAttribute",
         // queryOnly may be null for device traits defined with older versions,
         // so coerce it to a boolean
-        queryOnly:                   settings."${traitName}.queryOnly" as boolean,
+        queryOnly:                   settings."${traitName}.queryOnly" as Boolean,
         commands:                    []
     ]
 
@@ -4512,8 +4749,8 @@ private traitFromSettings_TemperatureSetting(traitName) {
         ]
         tempSettingTrait.commands << "Set Mode"
 
-        tempSettingTrait.modes.each { mode ->
-            def hubitatMode = settings."${traitName}.mode.${mode}.hubitatMode"
+        tempSettingTrait.modes.each { String mode ->
+            String hubitatMode = settings."${traitName}.mode.${mode}.hubitatMode"
             if (hubitatMode != null) {
                 tempSettingTrait.googleToHubitatModeMap[mode] = hubitatMode
                 tempSettingTrait.hubitatToGoogleModeMap[hubitatMode] = mode
@@ -4556,9 +4793,9 @@ private traitFromSettings_TemperatureSetting(traitName) {
     return tempSettingTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Timer(traitName) {
-    def timerTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Timer(String traitName) {
+    Map timerTrait = [
         maxTimerLimitSec:                 settings."${traitName}.maxTimerLimitSec",
         commandOnlyTimer:                 settings."${traitName}.commandOnlyTimer",
 
@@ -4574,17 +4811,17 @@ private traitFromSettings_Timer(traitName) {
     return timerTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Toggles(traitName) {
-    def togglesTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Toggles(String traitName) {
+    Map togglesTrait = [
         toggles:  [],
         commands: [],
     ]
-    def toggles = settings."${traitName}.toggles"?.collect { toggle ->
-        def toggleAttrs = [
-            name: toggle,
+    List<Map> toggles = ((List<String>)settings."${traitName}.toggles")?.collect { String toggle ->
+        Map toggleAttrs = [
+            (sNM): toggle,
             traitName: traitName,
-            labels: settings."${toggle}.labels"?.split(",")
+            labels: ((String)settings."${toggle}.labels")?.split(",")
         ]
         if (toggleAttrs.labels == null) {
             toggleAttrs.labels = ["Unknown"]
@@ -4596,17 +4833,17 @@ private traitFromSettings_Toggles(traitName) {
         togglesTrait.toggles = toggles
         toggles.each { toggle ->
             togglesTrait.commands += [
-                "${toggle.labels[0]} On" as String,
-                "${toggle.labels[0]} Off" as String
+                "${((List)toggle.labels)[0]} On" as String,
+                "${((List)toggle.labels)[0]} Off" as String
             ]
         }
     }
     return togglesTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_TransportControl(traitName) {
-    def transportControlTrait = [
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_TransportControl(String traitName) {
+    Map transportControlTrait = [
         nextCommand:  settings."${traitName}.nextCommand",
         pauseCommand:  settings."${traitName}.pauseCommand",
         previousCommand:  settings."${traitName}.previousCommand",
@@ -4617,8 +4854,8 @@ private traitFromSettings_TransportControl(traitName) {
     return transportControlTrait
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private traitFromSettings_Volume(traitName) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private Map traitFromSettings_Volume(String traitName) {
     def canMuteUnmute = settings."${traitName}.canMuteUnmute"
     if (canMuteUnmute == null) {
         canMuteUnmute = true
@@ -4629,7 +4866,7 @@ private traitFromSettings_Volume(traitName) {
         canSetVolume = true
     }
 
-    def volumeTrait = [
+    Map volumeTrait = [
         volumeAttribute:   settings."${traitName}.volumeAttribute",
         setVolumeCommand:  settings."${traitName}.setVolumeCommand",
         volumeUpCommand:   settings."${traitName}.volumeUpCommand",
@@ -4654,332 +4891,275 @@ private traitFromSettings_Volume(traitName) {
     return volumeTrait
 }
 
-private deviceTraitsFromState(deviceType) {
+private List<String> deviceTraitsFromState(String deviceType) {
     if (state.deviceTraits == null) {
         state.deviceTraits = [:]
     }
     return state.deviceTraits."${deviceType}" ?: []
 }
 
-private addTraitToDeviceTypeState(deviceTypeName, traitType) {
-    def deviceTraits = deviceTraitsFromState(deviceTypeName)
+private void addTraitToDeviceTypeState(String deviceTypeName, String traitType) {
+    List<String> deviceTraits = deviceTraitsFromState(deviceTypeName)
     deviceTraits << traitType
     state.deviceTraits."${deviceTypeName}" = deviceTraits
 }
 
-private deviceTypeTraitFromSettings(traitName) {
-    def pieces = traitName.split("\\.traits\\.")
-    def traitType = pieces[1]
-    def traitAttrs = "traitFromSettings_${traitType}"(traitName)
+private Map deviceTypeTraitFromSettings(String traitName) {
+    String[] pieces = traitName.split("\\.traits\\.")
+    String traitType = pieces[i1]
+    Map traitAttrs = "traitFromSettings_${traitType}"(traitName)
     traitAttrs.name = traitName
     traitAttrs.type = traitType
 
     return traitAttrs
 }
 
-private deleteDeviceTrait(deviceTrait) {
+private deleteDeviceTrait(Map deviceTrait) {
     LOGGER.debug("Deleting device trait ${deviceTrait.name}")
     "deleteDeviceTrait_${deviceTrait.type}"(deviceTrait)
-    def pieces = deviceTrait.name.split("\\.traits\\.")
-    def deviceType = pieces[0]
-    def traitType = pieces[1]
-    deviceTraitsFromState(deviceType).remove(traitType as String)
+    String[] pieces = ((String)deviceTrait.name).split("\\.traits\\.")
+    String deviceType = pieces[iZ]
+    String traitType = pieces[i1]
+    deviceTraitsFromState(deviceType).remove(traitType)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_ArmDisarm(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.armedAttribute")
-    app.removeSetting("${deviceTrait.name}.armLevelAttribute")
-    app.removeSetting("${deviceTrait.name}.exitAllowanceAttribute")
-    app.removeSetting("${deviceTrait.name}.cancelCommand")
+private void rmSettingList(String tname, List<String> s){
+    s.each{ String it ->
+        app.removeSetting(tname + '.' + it)
+    }
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_ArmDisarm(Map deviceTrait) {
+    List<String> s
+    s=['armedAttribute','armLevelAttribute','exitAllowanceAttribute', 'cancelCommand']
     deviceTrait.armLevels.each { armLevel, googleNames ->
-        app.removeSetting("${deviceTrait.name}.armLevels.${armLevel}.googleNames")
+        s.push("armLevels.${armLevel}.googleNames".toString())
+        s.push("armCommands.${armLevel}.commandName".toString())
+        s.push("armValues.${armLevel}.value".toString())
     }
-    deviceTrait.armLevels.each { armLevel, commandName ->
-        app.removeSetting("${deviceTrait.name}.armCommands.${armLevel}.commandName")
+    s = s+ ['armLevels', 'returnUserIndexToDevice']
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Brightness(Map deviceTrait) {
+    List<String> s=['brightnessAttribute', 'setBrightnessCommand']
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_CameraStream(Map deviceTrait) {
+    List<String> s=['cameraStreamURLAttribute','cameraSupportedProtocolsAttribute',
+                    'cameraStreamProtocolAttribute','cameraStreamCommand']
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_ColorSetting(Map deviceTrait) {
+    List<String> s=[ 'fullSpectrum','hueAttribute','saturationAttribute',
+            'levelAttribute','setColorCommand','colorTemperature',
+            'colorTemperature.min','colorTemperature.max','colorTemperatureAttribute',
+            'setColorTemperatureCommand','colorModeAttribute','fullSpectrumModeValue',
+            'temperatureModeValue' ]
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Dock(Map deviceTrait) {
+    List<String> s=[ 'dockAttribute','dockValue','dockCommand']
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_EnergyStorage(Map deviceTrait) {
+    List<String> s=['energyStorageDistanceUnitForUX','isRechargeable','queryOnlyEnergyStorage',
+            'chargeCommand','descriptiveCapacityRemaining','capacityRemainingRawValue',
+            'capacityRemainingUnit','capacityUntilFullRawValue','capacityUntilFullUnit',
+            'isChargingAttribute','chargingValue','isPluggedInAttribute','pluggedInValue' ]
+    rmSettingList((String)deviceTrait.name,s)
+}
+
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_FanSpeed(Map deviceTrait) {
+    List<String> s
+    s= ['currentSpeedAttribute','setFanSpeedCommand','reversible', 'reverseCommand']
+    ((Map<String,String>)deviceTrait.fanSpeeds).each { fanSpeed, googleNames ->
+        s.push("speed.${fanSpeed}.googleNames".toString())
     }
-    deviceTrait.armLevels.each { armLevel, value ->
-        app.removeSetting("${deviceTrait.name}.armValues.${armLevel}.value")
-    }
-    app.removeSetting("${deviceTrait.name}.armLevels")
-    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
+    s = s + ['supportsFanSpeedPercent', 'setFanSpeedPercentCommand','currentFanSpeedPercent',
+            'fanSpeeds']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Brightness(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.brightnessAttribute")
-    app.removeSetting("${deviceTrait.name}.setBrightnessCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_HumiditySetting(Map deviceTrait) {
+    List<String> s= ['humidityAttribute','humiditySetpointAttribute',
+                'setHumidityCommand','humidityRange.min','humidityRange.max',
+                'queryOnly']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_CameraStream(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.cameraStreamURLAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraSupportedProtocolsAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraStreamProtocolAttribute")
-    app.removeSetting("${deviceTrait.name}.cameraStreamCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Locator(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    app.removeSetting(tname + ".locatorCommand")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_ColorSetting(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.fullSpectrum")
-    app.removeSetting("${deviceTrait.name}.hueAttribute")
-    app.removeSetting("${deviceTrait.name}.saturationAttribute")
-    app.removeSetting("${deviceTrait.name}.levelAttribute")
-    app.removeSetting("${deviceTrait.name}.setColorCommand")
-    app.removeSetting("${deviceTrait.name}.colorTemperature")
-    app.removeSetting("${deviceTrait.name}.colorTemperature.min")
-    app.removeSetting("${deviceTrait.name}.colorTemperature.max")
-    app.removeSetting("${deviceTrait.name}.colorTemperatureAttribute")
-    app.removeSetting("${deviceTrait.name}.setColorTemperatureCommand")
-    app.removeSetting("${deviceTrait.name}.colorModeAttribute")
-    app.removeSetting("${deviceTrait.name}.fullSpectrumModeValue")
-    app.removeSetting("${deviceTrait.name}.temperatureModeValue")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_LockUnlock(Map deviceTrait) {
+    List<String> s= [
+    'lockedUnlockedAttribute','lockedValue','lockCommand', 'unlockCommand', 'returnUserIndexToDevice']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Dock(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.dockAttribute")
-    app.removeSetting("${deviceTrait.name}.dockValue")
-    app.removeSetting("${deviceTrait.name}.dockCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_MediaState(Map deviceTrait) {
+    List<String> s= [
+            'supportActivityState', 'supportPlaybackState', 'activityStateAttribute', 'playbackStateAttribute']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_EnergyStorage(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.energyStorageDistanceUnitForUX")
-    app.removeSetting("${deviceTrait.name}.isRechargeable")
-    app.removeSetting("${deviceTrait.name}.queryOnlyEnergyStorage")
-    app.removeSetting("${deviceTrait.name}.chargeCommand")
-    app.removeSetting("${deviceTrait.name}.descriptiveCapacityRemaining")
-    app.removeSetting("${deviceTrait.name}.capacityRemainingRawValue")
-    app.removeSetting("${deviceTrait.name}.capacityRemainingUnit")
-    app.removeSetting("${deviceTrait.name}.capacityUntilFullRawValue")
-    app.removeSetting("${deviceTrait.name}.capacityUntilFullUnit")
-    app.removeSetting("${deviceTrait.name}.isChargingAttribute")
-    app.removeSetting("${deviceTrait.name}.chargingValue")
-    app.removeSetting("${deviceTrait.name}.isPluggedInAttribute")
-    app.removeSetting("${deviceTrait.name}.pluggedInValue")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_OccupancySensing(Map deviceTrait) {
+    List<String> s= [
+            'occupancySensorType', 'occupancyAttribute', 'occupiedValue', 'occupiedToUnoccupiedDelaySec',
+            'unoccupiedToOccupiedDelaySec', 'unoccupiedToOccupiedEventThreshold']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_FanSpeed(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.currentSpeedAttribute")
-    app.removeSetting("${deviceTrait.name}.setFanSpeedCommand")
-    app.removeSetting("${deviceTrait.name}.reversible")
-    app.removeSetting("${deviceTrait.name}.reverseCommand")
-    deviceTrait.fanSpeeds.each { fanSpeed, googleNames ->
-        app.removeSetting("${deviceTrait.name}.speed.${fanSpeed}.googleNames")
-    }
-    app.removeSetting("${deviceTrait.name}.supportsFanSpeedPercent")
-    app.removeSetting("${deviceTrait.name}.setFanSpeedPercentCommand")
-    app.removeSetting("${deviceTrait.name}.currentFanSpeedPercent")
-    app.removeSetting("${deviceTrait.name}.fanSpeeds")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_OnOff(Map deviceTrait) {
+    List<String> s= [
+            'onOffAttribute','onValue', 'offValue', 'controlType', 'onCommand',
+            'offCommand', 'onOffCommand', 'onParameter', 'offParameter']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_HumiditySetting(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.humidityAttribute")
-    app.removeSetting("${deviceTrait.name}.humiditySetpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setHumidityCommand")
-    app.removeSetting("${deviceTrait.name}.humidityRange.min")
-    app.removeSetting("${deviceTrait.name}.humidityRange.max")
-    app.removeSetting("${deviceTrait.name}.queryOnly")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_OpenClose(Map deviceTrait) {
+    List<String> s= [
+            'discreteOnlyOpenClose', 'openCloseAttribute', 'openValue', 'closedValue',
+            'reverseDirection', 'openCommand', 'closeCommand', 'openPositionCommand', 'queryOnly']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Locator(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.locatorCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Reboot(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    app.removeSetting(tname + ".rebootCommand")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_LockUnlock(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.lockedUnlockedAttribute")
-    app.removeSetting("${deviceTrait.name}.lockedValue")
-    app.removeSetting("${deviceTrait.name}.lockCommand")
-    app.removeSetting("${deviceTrait.name}.unlockCommand")
-    app.removeSetting("${deviceTrait.name}.returnUserIndexToDevice")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Rotation(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    app.removeSetting(tname + ".rotationAttribute")
+    app.removeSetting(tname + ".setRotationCommand")
+    app.removeSetting(tname + ".continuousRotation")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_MediaState(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.supportActivityState")
-    app.removeSetting("${deviceTrait.name}.supportPlaybackState")
-    app.removeSetting("${deviceTrait.name}.activityStateAttribute")
-    app.removeSetting("${deviceTrait.name}.playbackStateAttribute")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Scene(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    app.removeSetting(tname + ".activateCommand")
+    app.removeSetting(tname + ".deactivateCommand")
+    app.removeSetting(tname + ".sceneReversible")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_OccupancySensing(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.occupancySensorType")
-    app.removeSetting("${deviceTrait.name}.occupancyAttribute")
-    app.removeSetting("${deviceTrait.name}.occupiedValue")
-    app.removeSetting("${deviceTrait.name}.occupiedToUnoccupiedDelaySec")
-    app.removeSetting("${deviceTrait.name}.unoccupiedToOccupiedDelaySec")
-    app.removeSetting("${deviceTrait.name}.unoccupiedToOccupiedEventThreshold")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_OnOff(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.onOffAttribute")
-    app.removeSetting("${deviceTrait.name}.onValue")
-    app.removeSetting("${deviceTrait.name}.offValue")
-    app.removeSetting("${deviceTrait.name}.controlType")
-    app.removeSetting("${deviceTrait.name}.onCommand")
-    app.removeSetting("${deviceTrait.name}.offCommand")
-    app.removeSetting("${deviceTrait.name}.onOffCommand")
-    app.removeSetting("${deviceTrait.name}.onParameter")
-    app.removeSetting("${deviceTrait.name}.offParameter")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_OpenClose(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.discreteOnlyOpenClose")
-    app.removeSetting("${deviceTrait.name}.openCloseAttribute")
-    app.removeSetting("${deviceTrait.name}.openValue")
-    app.removeSetting("${deviceTrait.name}.closedValue")
-    app.removeSetting("${deviceTrait.name}.reverseDirection")
-    app.removeSetting("${deviceTrait.name}.openCommand")
-    app.removeSetting("${deviceTrait.name}.closeCommand")
-    app.removeSetting("${deviceTrait.name}.openPositionCommand")
-    app.removeSetting("${deviceTrait.name}.queryOnly")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Reboot(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.rebootCommand")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Rotation(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.rotationAttribute")
-    app.removeSetting("${deviceTrait.name}.setRotationCommand")
-    app.removeSetting("${deviceTrait.name}.continuousRotation")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Scene(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.activateCommand")
-    app.removeSetting("${deviceTrait.name}.deactivateCommand")
-    app.removeSetting("${deviceTrait.name}.sceneReversible")
-}
-
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_SensorState(deviceTrait) {
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_SensorState(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
     GOOGLE_SENSOR_STATES.each { sensorType, sensorSettings ->
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.availableStates")
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.descriptiveAttribute")
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericAttribute")
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.numericUnits")
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.reportsDescriptiveState")
-        app.removeSetting("${deviceTrait.name}.sensorTypes.${sensorType}.reportsNumericState")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.availableStates")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.descriptiveAttribute")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.numericAttribute")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.numericUnits")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.reportsDescriptiveState")
+        app.removeSetting(tname + ".sensorTypes.${sensorType}.reportsNumericState")
     }
-    app.removeSetting("${deviceTrait.name}.sensorTypes")
+    app.removeSetting(tname + ".sensorTypes")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_SoftwareUpdate(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.lastSoftwareUpdateUnixTimestampSecAttribute")
-    app.removeSetting("${deviceTrait.name}.softwareUpdateCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_SoftwareUpdate(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    app.removeSetting(tname + ".lastSoftwareUpdateUnixTimestampSecAttribute")
+    app.removeSetting(tname + ".softwareUpdateCommand")
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_StartStop(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.canPause")
-    app.removeSetting("${deviceTrait.name}.startStopAttribute")
-    app.removeSetting("${deviceTrait.name}.pauseUnPauseAttribute")
-    app.removeSetting("${deviceTrait.name}.startValue")
-    app.removeSetting("${deviceTrait.name}.stopValue")
-    app.removeSetting("${deviceTrait.name}.pauseValue")
-    app.removeSetting("${deviceTrait.name}.startCommand")
-    app.removeSetting("${deviceTrait.name}.stopCommand")
-    app.removeSetting("${deviceTrait.name}.pauseCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_StartStop(Map deviceTrait) {
+    List<String> s= [
+            'canPause', 'startStopAttribute', 'pauseUnPauseAttribute', 'startValue', 'stopValue',
+            'pauseValue', 'startCommand', 'stopCommand', 'pauseCommand' ]
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_TemperatureControl(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.temperatureUnit")
-    app.removeSetting("${deviceTrait.name}.currentTemperatureAttribute")
-    app.removeSetting("${deviceTrait.name}.queryOnly")
-    app.removeSetting("${deviceTrait.name}.setpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setTemperatureCommand")
-    app.removeSetting("${deviceTrait.name}.minTemperature")
-    app.removeSetting("${deviceTrait.name}.maxTemperature")
-    app.removeSetting("${deviceTrait.name}.temperatureStep")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_TemperatureControl(Map deviceTrait) {
+    List<String> s= [
+            'temperatureUnit', 'currentTemperatureAttribute', 'queryOnly', 'setpointAttribute',
+            'setTemperatureCommand', 'minTemperature', 'maxTemperature', 'temperatureStep']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_TemperatureSetting(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.temperatureUnit")
-    app.removeSetting("${deviceTrait.name}.currentTemperatureAttribute")
-    app.removeSetting("${deviceTrait.name}.queryOnly")
-    app.removeSetting("${deviceTrait.name}.modes")
-    app.removeSetting("${deviceTrait.name}.heatcoolBuffer")
-    app.removeSetting("${deviceTrait.name}.range.min")
-    app.removeSetting("${deviceTrait.name}.range.max")
-    app.removeSetting("${deviceTrait.name}.setModeCommand")
-    app.removeSetting("${deviceTrait.name}.currentModeAttribute")
-    GOOGLE_THERMOSTAT_MODES.each { mode, display ->
-        app.removeSetting("${deviceTrait.name}.mode.${mode}.hubitatMode")
-        def attrPrefName = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]?.name
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_TemperatureSetting(Map deviceTrait) {
+    List<String> s
+    s= [
+        'temperatureUnit', 'currentTemperatureAttribute', 'queryOnly', 'modes',
+        'heatcoolBuffer', 'range.min', 'range.max', 'setModeCommand', 'currentModeAttribute']
+    GOOGLE_THERMOSTAT_MODES.each { String mode, String display ->
+        s.push("mode.${mode}.hubitatMode")
+        String attrPrefName = THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES[mode]?.name
         if (attrPrefName) {
-            app.removeSetting("${deviceTrait.name}.${attrPrefName}")
+            s.push("${attrPrefName}")
         }
-        def commandPrefName = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]?.name
+        String commandPrefName = THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES[mode]?.name
         if (commandPrefName) {
-            app.removeSetting("${deviceTrait.name}.${commandPrefName}")
+            s.push("${commandPrefName}")
         }
     }
     // These settings are no longer set for new device types, but may still exist
     // for device types created with older versions of the app
-    app.removeSetting("${deviceTrait.name}.setpointAttribute")
-    app.removeSetting("${deviceTrait.name}.setSetpointCommand")
+    s.push("setpointAttribute")
+    s.push("setSetpointCommand")
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Timer(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.maxTimerLimitSec")
-    app.removeSetting("${deviceTrait.name}.commandOnlyTimer")
-    app.removeSetting("${deviceTrait.name}.timerRemainingSecAttribute")
-    app.removeSetting("${deviceTrait.name}.timerPausedAttribute")
-    app.removeSetting("${deviceTrait.name}.timerStartCommand")
-    app.removeSetting("${deviceTrait.name}.timerAdjustCommand")
-    app.removeSetting("${deviceTrait.name}.timerCancelCommand")
-    app.removeSetting("${deviceTrait.name}.timerPauseCommand")
-    app.removeSetting("${deviceTrait.name}.timerResumeCommand")
-    app.removeSetting("${deviceTrait.name}.timerPausedValue")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Timer(Map deviceTrait) {
+    List<String> s= [
+            'maxTimerLimitSec', 'commandOnlyTimer', 'timerRemainingSecAttribute', 'timerPausedAttribute',
+            'timerStartCommand', 'timerAdjustCommand', 'timerCancelCommand',
+            'timerPauseCommand', 'timerResumeCommand', 'timerPausedValue']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_TransportControl(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.nextCommand")
-    app.removeSetting("${deviceTrait.name}.pauseCommand")
-    app.removeSetting("${deviceTrait.name}.previousCommand")
-    app.removeSetting("${deviceTrait.name}.resumeCommand")
-    app.removeSetting("${deviceTrait.name}.stopCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_TransportControl(Map deviceTrait) {
+    List<String> s= [ 'nextCommand', 'pauseCommand', 'previousCommand', 'resumeCommand', 'stopCommand']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Volume(deviceTrait) {
-    app.removeSetting("${deviceTrait.name}.volumeAttribute")
-    app.removeSetting("${deviceTrait.name}.setVolumeCommand")
-    app.removeSetting("${deviceTrait.name}.volumeStep")
-    app.removeSetting("${deviceTrait.name}.canMuteUnmute")
-    app.removeSetting("${deviceTrait.name}.canSetVolume")
-    app.removeSetting("${deviceTrait.name}.muteAttribute")
-    app.removeSetting("${deviceTrait.name}.mutedValue")
-    app.removeSetting("${deviceTrait.name}.unmutedValue")
-    app.removeSetting("${deviceTrait.name}.muteCommand")
-    app.removeSetting("${deviceTrait.name}.unmuteCommand")
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Volume(Map deviceTrait) {
+    List<String> s= [
+            'volumeAttribute', 'setVolumeCommand', 'volumeStep', 'canMuteUnmute', 'canSetVolume',
+            'muteAttribute', 'mutedValue', 'unmutedValue', 'muteCommand', 'unmuteCommand']
+    rmSettingList((String)deviceTrait.name,s)
 }
 
-@SuppressWarnings('UnusedPrivateMethod')
-private deleteDeviceTrait_Toggles(deviceTrait) {
-    deviceTrait.toggles.each { toggle ->
+@SuppressWarnings(['UnusedPrivateMethod','unused'])
+private void deleteDeviceTrait_Toggles(Map deviceTrait) {
+    String tname= (String)deviceTrait.name
+    ((List<Map>)deviceTrait.toggles).each { Map toggle ->
         deleteToggle(toggle)
     }
-    app.removeSetting("${deviceTrait.name}.toggles")
+    app.removeSetting(tname + ".toggles")
 }
 
-private deleteToggle(toggle) {
+private deleteToggle(Map toggle) {
     LOGGER.debug("Deleting toggle: ${toggle}")
     def toggles = settings."${toggle.traitName}.toggles"
     toggles.remove(toggle.name)
@@ -4988,35 +5168,35 @@ private deleteToggle(toggle) {
     deleteDeviceTrait_OnOff(toggle)
 }
 
-private deviceTypeTraitsFromSettings(deviceTypeName) {
+private Map deviceTypeTraitsFromSettings(String deviceTypeName) {
     return deviceTraitsFromState(deviceTypeName).collectEntries { traitType ->
-        def traitName = "${deviceTypeName}.traits.${traitType}"
-        def deviceTrait = deviceTypeTraitFromSettings(traitName)
+        String traitName = "${deviceTypeName}.traits.${traitType}"
+        Map deviceTrait = deviceTypeTraitFromSettings(traitName)
         [traitType, deviceTrait]
     }
 }
 
-private deviceTypeFromSettings(deviceTypeName) {
+private Map<String,Object> deviceTypeFromSettings(String deviceTypeName, Boolean toClean=false) {
     def deviceType = [
-        name:                     deviceTypeName,
-        display:                  settings."${deviceTypeName}.display",
-        type:                     settings."${deviceTypeName}.type",
-        googleDeviceType:         settings."${deviceTypeName}.googleDeviceType",
-        devices:                  settings."${deviceTypeName}.devices",
+        (sNM):                    deviceTypeName,
+        display:                  (String)settings."${deviceTypeName}.display",
+        (sTYPE):                  (String)settings."${deviceTypeName}.type",
+        googleDeviceType:         (String)settings."${deviceTypeName}.googleDeviceType",
+        devices:                  (List)settings."${deviceTypeName}.devices",
         traits:                   deviceTypeTraitsFromSettings(deviceTypeName),
         confirmCommands:          [],
         secureCommands:           [],
         pinCodes:                 [],
         useDevicePinCodes:        false,
-        pinCodeAttribute:         null,
-        pinCodeValue:             null,
+        pinCodeAttribute:         sNL,
+        pinCodeValue:             sNL,
     ]
 
     if (deviceType.display == null) {
-        return null
+        if(!toClean)return null
     }
 
-    def confirmCommands = settings."${deviceTypeName}.confirmCommands"
+    List confirmCommands = settings."${deviceTypeName}.confirmCommands"
     if (confirmCommands) {
         deviceType.confirmCommands = confirmCommands
     }
@@ -5026,12 +5206,12 @@ private deviceTypeFromSettings(deviceTypeName) {
         deviceType.secureCommands = secureCommands
     }
 
-    def pinCodes = settings."${deviceTypeName}.pinCodes"
-    pinCodes?.each { pinCodeId ->
+    List<String> pinCodes = settings."${deviceTypeName}.pinCodes"
+    pinCodes?.each { String pinCodeId ->
         deviceType.pinCodes << [
             id:    pinCodeId,
-            name:  settings."${deviceTypeName}.pin.${pinCodeId}.name",
-            value: settings."${deviceTypeName}.pin.${pinCodeId}.value",
+            (sNM):  settings."${deviceTypeName}.pin.${pinCodeId}.name",
+            (sVAL): settings."${deviceTypeName}.pin.${pinCodeId}.value",
         ]
     }
 
@@ -5045,11 +5225,11 @@ private deviceTypeFromSettings(deviceTypeName) {
     return deviceType
 }
 
-private deleteDeviceTypePin(deviceType, pinId) {
+private deleteDeviceTypePin(deviceType, String pinId) {
     LOGGER.debug("Removing pin with ID ${pinId} from device type ${deviceType.name}")
-    def pinIndex = deviceType.pinCodes.findIndexOf { it.id == pinId }
+    Integer pinIndex = deviceType.pinCodes.findIndexOf { it.id == pinId }
     deviceType.pinCodes.removeAt(pinIndex)
-    app.updateSetting("${deviceType.name}.pinCodes", deviceType.pinCodes*.id)
+    app.updateSetting("${deviceType.name}.pinCodes", ((List<Map<String,String>>)deviceType.pinCodes)*.id)
     app.removeSetting("${deviceType.name}.pin.${pinId}.name")
     app.removeSetting("${deviceType.name}.pin.${pinId}.value")
 }
@@ -5057,15 +5237,15 @@ private deleteDeviceTypePin(deviceType, pinId) {
 private addDeviceTypePin(deviceType) {
     deviceType.pinCodes << [
         id: UUID.randomUUID().toString(),
-        name: null,
-        value: null
+        (sNM): sNL,
+        (sVAL): null
     ]
     app.updateSetting("${deviceType.name}.pinCodes", deviceType.pinCodes*.id)
 }
 
-private modeSceneDeviceType() {
+private Map<String,Object> modeSceneDeviceType() {
     return [
-        name:             "hubitat_mode",
+        (sNM):             "hubitat_mode",
         display:          "Hubitat Mode",
         googleDeviceType: "SCENE",
         confirmCommands:  [],
@@ -5073,14 +5253,14 @@ private modeSceneDeviceType() {
         pinCodes:         [],
         traits: [
             Scene: [
-                name: "hubitat_mode",
-                type: "Scene",
+                (sNM): "hubitat_mode",
+                (sTYPE): "Scene",
                 sceneReversible: false
             ]
         ],
         devices: settings.modesToExpose.collect { mode ->
             [
-                name: mode,
+                (sNM): mode,
                 label: "${mode} Mode",
                 id: "hubitat_mode_${mode}"
             ]
@@ -5088,14 +5268,14 @@ private modeSceneDeviceType() {
     ]
 }
 
-private deviceTypes() {
+private List<Map> deviceTypes() {
     if (state.nextDeviceTypeIndex == null) {
         state.nextDeviceTypeIndex = 0
     }
 
-    def deviceTypes = []
+    List<Map> deviceTypes = []
     (0..<state.nextDeviceTypeIndex).each { i ->
-        def deviceType = deviceTypeFromSettings("deviceTypes.${i}")
+        Map deviceType = deviceTypeFromSettings("deviceTypes.${i}")
         if (deviceType != null) {
             deviceTypes << deviceType
         }
@@ -5103,11 +5283,11 @@ private deviceTypes() {
     return deviceTypes
 }
 
-private allKnownDevices() {
-    def knownDevices = [:]
+private Map<String,Map<String,Object>> allKnownDevices() {
+    Map<String,Map<String,Object>> knownDevices = [:]
     // Add "device" entries for exposed mode scenes
-    (deviceTypes() + [modeSceneDeviceType()]).each { deviceType ->
-        deviceType.devices.each { device ->
+    (deviceTypes() + [modeSceneDeviceType()]).each { Map deviceType ->
+        ((List)deviceType.devices).each { device ->
             knownDevices."${device.id}" = [
                 device: device,
                 deviceType: deviceType
@@ -5118,8 +5298,8 @@ private allKnownDevices() {
     return knownDevices
 }
 
-private roundTo(number, decimalPlaces) {
-    def factor = Math.max(1, 10 * decimalPlaces)
+private roundTo(number, Integer decimalPlaces) {
+    Integer factor = Math.max(i1, 10 * decimalPlaces)
     try {
         return Math.round(number * factor) / factor
     } catch (NullPointerException e) {
@@ -5128,15 +5308,15 @@ private roundTo(number, decimalPlaces) {
     }
 }
 
-private googlePercentageToHubitat(percentage) {
+private static Integer googlePercentageToHubitat(percentage) {
     // Google is documented to provide percentages in the range [0..100], as
     // is Hubitat's SwitchLevel (setLevel), WindowBlind (setPosition).
     //
     // Just to be safe, clamp incoming values from Google to the range [0..100].
-    return Math.max(0, Math.min(100, percentage as int))
+    return Math.max(iZ, Math.min(i100, percentage as Integer))
 }
 
-private hubitatPercentageToGoogle(percentage) {
+private static Integer hubitatPercentageToGoogle(percentage) {
     // Hubitat's driver capabilities for SwitchLevel (setLevel) and WindowBlind
     // (setPosition) are documented to use the range [0..100], but several
     // Z-Wave dimmer devices return values in the range [0..99].
@@ -5146,29 +5326,60 @@ private hubitatPercentageToGoogle(percentage) {
     //
     // Clamp the value to ensure it's in the range [0..100], then map 99
     // to 100.
-    def clamped = Math.max(0, Math.min(100, percentage as int))
-    return clamped == 99 ? 100 : clamped
+    Integer clamped = Math.max(iZ, Math.min(i100, percentage as Integer))
+    return clamped == 99 ? i100 : clamped
 }
 
 @Field
-private final LOGGER = [
-    debug: { if (settings.debugLogging) { log.debug(it) } },
-    info: { log.info(it) },
-    warn: { log.warn(it) },
-    error: { log.error(it) },
+private final Map<String,Closure> LOGGER = [
+    debug: { if (gtSetB('debugLogging')) { doLog(sDBG,it) } },
+    info: { doLog(sINFO,it) },
+    warn: { doLog(sWARN,it) },
+    error: { doLog(sERROR,it) },
     exception: { message, exception ->
         def relevantEntries = exception.stackTrace.findAll { entry -> entry.className.startsWith("user_app") }
         def line = relevantEntries[0].lineNumber
         def method = relevantEntries[0].methodName
-        log.error("${message}: ${exception} at line ${line} (${method})")
-        if (settings.debugLogging) {
-            log.debug("App exception stack trace:\n${relevantEntries.join("\n")}")
+        doLog(sERROR,"${message}: ${exception} at line ${line} (${method})")
+        if (gtSetB('debugLogging')) {
+            doLog(sDBG,"App exception stack trace:\n${relevantEntries.join("\n")}")
         }
     }
 ]
 
+@Field static final String sERROR='error'
+@Field static final String sINFO='info'
+@Field static final String sWARN='warn'
+@Field static final String sTRC='trace'
+@Field static final String sDBG='debug'
+@Field static final String sLTH='<'
+@Field static final String sGTH='>'
+
+void doLog(String mcmd, String msg, Boolean escapeHtml=true){
+    String clr
+    switch(mcmd){
+        case sINFO:
+            clr= '#0299b1'
+            break
+        case sTRC:
+            clr= sCLRGRY
+            break
+        case sDBG:
+            clr= 'purple'
+            break
+        case sWARN:
+            clr= sCLRORG
+            break
+        case sERROR:
+        default:
+            clr= sCLRRED
+    }
+    String myMsg= escapeHtml ? msg.replaceAll(sLTH, '&lt;').replaceAll(sGTH, '&gt;') : msg
+    log."$mcmd" escapeHtml ? span(myMsg,clr) : myMsg
+}
+
 @Field
-private static final HUBITAT_DEVICE_TYPES = [
+private static final Map<String,String> HUBITAT_DEVICE_TYPES = [
     accelerationSensor:          "Acceleration Sensor",
     actuator:                    "Actuator",
     alarm:                       "Alarm",
@@ -5263,7 +5474,7 @@ private static final HUBITAT_DEVICE_TYPES = [
 ]
 
 @Field
-private static final GOOGLE_DEVICE_TYPES = [
+private static final Map<String,String> GOOGLE_DEVICE_TYPES = [
     AC_UNIT:                "Air Conditioning Unit",
     AIRCOOLER:              "Air Cooler",
     AIRFRESHENER:           "Air Freshener",
@@ -5344,7 +5555,7 @@ private static final GOOGLE_DEVICE_TYPES = [
 ]
 
 @Field
-private static final GOOGLE_DEVICE_TRAITS = [
+private static final Map<String,String> GOOGLE_DEVICE_TRAITS = [
     //AppSelector: "App Selector",
     ArmDisarm: "Arm/Disarm",
     Brightness: "Brightness",
@@ -5386,7 +5597,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
 ]
 
 @Field
-private static final GOOGLE_THERMOSTAT_MODES = [
+private static final Map<String,String> GOOGLE_THERMOSTAT_MODES = [
     "off":      "Off",
     "on":       "On",
     "heat":     "Heat",
@@ -5400,7 +5611,7 @@ private static final GOOGLE_THERMOSTAT_MODES = [
 ]
 
 @Field
-private static final GOOGLE_SENSOR_STATES = [
+private static final Map<String,Map> GOOGLE_SENSOR_STATES = [
     "AirQuality" :
     [
         "label" :                                "Air Quality",
@@ -5458,8 +5669,8 @@ private static final GOOGLE_SENSOR_STATES = [
             "needs replacement":                 "Needs Replacement",
             "unknown":                           "Unknown",
         ],
-        "numericAttribute":                      "",
-        "numericUnits" :                         "",
+        "numericAttribute":                      '',
+        "numericUnits" :                         '',
     ],
     "WaterLeak" :
     [
@@ -5470,8 +5681,8 @@ private static final GOOGLE_SENSOR_STATES = [
             "no leak":                           "No Leak",
             "unknown":                           "Unknown",
         ],
-        "numericAttribute":                      "",
-        "numericUnits" :                         "",
+        "numericAttribute":                      '',
+        "numericUnits" :                         '',
     ],
     "RainDetection" :
     [
@@ -5482,8 +5693,8 @@ private static final GOOGLE_SENSOR_STATES = [
             "no rain detected":                  "No Rain Detected",
             "unknown":                           "Unknown",
         ],
-        "numericAttribute":                      "",
-        "numericUnits" :                         "",
+        "numericAttribute":                      '',
+        "numericUnits" :                         '',
     ],
     "FilterLifeTime" :
     [
@@ -5502,93 +5713,305 @@ private static final GOOGLE_SENSOR_STATES = [
     "PreFilterLifeTime" :
     [
         "label" :                                "Pre-Filter Life Time",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "preFilterLifeTimeValue",
         "numericUnits" :                         "PERCENTAGE",
     ],
     "HEPAFilterLifeTime" :
     [
         "label" :                                "HEPA Filter Life Time",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "HEPAFilterLifeTimeValue",
         "numericUnits" :                         "PERCENTAGE",
     ],
     "Max2FilterLifeTime" :
     [
         "label" :                                "Max2 Filter Life Time",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "max2FilterLifeTimeValue",
         "numericUnits" :                         "PERCENTAGE",
     ],
     "CarbonDioxideLevel" :
     [
         "label" :                                "Carbon Dioxide Level",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "carbonDioxideLevel",
         "numericUnits" :                         "PARTS_PER_MILLION",
     ],
     "PM2.5" :
     [
         "label" :                                "PM2.5",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "PM2_5Level",
         "numericUnits" :                         "MICROGRAMS_PER_CUBIC_METER",
     ],
     "PM10" :
     [
         "label" :                                "PM10",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "PM10Level",
         "numericUnits" :                         "MICROGRAMS_PER_CUBIC_METER",
     ],
     "VolatileOrganicCompounds" :
     [
         "label" :                                "Volatile Organic Compounds",
-        "descriptiveAttribute" :                 "",
-        "descriptiveState" :                     "",
+        "descriptiveAttribute" :                 '',
+        "descriptiveState" :                     '',
         "numericAttribute":                      "volatileOrganicCompoundsLevel",
         "numericUnits" :                         "PARTS_PER_MILLION",
     ],
 ]
 
 @Field
-private static final THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
+private static final Map<String,Map> THERMOSTAT_MODE_SETPOINT_COMMAND_PREFERENCES = [
     "off": null,
     "heat": [
-        name:  "setHeatingSetpointCommand",
-        title: "Set Heating Setpoint Command"
+        "name":  "setHeatingSetpointCommand",
+        "title": "Set Heating Setpoint Command"
     ],
     "cool": [
-        name:  "setCoolingSetpointCommand",
-        title: "Set Cooling Setpoint Command"
+        "name":  "setCoolingSetpointCommand",
+        "title": "Set Cooling Setpoint Command"
     ],
 ].withDefault { mode ->
     [
-        name:  "set${mode.capitalize()}SetpointCommand",
-        title: "Set ${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Command"
+        "name":  "set${mode.capitalize()}SetpointCommand",
+        "title": "Set ${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Command"
     ]
-}
+} as Map<String, Map>
 
 @Field
-private static final THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
+private static final Map<String,Map> THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
     "off": null,
     "heat": [
-        name:  "heatingSetpointAttribute",
-        title: "Heating Setpoint Attribute"
+        "name":  "heatingSetpointAttribute",
+        "title": "Heating Setpoint Attribute"
     ],
     "cool": [
-        name:  "coolingSetpointAttribute",
-        title: "Cooling Setpoint Attribute"
+        "name":  "coolingSetpointAttribute",
+        "title": "Cooling Setpoint Attribute"
     ]
 ].withDefault { mode ->
     [
-        name:  "${mode}SetpointAttribute",
-        title: "${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Attribute",
+        "name":  "${mode}SetpointAttribute",
+        "title": "${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Attribute",
     ]
+} as Map<String, Map>
+
+
+
+static String myObj(obj){
+    if(obj instanceof String)return 'String'
+    else if(obj instanceof Map)return 'Map'
+    else if(obj instanceof List)return 'List'
+    else if(obj instanceof ArrayList)return 'ArrayList'
+    else if(obj instanceof BigInteger)return 'BigInt'
+    else if(obj instanceof Long)return 'Long'
+    else if(obj instanceof Integer)return 'Int'
+    else if(obj instanceof Boolean)return 'Bool'
+    else if(obj instanceof BigDecimal)return 'BigDec'
+    else if(obj instanceof Double)return 'Double'
+    else if(obj instanceof Float)return 'Float'
+    else if(obj instanceof Byte)return 'Byte'
+    else if(obj instanceof Closure)return 'Closure'
+    else if(obj instanceof com.hubitat.app.DeviceWrapper)return 'Device'
+    else{
+        //      if(eric()) log.error "object: ${describeObject(obj)}"
+        return 'unknown'
+    }
 }
+
+@Field static final String sSPCSB7='      │'
+@Field static final String sSPCSB6='     │'
+@Field static final String sSPCS6 ='      '
+@Field static final String sSPCS5 ='     '
+@Field static final String sSPCST='┌─ '
+@Field static final String sSPCSM='├─ '
+@Field static final String sSPCSE='└─ '
+@Field static final String sNWL='\n'
+@Field static final String sDBNL='\n\n • '
+
+@CompileStatic
+static String spanStr(Boolean html,String s){ return html ? span(s) : s }
+
+@CompileStatic
+static String doLineStrt(Integer level,List<Boolean>newLevel){
+    String lineStrt; lineStrt=sNWL
+    Boolean dB; dB=false
+    Integer i
+    for(i=iZ;i<level;i++){
+        if(i+i1<level){
+            if(!newLevel[i]){
+                if(!dB){ lineStrt+=sSPCSB7; dB=true }
+                else lineStrt+=sSPCSB6
+            }else lineStrt+= !dB ? sSPCS6:sSPCS5
+        }else lineStrt+= !dB ? sSPCS6:sSPCS5
+    }
+    return lineStrt
+}
+
+@CompileStatic
+static String dumpListDesc(List data,Integer level,List<Boolean> lastLevel,String listLabel,Boolean html=false,Boolean reorder=true){
+    String str; str=sBLK
+    Integer n; n=i1
+    List<Boolean> newLevel=lastLevel
+
+    List list1=data?.collect{it}
+    Integer sz=list1.size()
+    for(Object par in list1){
+        String lbl=listLabel+"[${n-i1}]".toString()
+        if(par instanceof Map){
+            Map<String,Object> newmap=[:]
+            newmap[lbl]=(Map)par
+            Boolean t1=n==sz
+            newLevel[level]=t1
+            str+=dumpMapDesc(newmap,level,newLevel,n,sz,!t1,html,reorder)
+        }else if(par instanceof List || par instanceof ArrayList){
+            Map<String,Object> newmap=[:]
+            newmap[lbl]=par
+            Boolean t1=n==sz
+            newLevel[level]=t1
+            str+=dumpMapDesc(newmap,level,newLevel,n,sz,!t1,html,reorder)
+        }else{
+            String lineStrt
+            lineStrt=doLineStrt(level,lastLevel)
+            lineStrt+=n==i1 && sz>i1 ? sSPCST:(n<sz ? sSPCSM:sSPCSE)
+            str+=spanStr(html, lineStrt+lbl+": ${par} (${objType(par)})".toString() )
+        }
+        n+=i1
+    }
+    return str
+}
+
+@CompileStatic
+static String dumpMapDesc(Map<String,Object> data,Integer level,List<Boolean> lastLevel,Integer listCnt=null,Integer listSz=null,Boolean listCall=false,Boolean html=false,Boolean reorder=true){
+    String str; str=sBLK
+    Integer n; n=i1
+    Integer sz=data?.size()
+    Map<String,Object> svMap,svLMap,newMap; svMap=[:]; svLMap=[:]; newMap=[:]
+    for(Map.Entry<String,Object> par in data){
+        String k=(String)par.key
+        def v=par.value
+        if(reorder && v instanceof Map){
+            svMap+=[(k): v]
+        }else if(reorder && (v instanceof List || v instanceof ArrayList)){
+            svLMap+=[(k): v]
+        }else newMap+=[(k):v]
+    }
+    newMap+=svMap+svLMap
+    Integer lvlpls=level+i1
+    for(Map.Entry<String,Object> par in newMap){
+        String lineStrt
+        List<Boolean> newLevel=lastLevel
+        Boolean thisIsLast=n==sz && !listCall
+        if(level>iZ)newLevel[(level-i1)]=thisIsLast
+        Boolean theLast
+        theLast=thisIsLast
+        if(level==iZ)lineStrt=sDBNL
+        else{
+            theLast=theLast && thisIsLast
+            lineStrt=doLineStrt(level,newLevel)
+            if(listSz && listCnt && listCall)lineStrt+=listCnt==i1 && listSz>i1 ? sSPCST:(listCnt<listSz ? sSPCSM:sSPCSE)
+            else lineStrt+=((n<sz || listCall) && !thisIsLast) ? sSPCSM:sSPCSE
+        }
+        String k=(String)par.key
+        def v=par.value
+        String objType=objType(v)
+        if(v instanceof Map){
+            str+=spanStr(html, lineStrt+"${k}: (${objType})".toString() )
+            newLevel[lvlpls]=theLast
+            str+=dumpMapDesc((Map)v,lvlpls,newLevel,null,null,false,html,reorder)
+        }
+        else if(v instanceof List || v instanceof ArrayList){
+            str+=spanStr(html, lineStrt+"${k}: [${objType}]".toString() )
+            newLevel[lvlpls]=theLast
+            str+=dumpListDesc((List)v,lvlpls,newLevel,sBLK,html,reorder)
+        }
+        else{
+            str+=spanStr(html, lineStrt+"${k}: (${v}) (${objType})".toString() )
+        }
+        n+=i1
+    }
+    return str
+}
+
+@CompileStatic
+static String objType(obj){ return span(myObj(obj),sCLRORG) }
+
+@CompileStatic
+static String getMapDescStr(Map<String,Object> data,Boolean reorder=true, Boolean html=true){
+    List<Boolean> lastLevel=[true]
+    String str=dumpMapDesc(data,iZ,lastLevel,null,null,false,html,reorder)
+    return str!=sBLK ? str:'No Data was returned'
+}
+
+@SuppressWarnings('unused')
+def pageDump(){
+    String message=getMapDescStr(allKnownDevices(),false)
+    return dynamicPage((sNM):'pageDump',(sTIT):sBLK,uninstall:false){
+        section('Devices dump'){
+            paragraph message
+        }
+    }
+}
+
+@CompileStatic
+static String span(String str,String clr=sNL,String sz=sNL,Boolean bld=false,Boolean br=false){
+    return str ? sSPANS+"${(clr || sz || bld) ? sSTYLE+"'${clr ? sCLR+"${clr};":sBLK}${sz ? sFSZ+"${sz};":sBLK}${bld ? sFWT:sBLK}'":sBLK}>${str}</span>${br ? sLINEBR:sBLK}": sBLK
+}
+
+private String gtLbl(d){ return "${d?.label ?: d?.name ?: "no device name"}".toString() }
+private String gtSetStr(String nm){ return (String)settings[nm] }
+private Boolean gtSetB(String nm){ return (Boolean)settings[nm] }
+//private Integer gtSetI(String nm){ return (Integer)settings[nm] }
+private List gtSetList(String nm){ return (List)settings[nm] }
+
+private String gtStStr(String nm){ return (String)state[nm] }
+
+//private static Class DeviceWrapperClass(){ return 'hubitat.app.DeviceWrapper' as Class }
+
+//@Field static final String sCLR4D9    = '#2784D9'
+@Field static final String sCLRRED      = 'red'
+//@Field static final String sCLRRED2   = '#cc2d3b'
+@Field static final String sCLRGRY      = 'gray'
+//@Field static final String sCLRGRN    = 'green'
+//@Field static final String sCLRGRN2   = '#43d843'
+@Field static final String sCLRORG      = 'orange'
+@Field static final String sLINEBR      = '<br>'
+@Field static final String sSPANS       = '<span'
+@Field static final String sSTYLE       = ' style='
+@Field static final String sCLR         = 'color: '
+@Field static final String sFSZ         = 'font-size: '
+@Field static final String sFWT         = 'font-weight: bold;'
+//@Field static final String sIMPT        = 'px !important;'
+
+@Field static final String sNL=(String)null
+@Field static final String sBLK=''
+
+@Field static final String sNM='name'
+@Field static final String sREQ='required'
+@Field static final String sTYPE='type'
+@Field static final String sVAL='value'
+@Field static final String sDEFVAL='defaultValue'
+@Field static final String sTIT='title'
+@Field static final String sBOOL='bool'
+@Field static final String sTEXT='text'
+@Field static final String sENUM='enum'
+@Field static final String sOPTIONS='options'
+@Field static final String sMULTIPLE='multiple'
+@Field static final String sSUBONCHG='submitOnChange'
+
+@Field static final String sON='on'
+@Field static final String sOFF='off'
+//@Field static final String sSWITCH='switch'
+
+@Field static final Integer iZ=0
+@Field static final Integer i1=1
+@Field static final Integer i100=100
+//@Field static final Integer i2=2
