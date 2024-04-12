@@ -393,7 +393,7 @@ def mainPreferences() {
     }
 }
 
-@SuppressWarnings('MethodSize')
+@SuppressWarnings(['MethodSize', 'ComplexMethod'])
 def deviceTypePreferences(deviceType) {
     state.remove("currentlyEditingDeviceTrait")
     if (deviceType == null) {
