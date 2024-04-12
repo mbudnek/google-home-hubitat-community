@@ -2241,12 +2241,16 @@ def handleAction() {
     switch (requestType) {
         case "action.devices.SYNC":
             response = handleSyncRequest(request)
+            break;
         case "action.devices.QUERY":
             response = handleQueryRequest(request)
+            break;
         case "action.devices.EXECUTE":
             response = handleExecuteRequest(request)
+            break;
         case "action.devices.DISCONNECT":
             response = [:]
+            break;
     }
     LOGGER.debug(JsonOutput.toJson(response))
     return response
