@@ -32,7 +32,7 @@ preferences {
 }
 
 metadata {
-    definition (name: "Virtual Generic Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
+    definition(name: "Virtual Generic Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
         capability  "VideoCamera"
 
         attribute   "camera", "enum"
@@ -81,16 +81,12 @@ def addProtocols(sourceURL, sourceProtocol, sourceProtocolList) {
 
 def verifyURL(sourceURL) {
     def trimmedURL = sourceURL?.trim()
-    if ((trimmedURL != null) && (trimmedURL?.length() != 0)) {
-        return(1)
-    } else {
-        return(0)
-    }
+    return trimmedURL != null && trimmedURL?.length() != 0 ? 1 : 0
 }
 
 def validateProtcol(sourceURL, sourceProtocol, supportedProtocols) {
     if (verifyURL(sourceURL)) {
-        if (supportedProtocols.find { it == "hls" }) {
+        if (supportedProtocols.find { protocol -> protocol == "hls" }) {
             sendEvent(name: "streamURL", value: "${sourceURL}")
             sendEvent(name: "streamProtocol", value: "${sourceProtocol}")
 
