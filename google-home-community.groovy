@@ -80,6 +80,7 @@
 //   * May 20 2023 - Fix error in SensorState which prevented multiple trait types from being reported.
 //                   Allow for traits to support descriptive and/or numeric responses.
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
+//   * Apr 12 2024 - Code cleanup
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
