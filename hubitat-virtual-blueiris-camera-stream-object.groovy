@@ -24,7 +24,7 @@
  */
 
 preferences {
-    googleCameraStreamSupportedProtocols = [
+    final GOOGLE_CAMERA_STREAM_SUPPORTED_PROTOCOLS = [
         "progressive_mp4":         "Progressive MP4",
         "hls":                     "HLS",
         "dash":                    "Dash",
@@ -36,11 +36,11 @@ preferences {
     input "deviceUser", "text", title: "Webserver Username (Optional)", required: false
     input "devicePWD", "text", title: "Webserver Password (Optional)", required: false
     input "sourceProtocol", "enum", title: "Camera Stream Protocol",
-        options: googleCameraStreamSupportedProtocols, multiple: false, required: true
+        options: GOOGLE_CAMERA_STREAM_SUPPORTED_PROTOCOLS, multiple: false, required: true
 }
 
 metadata {
-    definition (name: "Virtual BlueIris Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
+    definition(name: "Virtual BlueIris Camera Stream Object", namespace: "lpakula", author: "Lyle Pakula") {
         capability  "VideoCamera"
 
         attribute   "camera", "enum"
