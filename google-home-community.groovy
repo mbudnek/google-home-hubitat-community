@@ -81,6 +81,7 @@
 //                   Allow for traits to support descriptive and/or numeric responses.
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
 //   * Apr 12 2024 - Code cleanup
+//   * May 08 2026 - Move to the new "Integrations" menu
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -105,7 +106,8 @@ definition(
     iconUrl: "",
     iconX2Url: "",
     iconX3Url: "",
-    importUrl: "https://raw.githubusercontent.com/mbudnek/google-home-hubitat-community/master/google-home-community.groovy"  // IgnoreLineLength
+    importUrl: "https://raw.githubusercontent.com/mbudnek/google-home-hubitat-community/master/google-home-community.groovy",  // IgnoreLineLength
+    menu: "Integrations",
 )
 
 preferences {
