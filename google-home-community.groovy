@@ -82,6 +82,7 @@
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
 //   * Apr 12 2024 - Code cleanup
 //   * May 08 2026 - Move to the new "Integrations" menu
+//   * Jun 26 2026 - Added InputSelector Trait (SetInput / currentInput, optional NextInput/PreviousInput)
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -1109,6 +1110,97 @@ private deviceTraitPreferences_FanSpeed(deviceTrait) {
             )
         }
     }
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private deviceTraitPreferences_InputSelector(deviceTrait) {
+    section("Input Selector Settings") {
+        input(
+            name: "${deviceTrait.name}.currentInputAttribute",
+            title: "Current Input Attribute",
+            type: "text",
+            defaultValue: "input",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.setInputCommand",
+            title: "Set Input Command",
+            description: "The device command used to select an input.  It will be called with the " +
+                         "input key as its only argument.",
+            type: "text",
+            defaultValue: "setInputSource",
+            required: true
+        )
+        input(
+            name: "${deviceTrait.name}.inputs",
+            title: "Supported Inputs",
+            description: "A comma-separated list of input keys.  Each key must match the value the " +
+                         "device reports in the current input attribute and the value expected by the " +
+                         "set input command (e.g. \"hdmi_1,CD,SAT/CBL\").",
+            type: "text",
+            required: true,
+            submitOnChange: true
+        )
+        def inputKeys = inputSelectorKeysFromSettings("${deviceTrait.name}.inputs")
+        inputKeys.each { inputKey ->
+            input(
+                name: "${deviceTrait.name}.input.${inputKey}.googleNames",
+                title: "Google Home Names for \"${inputKey}\"",
+                description: "A comma-separated list of names that the Google Assistant will " +
+                             "accept for this input.  The first name is used in the Assistant's response.",
+                type: "text",
+                required: true,
+                defaultValue: inputKey
+            )
+        }
+    }
+
+    section("Ordered Inputs") {
+        input(
+            name: "${deviceTrait.name}.orderedInputs",
+            title: "Ordered Inputs",
+            description: "Enable to support the \"next input\" and \"previous input\" commands.  " +
+                         "Only enable this if the device can switch inputs in order.",
+            type: "bool",
+            defaultValue: false,
+            submitOnChange: true
+        )
+        if (settings."${deviceTrait.name}.orderedInputs") {
+            input(
+                name: "${deviceTrait.name}.nextInputCommand",
+                title: "Next Input Command",
+                description: "The device command used to select the next input.  Leave blank if unsupported.",
+                type: "text",
+                required: false
+            )
+            input(
+                name: "${deviceTrait.name}.previousInputCommand",
+                title: "Previous Input Command",
+                description: "The device command used to select the previous input.  " +
+                             "Leave blank if unsupported.",
+                type: "text",
+                required: false
+            )
+        }
+    }
+
+    section("Advanced Settings") {
+        input(
+            name: "${deviceTrait.name}.commandOnlyInputSelector",
+            title: "Command Only (no state reporting)",
+            description: "Enable for devices that can switch inputs but cannot report the current " +
+                         "input back to Hubitat.",
+            type: "bool",
+            defaultValue: false
+        )
+    }
+}
+
+private inputSelectorKeysFromSettings(settingName) {
+    return settings."${settingName}"
+        ?.split(",")
+        ?.collect { it.trim() }
+        ?.findAll { it } ?: []
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2850,6 +2942,51 @@ private executeCommand_SetFanSpeed(deviceInfo, command) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_SetInput(deviceInfo, command) {
+    checkMfa(deviceInfo, "Set Input", command)
+    def inputSelectorTrait = deviceInfo.deviceType.traits.InputSelector
+    def newInput = command.params.newInput
+
+    if (!(newInput in inputSelectorTrait.inputs.keySet())) {
+        throw new Exception(JsonOutput.toJson([
+            errorCode: "unsupportedInput",
+        ]))
+    }
+
+    deviceInfo.device."${inputSelectorTrait.setInputCommand}"(newInput)
+
+    if (inputSelectorTrait.commandOnlyInputSelector) {
+        return [[:], [:]]
+    }
+    return [
+        [
+            (inputSelectorTrait.currentInputAttribute): newInput,
+        ],
+        [
+            currentInput: newInput,
+        ],
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_NextInput(deviceInfo, command) {
+    checkMfa(deviceInfo, "Next Input", command)
+    def inputSelectorTrait = deviceInfo.deviceType.traits.InputSelector
+    deviceInfo.device."${inputSelectorTrait.nextInputCommand}"()
+    // The resulting input isn't known ahead of time; rely on Report State to reconcile currentInput.
+    return [[:], [:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private executeCommand_PreviousInput(deviceInfo, command) {
+    checkMfa(deviceInfo, "Previous Input", command)
+    def inputSelectorTrait = deviceInfo.deviceType.traits.InputSelector
+    deviceInfo.device."${inputSelectorTrait.previousInputCommand}"()
+    // The resulting input isn't known ahead of time; rely on Report State to reconcile currentInput.
+    return [[:], [:]]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private executeCommand_SetHumidity(deviceInfo, command) {
     checkMfa(deviceInfo, "Set Humidity", command)
     def humiditySettingTrait = deviceInfo.deviceType.traits.HumiditySetting
@@ -3352,6 +3489,17 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deviceStateForTrait_InputSelector(deviceTrait, device) {
+    // Command-only devices cannot report their current input, so don't include any state.
+    if (deviceTrait.commandOnlyInputSelector) {
+        return [:]
+    }
+    return [
+        currentInput: device.currentValue(deviceTrait.currentInputAttribute),
+    ]
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_HumiditySetting(deviceTrait, device) {
     def deviceState = [
         humidityAmbientPercent: Math.round(device.currentValue(deviceTrait.humidityAttribute))
@@ -3849,6 +3997,25 @@ private attributesForTrait_FanSpeed(deviceTrait, device) {
 }
 
 @SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
+private attributesForTrait_InputSelector(deviceTrait, device) {
+    return [
+        availableInputs: deviceTrait.inputs.collect { inputKey, googleNames ->
+            [
+                key: inputKey,
+                names: [
+                    [
+                        lang: "en",
+                        name_synonym: googleNames.split(",")*.trim(),
+                    ],
+                ],
+            ]
+        },
+        orderedInputs: deviceTrait.orderedInputs,
+        commandOnlyInputSelector: deviceTrait.commandOnlyInputSelector,
+    ]
+}
+
+@SuppressWarnings(['UnusedPrivateMethod', 'UnusedPrivateMethodParameter'])
 private attributesForTrait_HumiditySetting(deviceTrait, device) {
     def attrs = [
         queryOnlyHumiditySetting: deviceTrait.queryOnly
@@ -4215,6 +4382,32 @@ private traitFromSettings_FanSpeed(traitName) {
     }
 
     return fanSpeedMapping
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
+private traitFromSettings_InputSelector(traitName) {
+    def inputSelectorTrait = [
+        currentInputAttribute:    settings."${traitName}.currentInputAttribute",
+        setInputCommand:          settings."${traitName}.setInputCommand",
+        inputs:                   [:],
+        orderedInputs:            settings."${traitName}.orderedInputs" as boolean,
+        commandOnlyInputSelector: settings."${traitName}.commandOnlyInputSelector" as boolean,
+        commands:                 ["Set Input"],
+    ]
+    inputSelectorKeysFromSettings("${traitName}.inputs").each { inputKey ->
+        inputSelectorTrait.inputs[inputKey] = settings."${traitName}.input.${inputKey}.googleNames"
+    }
+    if (inputSelectorTrait.orderedInputs) {
+        inputSelectorTrait.nextInputCommand = settings."${traitName}.nextInputCommand"
+        inputSelectorTrait.previousInputCommand = settings."${traitName}.previousInputCommand"
+        if (inputSelectorTrait.nextInputCommand) {
+            inputSelectorTrait.commands << "Next Input"
+        }
+        if (inputSelectorTrait.previousInputCommand) {
+            inputSelectorTrait.commands << "Previous Input"
+        }
+    }
+    return inputSelectorTrait
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -4809,6 +5002,20 @@ private deleteDeviceTrait_FanSpeed(deviceTrait) {
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
+private deleteDeviceTrait_InputSelector(deviceTrait) {
+    app.removeSetting("${deviceTrait.name}.currentInputAttribute")
+    app.removeSetting("${deviceTrait.name}.setInputCommand")
+    deviceTrait.inputs.each { inputKey, googleNames ->
+        app.removeSetting("${deviceTrait.name}.input.${inputKey}.googleNames")
+    }
+    app.removeSetting("${deviceTrait.name}.inputs")
+    app.removeSetting("${deviceTrait.name}.orderedInputs")
+    app.removeSetting("${deviceTrait.name}.nextInputCommand")
+    app.removeSetting("${deviceTrait.name}.previousInputCommand")
+    app.removeSetting("${deviceTrait.name}.commandOnlyInputSelector")
+}
+
+@SuppressWarnings('UnusedPrivateMethod')
 private deleteDeviceTrait_HumiditySetting(deviceTrait) {
     app.removeSetting("${deviceTrait.name}.humidityAttribute")
     app.removeSetting("${deviceTrait.name}.humiditySetpointAttribute")
@@ -5390,7 +5597,7 @@ private static final GOOGLE_DEVICE_TRAITS = [
     FanSpeed: "Fan Speed",
     //Fill: "Fill",
     HumiditySetting: "Humidity Setting",
-    //InputSelector: "Input Selector",
+    InputSelector: "Input Selector",
     //LightEffects: "Light Effects",
     Locator: "Locator",
     LockUnlock: "Lock/Unlock",

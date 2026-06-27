@@ -237,6 +237,19 @@ The following settings are only available if the "Query Only Humidity" setting i
 - Minimum Humidity Setpoint: The minimum humidity setpoint supported for this device type.  Attempting to set the desired humidiy lower will set it to this value instead.  Required if "Maximum Humidity Setpoint" is specified.
 - Maximum Humidity Setpoint: The maximum humidity setpoint supported for this device type.  Attempting to set the desired humidiy higher will set it to this value instead.  Required if "Minimum Humidity Setpoint" is specified.
 
+### Input Selector
+
+The Input Selector trait is used for devices that can switch between named inputs, such as A/V receivers, soundbars, and televisions.  It can be controlled by saying things like "Hey Google, change the input on {device} to {input}" or, for ordered inputs, "Hey Google, next input on {device}".  Because Google does not support querying this trait directly, the current input is reported to Google via Report State; configuring a Google service account and enabling "Report State" is recommended so that input changes made outside of Google stay in sync.  It has the following configuration parameters:
+
+- Current Input Attribute: The device attribute used to query the currently selected input.  Maps to the `input` attribute by default.
+- Set Input Command: A device command used to select an input.  It is called with the selected input's key as its only argument.  Maps to the `setInputSource` command by default.
+- Supported Inputs: A comma-separated list of input keys.  Each key must match the value the device reports in the Current Input Attribute and the value expected by the Set Input Command (for example `hdmi_1,CD,SAT/CBL`).
+- Google Home Names for {input}: A comma-separated list of names that you will use to reference this input when interacting with the Google Assistant.  The first name is used in the Assistant's response.  By default, the input's key is used.
+- Ordered Inputs: Select this if the device's inputs are ordered and support the "next input" and "previous input" commands.
+- Next Input Command: Only available if "Ordered Inputs" is selected.  A device command used to select the next input.  Leave blank if unsupported.
+- Previous Input Command: Only available if "Ordered Inputs" is selected.  A device command used to select the previous input.  Leave blank if unsupported.
+- Command Only (no state reporting): Select this for devices that can switch inputs but cannot report the current input back to Hubitat.
+
 ### Locator
 
 The Locator trait is used for finding devices that have audible or visual indicators, such as vacuums, or other devices that beep, ring or flash.  It can be controlled by saying things like "Hey Google, where is {device}" or "Hey Google, find my {device}".  Locator trait has the following configuration parameters:
