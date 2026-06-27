@@ -1197,10 +1197,11 @@ private deviceTraitPreferences_InputSelector(deviceTrait) {
 }
 
 private inputSelectorKeysFromSettings(settingName) {
-    return settings."${settingName}"
-        ?.split(",")
-        ?.collect { it.trim() }
-        ?.findAll { it } ?: []
+    def value = settings."${settingName}"
+    if (!value) {
+        return []
+    }
+    return value.split(",")*.trim().findAll { key -> key }
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -2955,17 +2956,12 @@ private executeCommand_SetInput(deviceInfo, command) {
 
     deviceInfo.device."${inputSelectorTrait.setInputCommand}"(newInput)
 
-    if (inputSelectorTrait.commandOnlyInputSelector) {
-        return [[:], [:]]
-    }
-    return [
-        [
-            (inputSelectorTrait.currentInputAttribute): newInput,
-        ],
-        [
-            currentInput: newInput,
-        ],
-    ]
+    return inputSelectorTrait.commandOnlyInputSelector
+        ? [[:], [:]]
+        : [
+            [(inputSelectorTrait.currentInputAttribute): newInput],
+            [currentInput: newInput],
+        ]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
@@ -3491,12 +3487,9 @@ private deviceStateForTrait_FanSpeed(deviceTrait, device) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceStateForTrait_InputSelector(deviceTrait, device) {
     // Command-only devices cannot report their current input, so don't include any state.
-    if (deviceTrait.commandOnlyInputSelector) {
-        return [:]
-    }
-    return [
-        currentInput: device.currentValue(deviceTrait.currentInputAttribute),
-    ]
+    return deviceTrait.commandOnlyInputSelector
+        ? [:]
+        : [currentInput: device.currentValue(deviceTrait.currentInputAttribute)]
 }
 
 @SuppressWarnings('UnusedPrivateMethod')
