@@ -139,10 +139,11 @@ def updated() {
     if (settings.googleServiceAccountJSON) {
         requestSync()
         if (settings.reportState) {
-            allKnownDevices().each { entry ->
+            def devices = allKnownDevices()
+            devices.each { entry ->
                 subscribe(entry.value.device, "handleDeviceEvent", [filterEvents: true])
             }
-            reportStateForDevices(allKnownDevices())
+            reportStateForDevices(devices)
         }
     }
 }
