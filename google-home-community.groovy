@@ -82,6 +82,7 @@
 //   * Jun 06 2023 - Add support for the OccupancySensing trait
 //   * Apr 12 2024 - Code cleanup
 //   * May 08 2026 - Move to the new "Integrations" menu
+//   * Jun 16 2026 - Optimize 'updated' method to only call 'allKnownDevices' once
 
 import groovy.json.JsonException
 import groovy.json.JsonOutput
@@ -139,10 +140,11 @@ def updated() {
     if (settings.googleServiceAccountJSON) {
         requestSync()
         if (settings.reportState) {
-            allKnownDevices().each { entry ->
+            def devices = allKnownDevices()
+            devices.each { entry ->
                 subscribe(entry.value.device, "handleDeviceEvent", [filterEvents: true])
             }
-            reportStateForDevices(allKnownDevices())
+            reportStateForDevices(devices)
         }
     }
 }
