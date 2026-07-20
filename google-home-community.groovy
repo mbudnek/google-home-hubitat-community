@@ -246,16 +246,18 @@ def appButtonHandler(buttonPressed) {
     }
 }
 
-private hubVersionLessThan(versionString) {
-    def hubVersion = location.hub.firmwareVersionString.split("\\.")
-    def targetVersion = versionString.split("\\.")
-    for (def i = 0; i < targetVersion.length; ++i) {
-        if ((hubVersion[i] as int) < (targetVersion[i] as int)) {
-            return true
-        } else if ((hubVersion[i] as int) > (targetVersion[i] as int)) {
-            return false
-        }
+private boolean hubVersionLessThan(String versionString) {
+    if (CACHED_HUB_VERSION == null) {
+        CACHED_HUB_VERSION = location.hub.firmwareVersionString.tokenize('.').collect { it as int }
     }
+    
+    List<Integer> targetVer = versionString.tokenize('.').collect { it as int }
+    
+    for (int i = 0; i < Math.min(CACHED_HUB_VERSION.size(), targetVer.size()); i++) {
+        if (CACHED_HUB_VERSION[i] < targetVer[i]) return true
+        if (CACHED_HUB_VERSION[i] > targetVer[i]) return false
+    }
+    
     return false
 }
 
@@ -5626,3 +5628,6 @@ private static final THERMOSTAT_MODE_SETPOINT_ATTRIBUTE_PREFERENCES = [
         title: "${GOOGLE_THERMOSTAT_MODES[mode]} Setpoint Attribute",
     ]
 }
+
+@Field
+private static List<Integer> CACHED_HUB_VERSION = null
