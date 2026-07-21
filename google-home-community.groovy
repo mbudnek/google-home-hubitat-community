@@ -150,10 +150,33 @@ def updated() {
 }
 
 def handleDeviceEvent(event) {
-    LOGGER.debug("Handling device event, deviceId=${event.deviceId} device=${event.device}")
-    def deviceId = event.deviceId
-    def deviceInfo = allKnownDevices()."${deviceId}"
-    reportStateForDevices([(deviceId): deviceInfo])
+    LOGGER.debug("Handling device event, deviceId=${event.deviceId} device=${event.device}")   
+    def pending = state.pendingReportDeviceIds ?: []
+    if (!pending.contains(event.deviceId as String)) {
+        pending << (event.deviceId as String)
+        state.pendingReportDeviceIds = pending
+    }
+    
+    runIn(1, "flushStateReports", [overwrite: true])
+}
+
+def flushStateReports() {
+    def pendingIds = state.pendingReportDeviceIds
+    state.pendingReportDeviceIds = []
+    if (!pendingIds) return
+
+    def allDevices = allKnownDevices()
+    def devicesToReport = [:]
+    
+    pendingIds.each { id ->
+        if (allDevices."${id}") {
+            devicesToReport."${id}" = allDevices."${id}"
+        }
+    }
+    
+    if (devicesToReport) {
+        reportStateForDevices(devicesToReport)
+    }
 }
 
 private reportStateForDevices(devices) {
