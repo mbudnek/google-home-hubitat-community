@@ -171,7 +171,10 @@ private reportStateForDevices(devices) {
     devices.each { deviceId, deviceInfo ->
         def deviceState = [:]
         deviceInfo.deviceType.traits.each { traitType, deviceTrait ->
-            deviceState += "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
+            def traitState = "deviceStateForTrait_${traitType}"(deviceTrait, deviceInfo.device)
+            if (traitState) {
+                deviceState.putAll(traitState)
+            }
         }
         if (deviceState.size()) {
             req.payload.devices.states."${deviceId}" = deviceState
