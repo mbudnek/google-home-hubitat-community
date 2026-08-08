@@ -1022,6 +1022,7 @@ private deviceTraitPreferences_EnergyStorage(deviceTrait) {
 @SuppressWarnings('UnusedPrivateMethod')
 private deviceTraitPreferences_FanSpeed(deviceTrait) {
     final HUBITAT_FAN_SPEEDS = [
+		"off":		   "Off",
         "low":         "Low",
         "medium-low":  "Medium-Low",
         "medium":      "Medium",
