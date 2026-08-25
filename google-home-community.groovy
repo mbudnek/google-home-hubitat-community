@@ -2273,7 +2273,7 @@ private attributeHasExpectedValue(device, attrName, attrValue) {
         }
     } else if (currentValue != attrValue) {
         LOGGER.debug("${device.name}: current value of ${attrName} (${currentValue}) " +
-                     "does does not yet match expected value (${attrValue})")
+                     "does not yet match expected value (${attrValue})")
         return false
     }
     return true
