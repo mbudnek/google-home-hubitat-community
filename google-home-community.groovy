@@ -193,14 +193,17 @@ private reportStateForDevices(devices) {
             body: req,
         ]
         LOGGER.debug("Posting device state requestId=${requestId}: ${params}")
+        params.headers.authorization = "Bearer ${token}"
+        def callbackData = [
+            successMessage: "Finished posting device state requestId=${requestId}",
+            errorMessage: "Error posting device state requestId=${requestId}:\nrequest=${req}\nError: ",
+        ]
         params.headers.Authorization = "Bearer ${token}"
         try {
-            httpPostJson(params) { resp ->
-                LOGGER.debug("Finished posting device state requestId=${requestId}")
-            }
+            asynchttpPost("handleAsyncResponse", params, callbackData)
         } catch (Exception ex) {
             LOGGER.exception(
-                "Error posting device state:\nrequest=${req}\n",
+                "Error executing async post for device state:\nrequest=${req}\n",
                 ex
             )
         }
@@ -220,8 +223,22 @@ def requestSync() {
             agentUserId: agentUserId,
         ],
     ]
-    httpPostJson(params) { resp ->
-        LOGGER.debug("Finished requesting Google sync devices")
+    def callbackData = [
+        successMessage: "Finished requesting Google sync devices",
+        errorMessage: "Error requesting Google sync devices",
+    ]
+    try {
+        asynchttpPost("handleAsyncResponse", params, callbackData)
+    } catch (Exception ex) {
+        LOGGER.exception("Error executing async post for requestSync", ex)
+    }
+}
+
+def handleAsyncResponse(response, data) {
+    if (response.hasError()) {
+        LOGGER.error("${data.errorMessage} ${response.errorMessage}")
+    } else {
+        LOGGER.debug(data.successMessage)
     }
 }
 
