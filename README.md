@@ -9,9 +9,9 @@ This integration consists of two parts:
 - A Hubitat app that will be installed on your Hubitat Elevation hub
 - A Google smart home Action
 
-## Installing the Hubitat App
+## Installing the Hubitat App (Integration)
 
-To install the Hubitat App:
+To install the Hubitat App (Integration):
 
 1. Navigate to "Apps Code" in Hubitat
 2. Click "New App"
@@ -22,8 +22,8 @@ To install the Hubitat App:
 7. Click "OAuth" again
 8. Make a note of the values in the "Client ID" and "Client Secret" fields
     - Note: Using keyboard shortcuts to copy from the Client ID and Client Secret fields doesn't work in some browsers (notably Google Chrome).  You may need to either right-click and copy from the context menu or type the values out manually.
-9. Navigate to "Apps" in Hubitat
-10. Click "Add User App" and select "Google Home Community"
+9. Navigate to "Integrations" in Hubitat
+10. Click "Add User Integration" and select "Google Home Community"
 11. Make a note of the app's ID.  This can be found in your web browser's URL bar.
     - The URL should be `http://{your hub IP}/installedapp/configure/{app ID}/mainPreferences`
     - The number between "configure/" and "/mainPreferences" is your app's ID
@@ -50,7 +50,7 @@ To create your Google smart home Action:
 8. Enter the following as the Fulfillment URL:
     - `https://cloud.hubitat.com/api/{your hub ID}/apps/{app ID}/action`
     - For example:
-        - Your app ID from step 11 of the "Installing the Hubitat App" section above is `12345`
+        - Your app ID from step 11 of the "Installing the Hubitat App (Integration)" section above is `12345`
         - Your Hub ID from step 2 of the previous section is `b97ac781-df30-43cd-98a4-e8a9a040bada`
         - Your Fulfillment URL would be `https://cloud.hubitat.com/api/b97ac781-df30-43cd-98a4-e8a9a040bada/apps/12345/action`
 9. Click "Account linking" in the menu
@@ -82,7 +82,7 @@ The first step to configuring a device to link to Google Home is to define a dev
 
 ## Defining a Device Type
 
-1. Navigate to "Apps" in Hubitat
+1. Navigate to "Integrations" in Hubitat
 2. Click on the "Google Home Community" app you created
 3. Click "Define new device type"
 4. Fill in the settings on the "Device Type Definition" page.  See [Device Type Settings](#device-type-settings) below.
